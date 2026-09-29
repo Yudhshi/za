@@ -48,7 +48,7 @@ final class AppCoordinator: ObservableObject {
             fatalError("DB 初期化失敗： \(error)")
         }
         AppLog.shared.configure(root: URL(fileURLWithPath: settings.reportsRoot))
-        AppLog.shared.log("app", "起動 Yudh v0.4")
+        AppLog.shared.log("app", "起動 Yudh v0.5")
         quietDays = QuietDayChecker(db: db)
 
         if Bundle.main.bundleIdentifier != nil {
