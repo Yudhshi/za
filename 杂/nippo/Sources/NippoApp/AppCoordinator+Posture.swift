@@ -38,7 +38,8 @@ extension AppCoordinator {
             posture: posture, current: posturePrompt, now: now, dueAt: postureDueAt,
             inMeeting: BreakReminder.isInMeeting(events: todayEvents, now: now))
         guard desired != posturePrompt else { return }
-        if desired == .askStand { pickStretch() }
+        // 「15 分後」のあとに出し直すときは同じストレッチのまま(押すたびに次のストレッチへ飛ばない)
+        if desired == .askStand && postureRemindAt == nil { pickStretch() }
         posturePrompt = desired
         AppLog.shared.log("posture", "prompt \(String(describing: desired))")
     }

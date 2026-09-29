@@ -23,8 +23,11 @@ final class PosturePanelController {
         self.panel = panel
         // SwiftUI の再レイアウト後に測る
         DispatchQueue.main.async {
+            // マウスのある画面に出す(外部ディスプレイで作業中に内蔵画面へ出さない)。無ければ主画面
+            let mouse = NSEvent.mouseLocation
+            let target = NSScreen.screens.first { $0.frame.contains(mouse) } ?? NSScreen.main
             guard let host = panel.contentView,
-                  let screen = NSScreen.main?.visibleFrame else { return }
+                  let screen = target?.visibleFrame else { return }
             let size = host.fittingSize
             panel.setFrame(NSRect(x: screen.midX - size.width / 2,
                                   y: screen.maxY - size.height - 12,

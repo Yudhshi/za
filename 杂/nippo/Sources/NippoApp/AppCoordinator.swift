@@ -40,15 +40,28 @@ final class AppCoordinator: ObservableObject {
     @Published var calendarAuthorized = false
 
     init() {
-        let dbPath = (settings.reportsRoot as NSString)
-            .appendingPathComponent("nippo.sqlite")
-        do {
-            db = try AppDatabase(path: dbPath)
-        } catch {
-            fatalError("DB 初期化失敗： \(error)")
+        // DB は 設定の保存先 → 既定の保存先 → メモリ の順に試す。
+        // 設定に書けないパスを入れても、起動のたびに落ちる(fatalError)ループにはしない
+        let root = settings.reportsRoot
+        let defaultRoot = ("~/Documents/日報" as NSString).expandingTildeInPath
+        var opened: AppDatabase?
+        var dbNotes: [String] = []
+        for dir in [root, defaultRoot] where opened == nil {
+            do {
+                opened = try AppDatabase(path: (dir as NSString).appendingPathComponent("nippo.sqlite"))
+            } catch {
+                dbNotes.append("DB を開けない: \(dir): \(error)")
+            }
         }
-        AppLog.shared.configure(root: URL(fileURLWithPath: settings.reportsRoot))
+        if opened == nil, let memory = try? AppDatabase.inMemory() {
+            opened = memory
+            dbNotes.append("メモリ上の DB で動く(休暇日・英語の記録は保存されない)")
+        }
+        guard let opened else { fatalError("DB 初期化失敗: \(dbNotes)") }
+        db = opened
+        AppLog.shared.configure(root: URL(fileURLWithPath: root))
         AppLog.shared.log("app", "起動 Yudh v0.5")
+        dbNotes.forEach { AppLog.shared.log("app", $0) }
         quietDays = QuietDayChecker(db: db)
 
         if Bundle.main.bundleIdentifier != nil {
@@ -82,10 +95,19 @@ final class AppCoordinator: ObservableObject {
         timer = Timer.scheduledTimer(withTimeInterval: 30, repeats: true) { [weak self] _ in
             Task { @MainActor in self?.tick() }
         }
+        // 数秒ずれてもよいので、システムに起床をまとめさせる(常駐アプリの省電力)
+        timer?.tolerance = 5
     }
 
     func tick() {
         let now = Date()
+
+        // 起動後にシステム設定でカレンダーを許可された場合に追従する(再起動しなくてよい)
+        if !calendarAuthorized, calendarProvider.isAuthorized {
+            calendarAuthorized = true
+            AppLog.shared.log("app", "カレンダー権限を検出")
+            refreshShachoken(force: true)
+        }
 
         // 勤務時間に入ったら(毎朝・再起動時)座り作業として計り始める
         let working = isWorkingNow
@@ -112,13 +134,17 @@ final class AppCoordinator: ObservableObject {
         let provider = calendarProvider
         // EventKit の同期フェッチをメインスレッドから追い出す(終極監査 major の修正)
         Task.detached(priority: .utility) { [weak self] in
-            let events = provider.events(on: Date())
+            let now = Date()
+            let events = provider.events(on: now)
+            // 明日の予定も読む(リマインド予約用)。夜のスリープ中に日付が変わっても、朝一の会議の通知が届くように
+            let tomorrow = Calendar.current.date(byAdding: .day, value: 1, to: now)
+                .map { provider.events(on: $0) } ?? []
             await MainActor.run {
                 guard let self else { return }
                 self.eventsRefreshInFlight = false
                 self.todayEvents = events
                 self.statusBarTitle = NextEventPolicy.statusTitle(events: events, now: Date())
-                self.scheduleMeetingReminders(for: events)
+                self.scheduleMeetingReminders(for: events + tomorrow)
             }
         }
     }
@@ -188,21 +214,22 @@ final class AppCoordinator: ObservableObject {
     /// (毎回 add+ログしていたため nippo.log が 1 日数千行になり、数日でローテートして履歴が消えていた)
     private var scheduledMeetingReminders: [String: String] = [:]
 
-    /// 今日の残り会議のリマインドを OS に事前予約する(30 秒ポーリング撤廃・スリープ耐性)。
-    /// お休みの日(週末・祝日・休暇日)は予約せず取消す。変更・削除された予定の予約も reconcile で取消す。
+    /// 今日と明日の会議のリマインドを OS に事前予約する(30 秒ポーリング撤廃・スリープ耐性)。
+    /// その予定の日がお休み(週末・祝日・休暇日)なら予約しない(今日が休みでも明日が勤務日なら明日の分は予約する)。
+    /// 変更・削除された予定の予約は reconcile で取消す。
     func scheduleMeetingReminders(for events: [MeetingEvent]) {
-        guard isWorkday else {
-            scheduledMeetingReminders.removeAll()
-            NotificationService.shared.reconcileMeetingReminders(validIDs: [])
-            return
-        }
         let lead = settings.reminderLeadMinutes
         var next: [String: String] = [:]
         let f = DateFormatter()
         f.dateFormat = "HH:mm"
+        let now = Date()
         for e in events where !e.isAllDay {
-            let fireDate = e.start.addingTimeInterval(TimeInterval(-lead * 60))
-            guard fireDate.timeIntervalSinceNow > 1 else { continue }
+            guard (try? quietDays.reason(for: e.start)) == nil else { continue }
+            // すでに始まった予定は対象外。開始 lead 分前を過ぎていてまだ始まっていなければ
+            // (起床直後・起動直後)すぐに通知する
+            guard e.start.timeIntervalSince(now) > 1 else { continue }
+            let fireDate = max(e.start.addingTimeInterval(TimeInterval(-lead * 60)),
+                               now.addingTimeInterval(2))
             let id = "nippo-meet-\(e.id)-\(Int(e.start.timeIntervalSince1970))-\(lead)"
             let title = "即将开会：\(e.title)"
             let body = "\(f.string(from: e.start)) 开始"

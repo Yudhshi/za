@@ -9,6 +9,10 @@ public final class EventKitCalendar: CalendarProviding {
         self.calendar = calendar
     }
 
+    public var isAuthorized: Bool {
+        EKEventStore.authorizationStatus(for: .event) == .fullAccess
+    }
+
     public func requestAccess() async -> Bool {
         if EKEventStore.authorizationStatus(for: .event) == .fullAccess { return true }
         return (try? await store.requestFullAccessToEvents()) ?? false
