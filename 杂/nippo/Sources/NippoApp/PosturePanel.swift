@@ -42,7 +42,7 @@ final class PosturePanelController {
         panel.level = .floating
         panel.backgroundColor = .clear
         panel.isOpaque = false
-        panel.hasShadow = false            // 影は SwiftUI 側で固い影を描く
+        panel.hasShadow = true             // 紙が机から少し浮く程度のシステムの影
         panel.hidesOnDeactivate = false    // 常駐アプリは普段非アクティブなので必須
         panel.isReleasedWhenClosed = false
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
@@ -58,7 +58,7 @@ private final class PromptPanel: NSPanel {
 
 // MARK: - 小窓の中身
 
-/// デスクトップの上に浮く白いカード(v3 レトロポップ)。目覚まし時計くん(マスコット)が尋ねる
+/// デスクトップの上に浮く小窓(v4:紙と墨・黄緑のインク)。大きな問いかけと、押すだけの操作
 struct PosturePromptView: View {
     @ObservedObject var coordinator: AppCoordinator
 
@@ -72,7 +72,7 @@ struct PosturePromptView: View {
             }
         }
         .frame(width: 380)
-        .padding(20)   // カードの右下の影が窓の中に収まるように
+        .padding(16)   // 主ボタンの版ずれが窓の中に収まるように
         .environment(\.locale, Theme.locale)
     }
 
@@ -80,60 +80,69 @@ struct PosturePromptView: View {
         max(0, Int(Date().timeIntervalSince(coordinator.postureSince) / 60))
     }
 
-    /// マスコット + 大きな問いかけ + 補足
-    private func question(_ title: String, _ detail: String) -> some View {
-        HStack(spacing: 10) {
-            Mascot(size: 64)
-                .padding(.leading, -6)
-            VStack(alignment: .leading, spacing: 2) {
-                Text(title)
-                    .font(Theme.font(30, .black))
-                Text(detail)
-                    .font(Theme.font(Theme.Size.body, .bold))
-                    .foregroundStyle(Theme.textSoft)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
+    /// 英字ラベル + 大きな問いかけ + 補足。右上に黄緑のインク(文字とは重ねない)
+    private func question(_ label: String, _ title: String, _ detail: String) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(label.uppercased())
+                .font(Theme.label())
+                .tracking(1.4)
+            Text(title)
+                .font(Theme.font(32, .black))
+                .padding(.trailing, 90)
+            Text(detail)
+                .font(Theme.font(Theme.Size.body, .semibold))
+                .foregroundStyle(Theme.textSoft)
+                .fixedSize(horizontal: false, vertical: true)
         }
     }
 
-    private var askStand: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            question("立ちましたか?", "座って \(sittingMinutes) 分。デスクを肘 90° の高さに")
-            VStack(alignment: .leading, spacing: 6) {
-                Label("このあと「\(coordinator.promptStretch.name)」", systemImage: "figure.cooldown")
-                Label("立つついでに水を一杯", systemImage: "drop.fill")
+    private func card<Content: View>(@ViewBuilder _ content: () -> Content) -> some View {
+        content()
+            .padding(16)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .overlay(alignment: .topTrailing) {
+                InkSplat(seed: 31, lobes: 9, drops: 2, drip: true, depth: 0.3)
+                    .fill(Theme.lime)
+                    .frame(width: 130, height: 120)
+                    .offset(x: 40, y: -40)
+                    .allowsHitTesting(false)
             }
-            .font(Theme.font(Theme.Size.body, .bold))
-            HStack(spacing: 10) {
-                Button {
-                    coordinator.confirmStood()
-                } label: {
-                    Text("立った!").frame(maxWidth: .infinity)
+            .clipped()
+            .block()
+    }
+
+    private var askStand: some View {
+        card {
+            VStack(alignment: .leading, spacing: 14) {
+                question("Stand up", "立ちましたか?", "座って \(sittingMinutes) 分。デスクを肘 90° の高さに")
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("このあと「\(coordinator.promptStretch.name)」")
+                    Text("立つついでに水を一杯")
                 }
-                .buttonStyle(.pop(Theme.green, height: 46, wide: true))
-                Button("15分後") { coordinator.snoozePosture(minutes: 15) }
-                    .buttonStyle(.pop(Theme.white, height: 46))
+                .font(Theme.font(Theme.Size.body, .bold))
+                HStack(spacing: 8) {
+                    Button("立った") { coordinator.confirmStood() }
+                        .buttonStyle(.sharp(.primary, height: 44, wide: true))
+                    Button("15分後") { coordinator.snoozePosture(minutes: 15) }
+                        .buttonStyle(.sharp(.plain, height: 44))
+                }
             }
         }
-        .card()
     }
 
     private var askSit: some View {
         let standing = max(0, Int(Date().timeIntervalSince(coordinator.postureSince) / 60))
-        return VStack(alignment: .leading, spacing: 12) {
-            question("座りましたか?", "立って \(standing) 分。おつかれさまでした。深く座って足裏を床に")
-            HStack(spacing: 10) {
-                Button {
-                    coordinator.confirmSat()
-                } label: {
-                    Text("座った").frame(maxWidth: .infinity)
+        return card {
+            VStack(alignment: .leading, spacing: 14) {
+                question("Sit down", "座りましたか?", "立って \(standing) 分。おつかれさまでした。深く座って足裏を床に")
+                HStack(spacing: 8) {
+                    Button("座った") { coordinator.confirmSat() }
+                        .buttonStyle(.sharp(.primary, height: 44, wide: true))
+                    Button("あと5分") { coordinator.snoozePosture(minutes: 5) }
+                        .buttonStyle(.sharp(.plain, height: 44))
                 }
-                .buttonStyle(.pop(Theme.green, height: 46, wide: true))
-                Button("あと5分") { coordinator.snoozePosture(minutes: 5) }
-                    .buttonStyle(.pop(Theme.white, height: 46))
             }
         }
-        .card()
     }
 }
 
@@ -145,24 +154,38 @@ private struct StandingGuide: View {
         TimelineView(.periodic(from: .now, by: 1)) { context in
             let total = TimeInterval(coordinator.settings.standMinutes * 60)
             let remaining = max(0, coordinator.postureDueAt.timeIntervalSince(context.date))
-            VStack(alignment: .leading, spacing: 12) {
-                HStack(alignment: .center, spacing: 10) {
-                    Mascot(size: 52)
-                        .padding(.leading, -6)
-                    VStack(alignment: .leading, spacing: 0) {
-                        Tag(text: "立ち作業 のこり", symbol: "figure.stand", color: Theme.cyan)
-                        SplatNumber(value: Self.clock(remaining), unit: "", size: 44)
-                            .padding(.top, 4)
-                    }
-                    Spacer()
+            VStack(alignment: .leading, spacing: 0) {
+                BlockHeader(en: "Standing", ja: "立ち作業 のこり") {
                     Button("閉じる") { coordinator.closePosturePrompt() }
-                        .buttonStyle(.pop(Theme.white, height: 32))
+                        .buttonStyle(.sharp(.plain, height: 24))
                         .help("閉じてもカウントは続きます。時間になったらまた知らせます")
                 }
-                PopProgress(progress: total > 0 ? 1 - remaining / total : 1)
+                HStack(spacing: 0) {
+                    SplatNumeral(value: Self.clock(remaining), unit: "", size: 56)
+                        .padding(.vertical, 14)
+                        .frame(width: 150)
+                        .frame(maxHeight: .infinity)
+                        .background(Theme.black)
+                    VStack(alignment: .leading, spacing: 10) {
+                        StandProgress(progress: total > 0 ? 1 - remaining / total : 1)
+                        Text("肩の力を抜き、肘は 90°")
+                            .font(Theme.font(Theme.Size.caption, .bold))
+                            .foregroundStyle(Theme.textSoft)
+                    }
+                    .padding(14)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .overlay(alignment: .leading) {
+                        Rectangle().fill(Theme.rule).frame(width: Theme.line)
+                    }
+                }
+                .fixedSize(horizontal: false, vertical: true)
+                .overlay(alignment: .bottom) {
+                    Rectangle().fill(Theme.rule).frame(height: Theme.line)
+                }
                 stretch
+                    .padding(14)
             }
-            .card()
+            .block()
         }
     }
 
@@ -172,18 +195,18 @@ private struct StandingGuide: View {
         let done = step >= s.steps.count
         return VStack(alignment: .leading, spacing: 10) {
             HStack {
-                Label(s.name, systemImage: "figure.cooldown")
+                Text(s.name)
                     .font(Theme.font(Theme.Size.headline, .heavy))
                 Spacer()
                 if !s.steps.isEmpty && !done {
                     Text("\(step + 1) / \(s.steps.count)")
-                        .font(Theme.font(Theme.Size.body, .black).monospacedDigit())
+                        .font(Theme.numeral(20))
                 }
             }
             if done {
                 Text("おつかれさま!あとは立ったまま作業を。")
                     .font(Theme.font(Theme.Size.title, .heavy))
-                Label("水を一杯", systemImage: "drop.fill")
+                Text("水を一杯")
                     .font(Theme.font(Theme.Size.body, .bold))
             } else {
                 Text(s.steps[step])
@@ -192,27 +215,22 @@ private struct StandingGuide: View {
                     .frame(maxWidth: .infinity, minHeight: 50, alignment: .topLeading)
                 Text("※しびれ・痛みが出たら中止")
                     .font(Theme.font(Theme.Size.caption, .bold))
-                    .foregroundStyle(Theme.inkSoft)
+                    .foregroundStyle(Theme.textSoft)
             }
-            HStack(spacing: 10) {
+            HStack(spacing: 8) {
                 if step > 0 && !done {
                     Button("戻る") { coordinator.moveStretchStep(by: -1) }
-                        .buttonStyle(.pop(Theme.white, height: 38))
+                        .buttonStyle(.sharp(.plain, height: 38))
                 }
                 Spacer()
                 if !done {
-                    Button(step == s.steps.count - 1 ? "できた!" : "次へ") {
+                    Button(step == s.steps.count - 1 ? "できた" : "次へ") {
                         coordinator.moveStretchStep(by: 1)
                     }
-                    .buttonStyle(.pop(Theme.green, height: 38))
+                    .buttonStyle(.sharp(.primary, height: 38))
                 }
             }
         }
-        .foregroundStyle(Theme.ink)
-        .padding(14)
-        .background(Theme.white, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous)
-            .strokeBorder(Theme.ink, lineWidth: 2))
     }
 
     /// 「12:34」
@@ -222,20 +240,20 @@ private struct StandingGuide: View {
     }
 }
 
-/// 緑が満ちていく進捗バー(太い輪郭)
-private struct PopProgress: View {
+/// 黄緑が満ちていく進捗バー(細い線の四角)
+private struct StandProgress: View {
     let progress: Double
 
     var body: some View {
         GeometryReader { geo in
             ZStack(alignment: .leading) {
-                Capsule(style: .continuous).fill(Theme.white)
-                Capsule(style: .continuous).fill(Theme.green)
-                    .frame(width: max(18, min(1, progress) * geo.size.width))
+                Theme.surface
+                Theme.lime
+                    .frame(width: max(0, min(1, progress)) * geo.size.width)
             }
-            .overlay(Capsule(style: .continuous).strokeBorder(Theme.ink, lineWidth: 2.5))
+            .overlay(Rectangle().strokeBorder(Theme.rule, lineWidth: Theme.line))
         }
-        .frame(height: 18)
+        .frame(height: 14)
         .accessibilityHidden(true)
     }
 }

@@ -127,4 +127,35 @@ func runEnglishTests() {
                       "today not started yet: count up to yesterday")
         T.expectEqual(try store.streak(today: tokyoDate(2026, 10, 5, 8, 0), calendar: tokyoCalendar), 0)
     }
+
+    T.run("store: undo the last answer, restore a known card, list cards") {
+        let store = EnglishStore(db: try AppDatabase.inMemory())
+        let now = tokyoDate(2026, 10, 1, 10, 0)
+        let today = "2026-10-01"
+
+        // 初めてのカードの答えを取り消すと、カードも記録も消える
+        let first = try store.undoPoint(for: "vocab:a")
+        try store.record(id: "vocab:a", kind: .vocab, rating: .good, now: now, calendar: tokyoCalendar)
+        try store.undo(first, now: now)
+        T.expectEqual(try store.card("vocab:a"), nil)
+        T.expectEqual(try store.answeredCount(day: today), 0)
+
+        // 2 回目の答えを取り消すと、1 回目のあとの状態に戻る
+        try store.record(id: "vocab:a", kind: .vocab, rating: .good, now: now, calendar: tokyoCalendar)
+        let second = try store.undoPoint(for: "vocab:a")
+        try store.record(id: "vocab:a", kind: .vocab, rating: .again, now: now, calendar: tokyoCalendar)
+        try store.undo(second, now: now)
+        T.expectEqual(try store.card("vocab:a")?.due, "2026-10-02")
+        T.expectEqual(try store.card("vocab:a")?.state.reps, 1)
+        T.expectEqual(try store.answeredCount(day: today), 1)
+
+        // 「知ってる」を戻すと今日の復習に並ぶ
+        try store.markKnown(id: "vocab:b", kind: .vocab, now: now, calendar: tokyoCalendar)
+        T.expect(!(try store.dueIDs(kind: .vocab, today: today)).contains("vocab:b"), "known is hidden")
+        try store.restore(id: "vocab:b", now: now, calendar: tokyoCalendar)
+        T.expect(try store.dueIDs(kind: .vocab, today: today).contains("vocab:b"), "restored is due today")
+
+        T.expectEqual(try store.cards(kind: .vocab).map(\.id), ["vocab:b", "vocab:a"], "ordered by due")
+        T.expectEqual(try store.cards(kind: .spell).count, 0)
+    }
 }

@@ -1,11 +1,14 @@
 import Foundation
 import NippoCore
 
-/// 英語タブ(すきま時間の英語)の状態と操作。素材は IELTS アプリから取り込んだもの:
-/// 単語 = 分層詞池の間隔反復カード / 同替 = 刘洪波 考点词の同義替換 4 択 /
-/// 聴写 = 王陆 语料库の書き取り(読み上げ)/ 辞書 = ECDICT の抜粋(引いた語は単語カードに足せる)
+/// 英語タブ(すきま時間の英語)の状態と操作。
+/// OOUI:まず「もの」(単語・考点词・語料・辞書)を選び、そのカード(1 つ)か一覧(まとまり)を見て、
+/// カードに付いた操作(覚えた・言い換えを選ぶ・書き取る・単語に足す・戻す)をする。
+/// 素材は IELTS アプリから取り込んだもの:単語 = 分層詞池 / 考点词 = 刘洪波 考点词真经の同義替換 /
+/// 語料 = 王陆 语料库(聴写)/ 辞書 = ECDICT の抜粋
 @MainActor
 final class EnglishCoordinator: ObservableObject {
+    /// もの(オブジェクト)の種類。名前は名詞にそろえる
     enum Mode: String, CaseIterable, Identifiable {
         case vocab, para, spell, dict
 
@@ -14,18 +17,19 @@ final class EnglishCoordinator: ObservableObject {
         var title: String {
             switch self {
             case .vocab: return "単語"
-            case .para: return "同替"
-            case .spell: return "聴写"
+            case .para: return "考点词"
+            case .spell: return "語料"
             case .dict: return "辞書"
             }
         }
 
-        var symbol: String {
+        /// カードでやること(ツールチップ用)
+        var detail: String {
             switch self {
-            case .vocab: return "rectangle.stack.fill"
-            case .para: return "arrow.left.arrow.right"
-            case .spell: return "headphones"
-            case .dict: return "magnifyingglass"
+            case .vocab: return "単語カード(IELTS 分層詞池・B1 から)。意味を思い出して、覚え具合を付ける"
+            case .para: return "考点词(刘洪波 考点词真经)。真題での言い換えを 4 択で選ぶ"
+            case .spell: return "語料(王陆 语料库)。読み上げを聞いて書き取る"
+            case .dict: return "辞書(ECDICT)。引いた語は単語カードに足せる"
             }
         }
 
@@ -49,6 +53,26 @@ final class EnglishCoordinator: ObservableObject {
         }
     }
 
+    /// 1 つのカードを見るか、まとまり(一覧)を見るか
+    enum Presentation: String {
+        case card, list
+    }
+
+    /// 一覧の絞り込み
+    enum ListFilter: String, CaseIterable, Identifiable {
+        case today, learning, known
+
+        var id: String { rawValue }
+
+        var title: String {
+            switch self {
+            case .today: return "今日"
+            case .learning: return "学習中"
+            case .known: return "知ってる"
+            }
+        }
+    }
+
     /// 単語カードの表示内容(詞池の語か、辞書から足した語)
     struct VocabCard: Equatable {
         let id: String
@@ -59,6 +83,8 @@ final class EnglishCoordinator: ObservableObject {
         let example: String?
         let level: String
         let isNew: Bool
+        /// 「知ってる」にしてあるカード(一覧から開いたとき)
+        let known: Bool
     }
 
     struct SpellItem: Equatable {
@@ -67,15 +93,35 @@ final class EnglishCoordinator: ObservableObject {
         let isNew: Bool
     }
 
+    /// 一覧の 1 行
+    struct ListRow: Identifiable, Equatable {
+        let id: String
+        let title: String
+        let gloss: String
+        let dueLabel: String
+    }
+
+    /// いま答えたこと(結果の一言と「元に戻す」)
+    struct LastAction: Equatable {
+        let mode: Mode
+        let message: String
+        let undo: EnglishUndo
+    }
+
     /// 1 日の目標(問)
     static let dailyGoal = 20
 
     @Published var mode: Mode {
         didSet {
             UserDefaults.standard.set(mode.rawValue, forKey: "englishMode")
-            if oldValue != mode { prepare() }
+            if oldValue != mode {
+                lastAction = nil
+                prepare()
+            }
         }
     }
+    @Published var presentation: Presentation = .card
+    @Published var listFilter: ListFilter = .today
     @Published private(set) var loaded = false
     @Published private(set) var library = EnglishLibrary()
 
@@ -91,6 +137,7 @@ final class EnglishCoordinator: ObservableObject {
 
     @Published var dictQuery = ""
 
+    @Published private(set) var lastAction: LastAction?
     @Published private(set) var todayCount = 0
     @Published private(set) var streak = 0
     @Published private(set) var remaining: [Mode: Int] = [:]
@@ -98,11 +145,11 @@ final class EnglishCoordinator: ObservableObject {
     private let store: EnglishStore
     private var loading = false
     private var questionID: String?
-    /// 聴写で一度でも自分で再生したら、以後は「次へ」で自動再生する(職場でいきなり音を出さない)
+    /// 語料で一度でも自分で再生したら、以後は「次へ」で自動再生する(職場でいきなり音を出さない)
     private var listened = false
     /// いま答えたカード(「もう一回」がすぐ戻ってこないように)
     private var lastAnswered: [Mode: String] = [:]
-    /// 「もう 10 語」で今日だけ増やした新規枠
+    /// 「もう 10 問」で今日だけ増やした新規枠
     private var extraNew: [Mode: Int] = [:]
     private var extraNewDay = ""
     private var rng = SystemRandomNumberGenerator()
@@ -161,7 +208,7 @@ final class EnglishCoordinator: ObservableObject {
         prepare()
     }
 
-    /// いまのモードの 1 問を用意する(出ている問題はそのまま)
+    /// いまの種類の 1 問を用意する(出ている問題はそのまま)
     func prepare() {
         refreshStats()
         guard loaded else { return }
@@ -177,13 +224,89 @@ final class EnglishCoordinator: ObservableObject {
     func addMoreNew() {
         resetExtraIfNewDay()
         extraNew[mode, default: 0] += 10
-        switch mode {
-        case .vocab: nextVocab()
-        case .para: nextPara()
-        case .spell: nextSpell(autoplay: false)
-        case .dict: break
-        }
+        advance()
         refreshStats()
+    }
+
+    // MARK: - 一覧(まとまり)→ カード(1 つ)
+
+    /// 一覧の行:今日 = 今日の復習、学習中 = 出題中のもの全部、知ってる = 出題から外したもの
+    func listRows() -> [ListRow] {
+        guard let kind = mode.kind, loaded else { return [] }
+        let today = DayKey.key(for: Date())
+        let cards = ((try? store.cards(kind: kind)) ?? []).filter { isResolvable($0.id) }
+        let chosen: [EnglishCard]
+        switch listFilter {
+        case .today: chosen = cards.filter { !$0.known && $0.due <= today }
+        case .learning: chosen = cards.filter { !$0.known }
+        case .known: chosen = cards.filter(\.known)
+        }
+        return chosen.prefix(200).map { card in
+            let (title, gloss) = describe(card.id)
+            return ListRow(id: card.id, title: title, gloss: gloss,
+                           dueLabel: card.known ? "知ってる" : Self.dueLabel(card.due, today: today))
+        }
+    }
+
+    /// 一覧で数を出す(絞り込みの横)
+    func listCount(_ filter: ListFilter) -> Int {
+        guard let kind = mode.kind, loaded else { return 0 }
+        let today = DayKey.key(for: Date())
+        let cards = ((try? store.cards(kind: kind)) ?? []).filter { isResolvable($0.id) }
+        switch filter {
+        case .today: return cards.filter { !$0.known && $0.due <= today }.count
+        case .learning: return cards.filter { !$0.known }.count
+        case .known: return cards.filter(\.known).count
+        }
+    }
+
+    /// 一覧で選んだものをカードで開く(期限前でも復習できる)
+    func focus(_ id: String) {
+        let known = (try? store.card(id))?.known ?? false
+        switch mode {
+        case .vocab:
+            revealed = false
+            vocabCard = makeVocabCard(id: id, isNew: false, known: known)
+        case .para:
+            picked = nil
+            if let entry = paraByID[id] {
+                question = ParaphraseQuiz.make(entry: entry, pool: library.paraphrases, using: &rng)
+                questionID = id
+            }
+        case .spell:
+            spellInput = ""
+            spellResult = nil
+            if let word = spellByID[id] { spellItem = SpellItem(id: id, word: word, isNew: false) }
+        case .dict:
+            break
+        }
+        presentation = .card
+    }
+
+    private func describe(_ id: String) -> (String, String) {
+        if let w = vocabByID[id] { return (w.w, w.zh) }
+        if let p = paraByID[id] { return (p.w, p.syn.joined(separator: " · ")) }
+        if let d = spellByID[id] { return (d.w, d.zh ?? "") }
+        if id.hasPrefix("dict:"), let hit = library.lookup(String(id.dropFirst(5))) { return (hit.word, hit.zh) }
+        return (id, "")
+    }
+
+    /// 「今日」「明日」「3日後」「10/12」
+    static func dueLabel(_ due: String, today: String) -> String {
+        let f = DateFormatter()
+        f.calendar = Calendar(identifier: .gregorian)
+        f.locale = Locale(identifier: "en_US_POSIX")
+        f.dateFormat = "yyyy-MM-dd"
+        guard let d = f.date(from: due), let t = f.date(from: today) else { return due }
+        let days = Calendar(identifier: .gregorian).dateComponents([.day], from: t, to: d).day ?? 0
+        switch days {
+        case ..<1: return "今日"
+        case 1: return "明日"
+        case 2...30: return "\(days)日後"
+        default:
+            let c = Calendar(identifier: .gregorian).dateComponents([.month, .day], from: d)
+            return "\(c.month ?? 0)/\(c.day ?? 0)"
+        }
     }
 
     // MARK: - 単語
@@ -194,23 +317,40 @@ final class EnglishCoordinator: ObservableObject {
     }
 
     func rate(_ rating: SRSRating) {
-        guard let card = vocabCard, revealed else { return }
-        record(card.id, kind: .vocab, rating: rating)
+        guard let card = vocabCard, revealed, !card.known else { return }
+        let point = try? store.undoPoint(for: card.id)
+        let saved = record(card.id, kind: .vocab, rating: rating)
+        remember(.vocab, point, "\(card.word) → \(saved.map { Self.intervalLabel($0.state.interval) } ?? "記録")")
         lastAnswered[.vocab] = card.id
         nextVocab()
         refreshStats()
     }
 
-    /// 「知ってる」:もう出さない
+    /// 「知ってる」:もう出さない(一覧の「知ってる」から戻せる)
     func markKnown() {
-        guard let card = vocabCard else { return }
+        guard let card = vocabCard, !card.known else { return }
+        let point = try? store.undoPoint(for: card.id)
         do {
             try store.markKnown(id: card.id, kind: .vocab)
         } catch {
             AppLog.shared.log("english", "markKnown failed: \(error)")
         }
+        remember(.vocab, point, "\(card.word) → 知ってる(もう出さない)")
         lastAnswered[.vocab] = card.id
         nextVocab()
+        refreshStats()
+    }
+
+    /// 「知ってる」にしたカードを出題に戻す
+    func restoreCurrent() {
+        guard let card = vocabCard, card.known else { return }
+        do {
+            try store.restore(id: card.id)
+        } catch {
+            AppLog.shared.log("english", "restore failed: \(error)")
+        }
+        vocabCard = makeVocabCard(id: card.id, isNew: false, known: false)
+        revealed = false
         refreshStats()
     }
 
@@ -230,28 +370,31 @@ final class EnglishCoordinator: ObservableObject {
             vocabCard = nil
             return
         }
-        vocabCard = makeVocabCard(id: next.id, isNew: next.isNew)
+        vocabCard = makeVocabCard(id: next.id, isNew: next.isNew, known: false)
     }
 
-    private func makeVocabCard(id: String, isNew: Bool) -> VocabCard? {
+    private func makeVocabCard(id: String, isNew: Bool, known: Bool) -> VocabCard? {
         if let w = vocabByID[id] {
             return VocabCard(id: id, word: w.w, phonetic: w.ph, pos: w.pos, meaning: w.zh,
-                             example: w.ex, level: w.lv.uppercased(), isNew: isNew)
+                             example: w.ex, level: w.lv.uppercased(), isNew: isNew, known: known)
         }
         if id.hasPrefix("dict:"), let hit = library.lookup(String(id.dropFirst(5))) {
             return VocabCard(id: id, word: hit.word, phonetic: "/\(hit.ipa)/", pos: nil,
-                             meaning: hit.zh, example: nil, level: "辞書", isNew: false)
+                             meaning: hit.zh, example: nil, level: "辞書", isNew: false, known: known)
         }
         return nil
     }
 
-    // MARK: - 同替
+    // MARK: - 考点词
 
     func choose(_ index: Int) {
         guard picked == nil, let q = question, let id = questionID,
               q.choices.indices.contains(index) else { return }
         picked = index
-        record(id, kind: .para, rating: index == q.answerIndex ? .good : .again)
+        let point = try? store.undoPoint(for: id)
+        let correct = index == q.answerIndex
+        record(id, kind: .para, rating: correct ? .good : .again)
+        remember(.para, point, "\(q.entry.w) → " + (correct ? "正解" : "今日もう一度"))
         lastAnswered[.para] = id
         refreshStats()
     }
@@ -271,7 +414,7 @@ final class EnglishCoordinator: ObservableObject {
         questionID = next.id
     }
 
-    // MARK: - 聴写
+    // MARK: - 語料(聴写)
 
     func play(slow: Bool = false) {
         guard let item = spellItem else { return }
@@ -290,12 +433,15 @@ final class EnglishCoordinator: ObservableObject {
         let result = SpellCheck.check(spellInput, answer: item.word.w)
         spellResult = result
         let rating: SRSRating
+        let message: String
         switch result {
-        case .correct: rating = .good
-        case .almost: rating = .hard
-        case .wrong: rating = .again
+        case .correct: rating = .good; message = "正解"
+        case .almost: rating = .hard; message = "おしい・明日もう一度"
+        case .wrong: rating = .again; message = "今日もう一度"
         }
+        let point = try? store.undoPoint(for: item.id)
         record(item.id, kind: .spell, rating: rating)
+        remember(.spell, point, "\(item.word.w) → \(message)")
         lastAnswered[.spell] = item.id
         refreshStats()
     }
@@ -304,7 +450,9 @@ final class EnglishCoordinator: ObservableObject {
     func giveUpSpelling() {
         guard let item = spellItem, spellResult == nil else { return }
         spellResult = .wrong
+        let point = try? store.undoPoint(for: item.id)
         record(item.id, kind: .spell, rating: .again)
+        remember(.spell, point, "\(item.word.w) → 今日もう一度")
         lastAnswered[.spell] = item.id
         refreshStats()
     }
@@ -338,7 +486,50 @@ final class EnglishCoordinator: ObservableObject {
         refreshStats()
     }
 
+    // MARK: - 元に戻す
+
+    /// ⌘Z:いま答えたことを取り消して、そのカードをもう一度出す
+    func undoLast() {
+        guard let action = lastAction else { return }
+        do {
+            try store.undo(action.undo)
+        } catch {
+            AppLog.shared.log("english", "undo failed: \(error)")
+        }
+        lastAction = nil
+        lastAnswered[action.mode] = nil
+        if mode != action.mode { mode = action.mode }
+        focus(action.undo.id)
+        refreshStats()
+    }
+
+    private func remember(_ mode: Mode, _ point: EnglishUndo?, _ message: String) {
+        guard let point else {
+            lastAction = nil
+            return
+        }
+        lastAction = LastAction(mode: mode, message: message, undo: point)
+    }
+
+    /// 「明日また」「3日後にまた」「今日もう一度」
+    static func intervalLabel(_ days: Int) -> String {
+        switch days {
+        case ..<1: return "今日もう一度"
+        case 1: return "明日また"
+        default: return "\(days)日後にまた"
+        }
+    }
+
     // MARK: - 出題・記録
+
+    private func advance() {
+        switch mode {
+        case .vocab: nextVocab()
+        case .para: nextPara()
+        case .spell: nextSpell(autoplay: false)
+        case .dict: break
+        }
+    }
 
     private func nextID(_ mode: Mode, pool: [String]) -> (id: String, isNew: Bool)? {
         guard let kind = mode.kind else { return nil }
@@ -377,15 +568,17 @@ final class EnglishCoordinator: ObservableObject {
         return false
     }
 
-    private func record(_ id: String, kind: EnglishKind, rating: SRSRating) {
+    @discardableResult
+    private func record(_ id: String, kind: EnglishKind, rating: SRSRating) -> EnglishCard? {
         do {
-            try store.record(id: id, kind: kind, rating: rating)
+            return try store.record(id: id, kind: kind, rating: rating)
         } catch {
             AppLog.shared.log("english", "record failed: \(error)")
+            return nil
         }
     }
 
-    /// 今日の数・連続日数・各モードの残り
+    /// 今日の数・連続日数・各種類の残り
     func refreshStats() {
         let now = Date()
         let today = DayKey.key(for: now)

@@ -153,6 +153,34 @@ final class AppCoordinator: ObservableObject {
 
     func saveTaskMemo(_ text: String) {
         settings.taskMemo = text
+        lastCompletedTask = nil
+        objectWillChange.send()
+    }
+
+    /// 完了したタスク(直後なら「元に戻す」で完了前のメモに戻せる)
+    struct CompletedTask: Equatable {
+        let title: String
+        let previousMemo: String
+    }
+    @Published private(set) var lastCompletedTask: CompletedTask?
+
+    /// タスク 1 つを完了(メモから消す)
+    func completeTask(at index: Int) {
+        let memo = settings.taskMemo
+        let blocks = TaskOutline.blocks(memo)
+        guard blocks.indices.contains(index) else { return }
+        let block = blocks[index]
+        lastCompletedTask = CompletedTask(title: block.title ?? block.items.first?.text ?? "タスク",
+                                          previousMemo: memo)
+        settings.taskMemo = TaskOutline.removing(block: index, from: memo)
+        objectWillChange.send()
+        AppLog.shared.log("task", "done \(lastCompletedTask?.title ?? "")")
+    }
+
+    func undoCompleteTask() {
+        guard let done = lastCompletedTask else { return }
+        settings.taskMemo = done.previousMemo
+        lastCompletedTask = nil
         objectWillChange.send()
     }
 

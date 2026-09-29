@@ -1,8 +1,8 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
   <!--
-    Yudh のアプリアイコン v3:目覚まし時計くん。
-    ラバーホース(パイカットの目)× スプラトゥーン(インクの飛び散り)× ネオブルータリズム(太い墨線・固い影)
-    × ガラス(上半分のつや)。要素は少なく、16px でも「緑に黄色のインク、白い顔」と読めるように。
+    Yudh のアプリアイコン v4:黒の地に黄緑のインク(スプラトゥーン)、その上に「Y」。
+    Y の 2 本の腕は 10 時 10 分の時計の針、真ん中の点が針の軸(会議の時間を見張るアプリ)。
+    地の細い縦線はプリーツ。角のすみれ色のしずくは対戦相手のインク。
     macOS のアイコン格子(1024 の中に 824 角の角丸、角半径 185)に合わせてある。
     書き出しは scripts/make-icon.mjs(PNG → AppIcon.icns)
   -->
@@ -10,69 +10,33 @@
     <clipPath id="squircle">
       <rect x="100" y="100" width="824" height="824" rx="185" ry="185"/>
     </clipPath>
-    <linearGradient id="bg" x1="0" y1="100" x2="0" y2="924" gradientUnits="userSpaceOnUse">
-      <stop offset="0" stop-color="#3FE27E"/>
-      <stop offset="1" stop-color="#1CB957"/>
-    </linearGradient>
-    <linearGradient id="sheen" x1="0" y1="100" x2="0" y2="560" gradientUnits="userSpaceOnUse">
-      <stop offset="0" stop-color="#FFFFFF" stop-opacity="0.42"/>
+    <pattern id="pleats" width="12" height="12" patternUnits="userSpaceOnUse">
+      <rect width="12" height="12" fill="#0B0B0B"/>
+      <rect width="3" height="12" fill="#191919"/>
+    </pattern>
+    <linearGradient id="sheen" x1="0" y1="100" x2="0" y2="520" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#FFFFFF" stop-opacity="0.16"/>
       <stop offset="1" stop-color="#FFFFFF" stop-opacity="0"/>
     </linearGradient>
     <filter id="drop" x="-10%" y="-10%" width="120%" height="125%">
-      <feDropShadow dx="0" dy="12" stdDeviation="14" flood-color="#000" flood-opacity="0.3"/>
+      <feDropShadow dx="0" dy="12" stdDeviation="14" flood-color="#000" flood-opacity="0.32"/>
     </filter>
   </defs>
-
   <g filter="url(#drop)">
     <g clip-path="url(#squircle)">
-      <rect x="0" y="0" width="1024" height="1024" fill="url(#bg)"/>
-
-      <!-- インクの飛び散り(黄)とピンクのしずく -->
-      <g fill="#FFD60A" transform="rotate(-8 512 540)"><path d="M809.9 511.4 Q879.5 559.3 798.6 580.8 Q717.6 602.4 752.7 683.4 Q787.7 764.3 722.4 761.2 Q657.0 758.2 629.2 819.0 Q601.4 879.8 526.4 830.9 Q451.5 781.9 397.7 794.2 Q343.9 806.5 341.2 758.4 Q338.5 710.2 259.6 662.1 Q180.6 614.0 211.2 576.0 Q241.9 537.9 215.4 500.3 Q188.9 462.8 253.5 422.8 Q318.1 382.9 319.5 318.4 Q321.0 254.0 403.5 277.9 Q486.1 301.8 521.9 268.0 Q557.7 234.3 592.1 300.7 Q626.4 367.1 712.2 348.1 Q798.0 329.2 769.1 396.3 Q740.2 463.5 809.9 511.4 Z"/><circle cx="324.6" cy="898.0" r="31.6"/><circle cx="130.1" cy="339.8" r="36.0"/><circle cx="809.5" cy="756.2" r="23.3"/><rect x="402.5" y="697.5" width="61.7" height="160.7" rx="30.8"/><circle cx="433.3" cy="858.2" r="46.2"/></g>
-      <g fill="#FF4FA3">
-        <circle cx="820" cy="770" r="26"/>
-        <circle cx="200" cy="222" r="16"/>
+      <rect x="0" y="0" width="1024" height="1024" fill="url(#pleats)"/>
+      <g fill="#5A2DFF"><path d="M1028.0 917.7 Q1057.2 936.8 1029.2 947.1 Q1001.1 957.3 1000.0 991.4 Q998.9 1025.5 966.1 1026.5 Q933.2 1027.4 909.2 1050.6 Q885.1 1073.8 868.5 1047.8 Q851.8 1021.8 821.6 1029.1 Q791.3 1036.4 794.5 998.6 Q797.6 960.8 776.3 951.7 Q755.0 942.5 772.0 914.2 Q789.1 885.9 794.5 852.1 Q800.0 818.3 823.9 827.3 Q847.8 836.2 880.7 817.0 Q913.7 797.7 924.2 813.5 Q934.6 829.3 978.5 833.4 Q1022.4 837.5 1010.6 868.0 Q998.9 898.5 1028.0 917.7 Z"/><circle cx="1043.6" cy="834.1" r="11.6"/><circle cx="716.3" cy="958.0" r="13.3"/></g>
+      <g fill="#C8FF1A" transform="rotate(-6 512 520)"><path d="M761.5 489.3 Q807.6 524.5 761.0 560.9 Q714.3 597.2 744.9 646.5 Q775.4 695.7 701.7 694.1 Q628.0 692.5 598.9 745.5 Q569.8 798.4 543.0 766.1 Q516.3 733.9 454.1 750.6 Q391.9 767.4 398.1 726.9 Q404.3 686.4 347.7 699.0 Q291.1 711.6 282.4 639.7 Q273.8 567.9 255.3 530.2 Q236.9 492.5 277.3 471.6 Q317.7 450.7 293.2 409.2 Q268.7 367.7 310.4 356.0 Q352.2 344.3 376.6 292.3 Q401.1 240.3 445.7 284.2 Q490.4 328.1 530.9 285.8 Q571.4 243.5 597.0 294.2 Q622.7 344.9 685.4 335.2 Q748.2 325.6 731.8 389.9 Q715.3 454.1 761.5 489.3 Z"/><circle cx="319.0" cy="257.3" r="32.7"/><circle cx="560.7" cy="203.5" r="36.2"/><circle cx="265.8" cy="240.3" r="27.1"/><rect x="381.1" y="656.5" width="50.1" height="148.7" rx="25.0"/><circle cx="406.1" cy="805.2" r="37.6"/></g>
+      <!-- Y = 10 時 10 分の針 + 軸 -->
+      <g stroke="#0A0A0A" stroke-width="76" stroke-linecap="butt" fill="none">
+        <path d="M512 522 L404 398"/>
+        <path d="M512 522 L620 398"/>
+        <path d="M512 500 L512 690"/>
       </g>
-
-      <!-- 固い影(右下にずらした墨) -->
-      <g fill="#111111" transform="translate(20 20)">
-        <path d="M268 360 A108 108 0 0 1 430 214 Z" transform="rotate(-8 350 290)"/>
-        <path d="M756 360 A108 108 0 0 0 594 214 Z" transform="rotate(8 674 290)"/>
-        <circle cx="512" cy="540" r="212"/>
-      </g>
-
-      <!-- ベル(ピンクのドーム)と打ち金 -->
-      <g stroke="#111111" stroke-width="22" stroke-linejoin="round">
-        <path d="M512 300 L512 262" stroke-linecap="round"/>
-        <circle cx="512" cy="248" r="24" fill="#FF4FA3"/>
-        <path d="M268 360 A108 108 0 0 1 430 214 Z" fill="#FF4FA3" transform="rotate(-8 350 290)"/>
-        <path d="M756 360 A108 108 0 0 0 594 214 Z" fill="#FF4FA3" transform="rotate(8 674 290)"/>
-      </g>
-      <g fill="none" stroke="#FFFFFF" stroke-width="12" stroke-linecap="round" opacity="0.7">
-        <path d="M300 300 Q318 262 356 246"/>
-        <path d="M668 246 Q704 256 724 290"/>
-      </g>
-
-      <!-- 顔 -->
-      <circle cx="512" cy="540" r="212" fill="#FFFFFF" stroke="#111111" stroke-width="24"/>
-      <g fill="#111111">
-        <ellipse cx="456" cy="506" rx="34" ry="56"/>
-        <ellipse cx="568" cy="506" rx="34" ry="56"/>
-      </g>
-      <g fill="#FFFFFF">
-        <path d="M462 494 L494 460 L475 452 Z"/>
-        <path d="M574 494 L606 460 L587 452 Z"/>
-      </g>
-      <g fill="#FF4FA3" opacity="0.85">
-        <ellipse cx="398" cy="596" rx="28" ry="16"/>
-        <ellipse cx="626" cy="596" rx="28" ry="16"/>
-      </g>
-      <path d="M446 604 Q512 660 578 604" fill="none" stroke="#111111" stroke-width="24" stroke-linecap="round"/>
-
-      <!-- ガラスのつや -->
-      <rect x="100" y="100" width="824" height="460" fill="url(#sheen)"/>
+      <circle cx="512" cy="522" r="26" fill="#C8FF1A"/>
+      <rect x="100" y="100" width="824" height="420" fill="url(#sheen)"/>
     </g>
     <rect x="100" y="100" width="824" height="824" rx="185" ry="185" fill="none"
-          stroke="#FFFFFF" stroke-opacity="0.35" stroke-width="4"/>
+          stroke="#FFFFFF" stroke-opacity="0.14" stroke-width="4"/>
   </g>
 </svg>

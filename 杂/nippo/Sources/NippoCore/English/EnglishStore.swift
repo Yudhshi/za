@@ -24,6 +24,13 @@ public struct EnglishCard: Equatable, Sendable {
     public var firstSeen: String
 }
 
+/// 「元に戻す」ための控え(答える直前のカードと、記録の最後の番号)
+public struct EnglishUndo: Equatable, Sendable {
+    public let id: String
+    let previous: EnglishCard?
+    let lastLogID: Int64
+}
+
 /// 英語の学習記録(english_card / english_log)。カードは SM-2 で復習日を決め、答えるたびに log に 1 行残す
 public struct EnglishStore {
     let db: AppDatabase
@@ -78,6 +85,46 @@ public struct EnglishStore {
             try Self.save(db, EnglishCard(id: id, kind: kind, state: SRSState(), due: today,
                                           known: false, firstSeen: today), now: now)
             return true
+        }
+    }
+
+    /// 「知ってる」にしたカードを出題に戻す(今日の復習に並ぶ)
+    public func restore(id: String, now: Date = Date(), calendar: Calendar = .current) throws {
+        let today = DayKey.key(for: now, calendar: calendar)
+        try db.dbQueue.write { db in
+            guard var card = try Self.fetchCard(db, id: id) else { return }
+            card.known = false
+            card.due = today
+            try Self.save(db, card, now: now)
+        }
+    }
+
+    /// その種類のカード全部(一覧用。復習日の近い順)
+    public func cards(kind: EnglishKind) throws -> [EnglishCard] {
+        try db.dbQueue.read { db in
+            try Row.fetchAll(db, sql: "SELECT * FROM english_card WHERE kind = ? ORDER BY due, id",
+                             arguments: [kind.rawValue])
+                .compactMap(Self.card(from:))
+        }
+    }
+
+    /// 答える直前の状態(「元に戻す」用)
+    public func undoPoint(for id: String) throws -> EnglishUndo {
+        try db.dbQueue.read { db in
+            EnglishUndo(id: id, previous: try Self.fetchCard(db, id: id),
+                        lastLogID: try Int64.fetchOne(db, sql: "SELECT MAX(id) FROM english_log") ?? 0)
+        }
+    }
+
+    /// 元に戻す:カードを答える前の状態に戻し(初めてのカードなら消し)、その後の記録を消す
+    public func undo(_ point: EnglishUndo, now: Date = Date()) throws {
+        try db.dbQueue.write { db in
+            if let previous = point.previous {
+                try Self.save(db, previous, now: now)
+            } else {
+                try db.execute(sql: "DELETE FROM english_card WHERE id = ?", arguments: [point.id])
+            }
+            try db.execute(sql: "DELETE FROM english_log WHERE id > ?", arguments: [point.lastLogID])
         }
     }
 
@@ -141,8 +188,12 @@ public struct EnglishStore {
 
     private static func fetchCard(_ db: Database, id: String) throws -> EnglishCard? {
         guard let row = try Row.fetchOne(db, sql: "SELECT * FROM english_card WHERE id = ?",
-                                         arguments: [id]),
-              let kind = EnglishKind(rawValue: row["kind"]) else { return nil }
+                                         arguments: [id]) else { return nil }
+        return card(from: row)
+    }
+
+    private static func card(from row: Row) -> EnglishCard? {
+        guard let kind = EnglishKind(rawValue: row["kind"]) else { return nil }
         return EnglishCard(
             id: row["id"], kind: kind,
             state: SRSState(interval: row["interval"], ease: row["ease"], reps: row["reps"],
