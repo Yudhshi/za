@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <!--
+    Yudh のアプリアイコン v5:すみれの地に黄緑のインク(スプラトゥーンのナワバリの 2 色)、
+    その上にゲームのロゴのような斜体の「Y」(すみれの押し出しで立体に)。縦線・キャラクターは使わない。
+    macOS のアイコン格子(1024 の中に 824 角の角丸、角半径 185)に合わせてある。
+    書き出しは scripts/make-icon.mjs(PNG → AppIcon.icns)
+  -->
+  <defs>
+    <clipPath id="sq"><rect x="100" y="100" width="824" height="824" rx="185" ry="185"/></clipPath>
+    <linearGradient id="vg" x1="0" y1="100" x2="0" y2="924" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#6E45FF"/><stop offset="1" stop-color="#3712C9"/></linearGradient>
+    <linearGradient id="sheen" x1="0" y1="100" x2="0" y2="520" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#FFFFFF" stop-opacity="0.22"/><stop offset="1" stop-color="#FFFFFF" stop-opacity="0"/>
+    </linearGradient>
+    <filter id="drop" x="-10%" y="-10%" width="120%" height="125%"><feDropShadow dx="0" dy="12" stdDeviation="14" flood-color="#000" flood-opacity="0.3"/></filter>
+  </defs>
+  <g filter="url(#drop)"><g clip-path="url(#sq)">
+    <rect width="1024" height="1024" fill="url(#vg)"/>
+    <g fill="#C8FF1A" transform="rotate(-8 512 512)"><path d="M773.6 479.7 Q822.0 516.7 773.1 555.0 Q724.2 593.2 756.2 645.0 Q788.2 696.7 711.0 695.1 Q633.7 693.4 603.2 749.0 Q572.6 804.7 544.5 770.7 Q516.5 736.8 451.3 754.5 Q386.1 772.1 392.6 729.5 Q399.1 687.0 339.7 700.2 Q280.3 713.4 271.2 637.9 Q262.2 562.4 242.8 522.7 Q223.4 483.1 265.8 461.1 Q308.3 439.1 282.5 395.5 Q256.8 351.9 300.6 339.6 Q344.4 327.2 370.0 272.6 Q395.7 218.0 442.5 264.1 Q489.3 310.3 531.8 265.8 Q574.3 221.4 601.2 274.6 Q628.1 327.9 693.9 317.7 Q759.7 307.6 742.5 375.2 Q725.3 442.8 773.6 479.7 Z"/><circle cx="309.6" cy="235.8" r="34.4"/><circle cx="563.0" cy="179.2" r="38.0"/><circle cx="253.8" cy="217.9" r="28.5"/><rect x="374.7" y="655.5" width="52.6" height="156.4" rx="26.3"/><circle cx="401.0" cy="811.9" r="39.5"/></g>
+    <g transform="translate(91.6 0) skewX(-10)">
+      <path d="M318 300 L452 300 L512 420 L572 300 L706 300 L574 560 L574 748 L450 748 L450 560 Z" fill="#3712C9" transform="translate(22 22)"/>
+      <path d="M318 300 L452 300 L512 420 L572 300 L706 300 L574 560 L574 748 L450 748 L450 560 Z" fill="#0A0A0A"/>
+      
+    </g>
+  </g>
+  <rect x="100" y="100" width="824" height="824" rx="185" ry="185" fill="none" stroke="#FFFFFF" stroke-opacity="0.18" stroke-width="4"/></g>
+</svg>

@@ -33,7 +33,12 @@ func runSettingsTests() {
         T.expectEqual(s.taskMemo, "")
         s.taskMemo = "事例公開\n\t- 電話"
         T.expectEqual(AppSettings(defaults: d).taskMemo, "事例公開\n\t- 電話")
-        T.expectEqual(s.shachokenKeywords, "シャチョケン")
+        T.expectEqual(s.shachokenKeywords, "新卒社長研修, シャチョケン")
+        s.shachokenKeywords = "シャチョケン"
+        T.expectEqual(s.shachokenKeywords, AppSettings.defaultShachokenKeywords, "old default is upgraded")
+        s.shachokenKeywords = "社長研修"
+        T.expectEqual(AppSettings(defaults: d).shachokenKeywords, "社長研修")
+        T.expectEqual(s.loginItemMovedToYudh, false)
 
         T.expectEqual(s.postureEnabled, true)
         T.expectEqual(s.sitMinutes, 45)

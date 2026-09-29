@@ -21,7 +21,7 @@ public final class NotificationService: NSObject, UNUserNotificationCenterDelega
         center.delegate = self
         // 会議通知には「参加」アクションを付ける
         let join = UNNotificationAction(identifier: Self.joinActionID,
-                                        title: "参加",
+                                        title: "加入会议",
                                         options: [])
         let meeting = UNNotificationCategory(identifier: Self.meetingCategory,
                                              actions: [join],

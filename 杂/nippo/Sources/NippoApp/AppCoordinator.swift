@@ -31,6 +31,9 @@ final class AppCoordinator: ObservableObject {
         didSet { posturePanel.update() }
     }
     lazy var posturePanel = PosturePanelController(coordinator: self)
+    private lazy var settingsWindow = SettingsWindowController(coordinator: self)
+    /// 英語タブ(すきま時間の英語)
+    lazy var english = EnglishCoordinator(db: db)
 
     let calendarProvider: CalendarProviding = EventKitCalendar()
     private var timer: Timer?
@@ -42,16 +45,27 @@ final class AppCoordinator: ObservableObject {
         do {
             db = try AppDatabase(path: dbPath)
         } catch {
-            fatalError("DB 初期化失敗: \(error)")
+            fatalError("DB 初期化失敗： \(error)")
         }
         AppLog.shared.configure(root: URL(fileURLWithPath: settings.reportsRoot))
-        AppLog.shared.log("app", "起動 v1.1")
+        AppLog.shared.log("app", "起動 Yudh v0.5")
         quietDays = QuietDayChecker(db: db)
 
-        // 初回起動時にログイン項目を自動登録(ユーザーがシステム設定で外したら再登録しない)
-        if Bundle.main.bundleIdentifier != nil, !settings.autoLaunchApplied {
-            try? SMAppService.mainApp.register()
-            settings.autoLaunchApplied = true
+        if Bundle.main.bundleIdentifier != nil {
+            // 2026-09-29 に Nippo.app → Yudh.app へ改名。ログイン項目を新しい場所で登録し直す(一度だけ)
+            if !settings.loginItemMovedToYudh {
+                try? SMAppService.mainApp.unregister()
+                settings.loginItemMovedToYudh = true
+            }
+            // ログイン時に起動は常にオン(設定の切り替えは無い)。
+            // システム設定で明示的に切られた(承認待ち)ときだけは尊重する
+            if SMAppService.mainApp.status == .notRegistered {
+                do {
+                    try SMAppService.mainApp.register()
+                } catch {
+                    AppLog.shared.log("app", "ログイン項目の登録に失敗： \(error)")
+                }
+            }
         }
 
         NotificationService.shared.requestPermission()
@@ -132,8 +146,41 @@ final class AppCoordinator: ObservableObject {
         }
     }
 
+    /// 設定ウインドウを前面に開く(メニューの歯車ボタン)
+    func openSettings() {
+        settingsWindow.show()
+    }
+
     func saveTaskMemo(_ text: String) {
         settings.taskMemo = text
+        lastCompletedTask = nil
+        objectWillChange.send()
+    }
+
+    /// 完了したタスク(直後なら「元に戻す」で完了前のメモに戻せる)
+    struct CompletedTask: Equatable {
+        let title: String
+        let previousMemo: String
+    }
+    @Published private(set) var lastCompletedTask: CompletedTask?
+
+    /// タスク 1 つを完了(メモから消す)
+    func completeTask(at index: Int) {
+        let memo = settings.taskMemo
+        let blocks = TaskOutline.blocks(memo)
+        guard blocks.indices.contains(index) else { return }
+        let block = blocks[index]
+        lastCompletedTask = CompletedTask(title: block.title ?? block.items.first?.text ?? "任务",
+                                          previousMemo: memo)
+        settings.taskMemo = TaskOutline.removing(block: index, from: memo)
+        objectWillChange.send()
+        AppLog.shared.log("task", "done \(lastCompletedTask?.title ?? "")")
+    }
+
+    func undoCompleteTask() {
+        guard let done = lastCompletedTask else { return }
+        settings.taskMemo = done.previousMemo
+        lastCompletedTask = nil
         objectWillChange.send()
     }
 
@@ -157,9 +204,9 @@ final class AppCoordinator: ObservableObject {
             let fireDate = e.start.addingTimeInterval(TimeInterval(-lead * 60))
             guard fireDate.timeIntervalSinceNow > 1 else { continue }
             let id = "nippo-meet-\(e.id)-\(Int(e.start.timeIntervalSince1970))-\(lead)"
-            let title = "まもなく会議: \(e.title)"
-            let body = "\(f.string(from: e.start)) 開始"
-                + (e.joinURL != nil ? "。クリックで参加" : "")
+            let title = "即将开会：\(e.title)"
+            let body = "\(f.string(from: e.start)) 开始"
+                + (e.joinURL != nil ? "。点击加入会议" : "")
             let signature = [title, body, e.joinURL?.absoluteString ?? ""]
                 .joined(separator: "\n")
             next[id] = signature
@@ -189,11 +236,11 @@ final class AppCoordinator: ObservableObject {
     /// 「853」などを今日の出勤時刻として保存する。失敗したら理由を返す
     func setWorkBegan(_ text: String) -> String? {
         guard let (h, m) = WorkStart.parse(text) else {
-            return "時刻を読めませんでした(例:8:53 なら 853)"
+            return "看不懂这个时间（例：8:53 就输入 853）"
         }
         guard let date = Calendar.current.date(bySettingHour: h, minute: m, second: 0, of: Date()),
               date <= Date() else {
-            return "これからの時刻は入力できません"
+            return "不能填还没到的时间"
         }
         settings.workBeganTime = String(format: "%02d:%02d", h, m)
         settings.workBeganDay = DayKey.key(for: Date())

@@ -28,6 +28,12 @@ public final class AppSettings: ObservableObject {
         set { d.set(newValue, forKey: "autoLaunchApplied"); objectWillChange.send() }
     }
 
+    /// Nippo.app → Yudh.app の改名後に、ログイン項目を新しい場所で登録し直したか
+    public var loginItemMovedToYudh: Bool {
+        get { d.bool(forKey: "loginItemMovedToYudh") }
+        set { d.set(newValue, forKey: "loginItemMovedToYudh"); objectWillChange.send() }
+    }
+
     /// 勤務時間("HH:mm")。立ち作業リマインドはこの時間帯だけ動く
     public var workStartTime: String {
         get { d.string(forKey: "workStartTime") ?? "09:00" }
@@ -65,9 +71,18 @@ public final class AppSettings: ObservableObject {
         set { d.set(newValue, forKey: "taskMemo"); objectWillChange.send() }
     }
 
-    /// 「次のシャチョケン」を探す件名キーワード(カンマ区切り)
+    /// シャチョケン = 26卒_新卒社長研修。カレンダーの件名は正式名なので正式名で探す
+    public static let defaultShachokenKeywords = "新卒社長研修, シャチョケン"
+
+    /// 「次のシャチョケン」を探す件名キーワード(カンマ区切り)。
+    /// 旧既定値「シャチョケン」だけでは件名(26卒_新卒社長研修)に当たらなかったので、新しい既定値に読み替える
     public var shachokenKeywords: String {
-        get { d.string(forKey: "shachokenKeywords") ?? "シャチョケン" }
+        get {
+            guard let value = d.string(forKey: "shachokenKeywords"), value != "シャチョケン" else {
+                return Self.defaultShachokenKeywords
+            }
+            return value
+        }
         set { d.set(newValue, forKey: "shachokenKeywords"); objectWillChange.send() }
     }
 

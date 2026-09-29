@@ -23,4 +23,20 @@ func runTaskOutlineTests() {
         T.expectEqual(render(TaskOutline.parse("\n\nA\n\n\n\nB\n- \n\n")), ["0:A", "---", "0:B"])
         T.expectEqual(render(TaskOutline.parse("")), [])
     }
+
+    T.run("blocks: each task with its items; orphan items before the first title") {
+        let memo = "- メモ\n事例公開\n\nPh2 - navigate\n\t- 電話\n\t- gen1\n"
+        let blocks = TaskOutline.blocks(memo)
+        T.expectEqual(blocks.map(\.title), [nil, "事例公開", "Ph2 - navigate"])
+        T.expectEqual(blocks.map { $0.items.map(\.text) }, [["メモ"], [], ["電話", "gen1"]])
+        T.expectEqual(TaskOutline.blocks("").count, 0)
+    }
+
+    T.run("completing (removing) a task keeps the rest tidy") {
+        let memo = "事例公開\n\nPh2 - navigate\n\t- 電話\n\nC"
+        T.expectEqual(TaskOutline.removing(block: 1, from: memo), "事例公開\n\nC")
+        T.expectEqual(TaskOutline.removing(block: 0, from: memo), "Ph2 - navigate\n\t- 電話\n\nC")
+        T.expectEqual(TaskOutline.removing(block: 2, from: memo), "事例公開\n\nPh2 - navigate\n\t- 電話")
+        T.expectEqual(TaskOutline.removing(block: 9, from: memo), memo, "out of range: unchanged")
+    }
 }

@@ -2,101 +2,73 @@ import AppKit
 import SwiftUI
 import NippoCore
 
-/// メニューパネル本体(2026-09 スプラトゥーン × ネオブルータリズム × Liquid Glass)。
-/// 日付 → お休み → 勤務時間 → いまのタスク → 次のシャチョケン → 座り/立ち → 次の会議 → 今日の予定。
-/// 画面より高くなったらスクロール(下端のフッターは常に見える)
+/// パネルのタブ(開き直しても前回のタブ)
+enum PanelTab: String {
+    case today, english
+}
+
+/// メニューパネル本体(2026-09 v7)。1 列で、上から「いま大事な順」:
+/// 日付と工作时间(小さく)→ 主役のカード(次の会議 / 単語)→ 今日日程 → 当前任务 → 下の 1 行(坐姿・シャチョケン・电源)。
+/// OOUI:会議・タスク・単語という「もの」を一覧から選び、そのものに付いた操作をする。
+/// 画面の文字は中国語(簡体字)。短いラベルと掛け声は英語(NEXT・NICE!)
 struct MenuContentView: View {
     @ObservedObject var coordinator: AppCoordinator
-    @State private var contentHeight: CGFloat = 640
+    @AppStorage("panelTab") private var tab: PanelTab = .today
+    @State private var contentHeight: CGFloat = 360
+    /// 今日の日程で選んだ会議(nil = 次の会議)
+    @State private var selectedMeetingID: String?
 
     private var maxHeight: CGFloat {
-        (NSScreen.main?.visibleFrame.height ?? 900) - 120
+        (NSScreen.main?.visibleFrame.height ?? 900) - 200
     }
 
     var body: some View {
         VStack(spacing: 0) {
+            PanelHeader(coordinator: coordinator, english: coordinator.english, tab: $tab)
+                .padding(.horizontal, Theme.padding)
+                .padding(.top, 16)
+
             ScrollView {
-                content
-                    .background(GeometryReader { geo in
-                        Color.clear.preference(key: ContentHeightKey.self, value: geo.size.height)
-                    })
+                Group {
+                    switch tab {
+                    case .today:
+                        TodayView(coordinator: coordinator, selectedMeetingID: $selectedMeetingID)
+                    case .english:
+                        VStack(alignment: .leading, spacing: 0) {
+                            MeetingStrip(coordinator: coordinator)
+                            EnglishView(english: coordinator.english)
+                        }
+                    }
+                }
+                .padding(.horizontal, Theme.padding)
+                .padding(.top, 14)
+                .padding(.bottom, 18)
+                .background(GeometryReader { geo in
+                    Color.clear.preference(key: ContentHeightKey.self, value: geo.size.height)
+                })
             }
-            .scrollIndicators(.never)
+            .scrollIndicators(.automatic)
             .frame(height: min(contentHeight, maxHeight))
             // 初回レイアウト前の 0 は無視(高さ 0 に潰れないように)
             .onPreferenceChange(ContentHeightKey.self) { if $0 > 0 { contentHeight = $0 } }
 
-            PanelFooter()
-                .padding(.horizontal, Theme.panelPadding)
-                .padding(.bottom, Theme.panelPadding)
-                .padding(.trailing, Theme.shadowOffset)
+            PanelFooter(coordinator: coordinator)
+                .padding(.horizontal, Theme.padding)
+                .padding(.bottom, 12)
         }
         .frame(width: Theme.panelWidth)
-        .background(SplatBackdrop())
+        .background(Theme.stage)
+        .environment(\.colorScheme, .dark)
         .environment(\.locale, Theme.locale)
+        .typesettingLanguage(Theme.language)
         .onAppear {
+            selectedMeetingID = nil
             coordinator.refreshTodayEvents()
             coordinator.refreshShachoken(force: true)
+            coordinator.english.loadIfNeeded()
         }
-    }
-
-    private var content: some View {
-        VStack(alignment: .leading, spacing: Theme.gap) {
-            DateHeader()
-            if let reason = coordinator.quietReasonToday {
-                CardHeader(symbol: "moon.fill", color: Theme.yellow, title: "今日はお休み(\(reason))",
-                           subtitle: "会議の通知と立ち作業リマインドは止まっています", seed: 13)
-                    .glassCard()
-            }
-            WorkTimeCard(coordinator: coordinator)
-            TaskMemoCard(coordinator: coordinator)
-            if coordinator.calendarAuthorized {
-                ShachokenCard(event: coordinator.nextShachoken,
-                              keyword: coordinator.settings.shachokenKeywords)
-            }
-            if coordinator.settings.postureEnabled && coordinator.isWorkingNow {
-                PostureCard(coordinator: coordinator)
-            }
-            meetings
-        }
-        .padding([.horizontal, .top], Theme.panelPadding)
-        .padding(.bottom, Theme.gap)
-        .padding(.trailing, Theme.shadowOffset)
-    }
-
-    // MARK: - 会議
-
-    @ViewBuilder
-    private var meetings: some View {
-        let now = Date()
-        let hero = NextEventPolicy.currentOrNext(events: coordinator.todayEvents, now: now)
-        let rest = coordinator.todayEvents.filter { $0.id != hero?.id }
-
-        if !coordinator.calendarAuthorized {
-            VStack(alignment: .leading, spacing: 12) {
-                CardHeader(symbol: "calendar.badge.exclamationmark", color: Theme.orange,
-                           title: "カレンダーへのアクセスが必要です",
-                           subtitle: "会議の表示・通知と、シャチョケンの確認に使います", seed: 19)
-                Button("システム設定を開く") {
-                    if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Calendars") {
-                        NSWorkspace.shared.open(url)
-                    }
-                }
-                .buttonStyle(.splat(Theme.yellow))
-            }
-            .glassCard()
-        } else if hero == nil && rest.isEmpty {
-            CardHeader(symbol: "calendar", color: Theme.cyan, title: "今日の会議はありません",
-                       subtitle: "勤務日は、会議の開始 \(coordinator.settings.reminderLeadMinutes) 分前に通知します",
-                       seed: 29)
-                .glassCard()
-        } else {
-            if let hero {
-                NextUpCard(event: hero)
-            }
-            if !rest.isEmpty {
-                ScheduleCard(events: rest)
-            }
+        .onChange(of: tab) { _, newTab in
+            if newTab == .english { coordinator.english.loadIfNeeded() }
         }
     }
 }
@@ -106,75 +78,117 @@ private struct ContentHeightKey: PreferenceKey {
     static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = nextValue() }
 }
 
-// MARK: - 勤務時間(出勤時刻は手入力)
+// MARK: - 上の帯:日付・工作时间・タブ
 
-/// 出勤時刻を「853」のように入れると、今日の勤務時間を表示する(勤怠システムとは連携しない)
-private struct WorkTimeCard: View {
+private struct PanelHeader: View {
     @ObservedObject var coordinator: AppCoordinator
+    @ObservedObject var english: EnglishCoordinator
+    @Binding var tab: PanelTab
+    @State private var workError: String?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(alignment: .center, spacing: 14) {
+                HStack(alignment: .firstTextBaseline, spacing: 6) {
+                    Text(Date(), format: .dateTime.month().day())
+                        .font(Theme.font(15, .semibold))
+                        .foregroundStyle(Theme.white)
+                    Text(Date(), format: .dateTime.weekday(.abbreviated))
+                        .font(Theme.font(15, .regular))
+                        .foregroundStyle(Theme.textSoft)
+                    if let reason = coordinator.quietReasonToday {
+                        Text("休息日 · \(reason)")
+                            .font(Theme.font(12, .semibold))
+                            .foregroundStyle(Theme.textSoft)
+                            .help("今天是\(reason)：会议提醒和站立提醒都已暂停")
+                    }
+                }
+                .fixedSize()
+                // 英語タブでは入力欄を出さない(数字キーの操作と取り合わないように)
+                WorkTime(coordinator: coordinator, allowsInput: tab == .today, error: $workError) {
+                    tab = .today
+                }
+                Spacer(minLength: 8)
+                PillTabs(items: [
+                    TabItem(value: PanelTab.today, title: "今日", shortcut: "1"),
+                    TabItem(value: PanelTab.english, title: "英语",
+                            badge: english.loaded ? english.remainingTotal : nil, shortcut: "2"),
+                ], selection: $tab)
+            }
+            if let workError, tab == .today {
+                Text(workError)
+                    .font(Theme.font(12, .semibold))
+                    .foregroundStyle(Theme.lime)
+            }
+        }
+    }
+}
+
+/// 工作时间(出勤時刻は手入力。勤怠システムとは連携しない)。小さく 1 行で。
+/// 入力済みなら「已工作 3小时12分」(押すと修正)、未入力なら今日タブではその場に小さな入力欄
+private struct WorkTime: View {
+    @ObservedObject var coordinator: AppCoordinator
+    let allowsInput: Bool
+    @Binding var error: String?
+    let showToday: () -> Void
     @State private var input = ""
     @State private var editing = false
-    @State private var error: String?
     static let time = Date.FormatStyle(date: .omitted, time: .shortened, locale: Theme.locale)
 
     var body: some View {
-        if let began = coordinator.workBeganAt, !editing {
+        if let began = coordinator.workBeganAt, !(editing && allowsInput) {
             TimelineView(.periodic(from: .now, by: 30)) { context in
-                HStack(spacing: 12) {
-                    IconTile(symbol: "briefcase.fill", color: Theme.yellow, seed: 5)
-                    VStack(alignment: .leading, spacing: 0) {
-                        Text("勤務")
-                            .font(.system(size: Theme.Size.subhead, weight: .heavy))
+                Button {
+                    input = ""
+                    error = nil
+                    editing = true
+                    showToday()
+                } label: {
+                    HStack(alignment: .firstTextBaseline, spacing: 4) {
+                        Text("已工作")
+                            .foregroundStyle(Theme.textFaint)
                         Text(WorkStart.durationText(from: began, to: context.date))
-                            .font(.system(size: 26, weight: .black))
                             .monospacedDigit()
-                        Text("\(began.formatted(Self.time)) から")
-                            .font(.system(size: Theme.Size.subhead, weight: .semibold))
                             .foregroundStyle(Theme.textSoft)
                     }
-                    Spacer(minLength: 8)
-                    Button("修正") {
-                        input = ""
-                        error = nil
-                        editing = true
-                    }
-                    .buttonStyle(.splat)
+                    .font(Theme.font(12, .semibold))
+                    .fixedSize()
                 }
-                .glassCard()
+                .buttonStyle(.plain)
+                .help("\(began.formatted(Self.time)) 上班。点击修改上班时间")
             }
+        } else if !allowsInput {
+            Button(action: showToday) {
+                Text("填写上班时间")
+                    .font(Theme.font(12, .semibold))
+                    .foregroundStyle(Theme.textFaint)
+                    .fixedSize()
+            }
+            .buttonStyle(.plain)
+            .help("去「今日」填写上班时间")
         } else {
-            VStack(alignment: .leading, spacing: 12) {
-                CardHeader(symbol: "briefcase.fill", color: Theme.yellow,
-                           title: editing ? "出勤時刻を修正" : "出勤時刻を入力",
-                           subtitle: "8:53 なら 853 と入力して Enter", seed: 5)
-                HStack(spacing: 10) {
-                    // 白い枠の中はダークでも明るい配色で描く(プレースホルダーとカーソルを見えるように)
-                    TextField("", text: $input, prompt: Text("853").foregroundStyle(Theme.inkSoft))
-                        .textFieldStyle(.plain)
-                        .environment(\.colorScheme, .light)
-                        .font(.system(size: Theme.Size.title, weight: .heavy).monospacedDigit())
-                        .foregroundStyle(Theme.ink)
-                        .padding(.horizontal, 14)
-                        .frame(height: 40)
-                        .background(Theme.white, in: Capsule(style: .circular))
-                        .overlay(Capsule(style: .circular).strokeBorder(Theme.ink, lineWidth: 2.5))
-                        .onSubmit(save)
-                    Button("記録", action: save)
-                        .buttonStyle(.splat(Theme.lime, minHeight: 40))
-                        .disabled(input.trimmingCharacters(in: .whitespaces).isEmpty)
-                    if editing {
-                        Button("やめる") {
-                            editing = false
-                            error = nil
-                        }
-                        .buttonStyle(.splat(Theme.white, minHeight: 40))
+            HStack(spacing: 6) {
+                Text("上班")
+                    .font(Theme.font(12, .semibold))
+                    .foregroundStyle(Theme.textFaint)
+                TextField("", text: $input, prompt: Text("853").foregroundStyle(Theme.textFaint))
+                    .font(Theme.font(13, .semibold).monospacedDigit())
+                    .multilineTextAlignment(.center)
+                    .frame(width: 52, height: 24)
+                    .textFieldStyle(.plain)
+                    .foregroundStyle(Theme.white)
+                    .background(Theme.fill, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+                    .onSubmit(save)
+                    .help("8:53 上班就输入 853，按回车")
+                if editing {
+                    Button("取消") {
+                        editing = false
+                        error = nil
                     }
-                }
-                if let error {
-                    Label(error, systemImage: "exclamationmark.triangle.fill")
-                        .font(.system(size: Theme.Size.subhead, weight: .heavy))
+                    .buttonStyle(.command(.quiet, height: 24))
                 }
             }
-            .glassCard()
+            .fixedSize()
         }
     }
 
@@ -189,136 +203,431 @@ private struct WorkTimeCard: View {
     }
 }
 
-// MARK: - いまのタスク(字下げで中身を細分化するメモ)
+// MARK: - 今日
 
-/// 「事例公開」「Ph2 - navigate / ・電話 / ・gen1 と gen2 の違い」のように書けるメモ。
-/// 表示はタスク名を太字、中身を箇条書きで。編集はそのままのテキストで(Tab で字下げ)
-private struct TaskMemoCard: View {
+private struct TodayView: View {
+    @ObservedObject var coordinator: AppCoordinator
+    @Binding var selectedMeetingID: String?
+
+    var body: some View {
+        let events = coordinator.todayEvents
+        let next = NextEventPolicy.currentOrNext(events: events, now: Date())
+        let selected = events.first { $0.id == selectedMeetingID } ?? next
+
+        VStack(alignment: .leading, spacing: 0) {
+            // 主役:選んだ会議(既定は次の会議)
+            Group {
+                if !coordinator.calendarAuthorized {
+                    CalendarAccessHero()
+                } else if let selected {
+                    MeetingHero(event: selected, isNext: selected.id == next?.id)
+                } else {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("今天没有会议")
+                            .font(Theme.font(22, .semibold))
+                            .foregroundStyle(Theme.white)
+                        Text("工作日会在会议开始前 \(coordinator.settings.reminderLeadMinutes) 分钟提醒你")
+                            .font(Theme.font(13, .regular))
+                            .foregroundStyle(Theme.textSoft)
+                    }
+                    .card()
+                }
+            }
+
+            ScheduleList(events: events, selectedID: selected?.id) { id in
+                // 次の会議を選び直したら既定に戻す(時間が進むと自動で次へ移る)
+                withAnimation(.spring(duration: 0.25, bounce: 0.2)) {
+                    selectedMeetingID = id == next?.id ? nil : id
+                }
+            }
+            .padding(.top, 22)
+
+            TaskList(coordinator: coordinator)
+                .padding(.top, 20)
+        }
+    }
+}
+
+/// 主役:会議 1 つ。左に件名と「加入会议」、右に黄緑の大きな残り時間
+private struct MeetingHero: View {
+    let event: MeetingEvent
+    let isNext: Bool
+    static let time = Date.FormatStyle(date: .omitted, time: .shortened, locale: Theme.locale)
+
+    var body: some View {
+        TimelineView(.periodic(from: .now, by: 15)) { context in
+            let now = context.date
+            let running = event.start <= now && now < event.end
+            let past = event.end <= now
+            let countdown: (value: String, unit: String) =
+                past ? ("—", "已结束") : NextEventPolicy.heroCountdown(for: event, now: now)
+            let kicker: String = running ? "NOW" : (past ? "DONE" : (isNext ? "NEXT" : "LATER"))
+            let span = "\(event.start.formatted(Self.time)) – \(event.end.formatted(Self.time))"
+            HStack(alignment: .top, spacing: 16) {
+                VStack(alignment: .leading, spacing: 0) {
+                    Eyebrow(lead: kicker, text: span)
+                    Text(event.title)
+                        .font(Theme.font(22, .semibold))
+                        .foregroundStyle(Theme.white)
+                        .lineLimit(2)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .textSelection(.enabled)
+                        .padding(.top, 6)
+                    if let url = event.joinURL, !past {
+                        Button("加入会议") { NSWorkspace.shared.open(url) }
+                            .buttonStyle(.command(.primary))
+                            .help(url.host ?? "加入会议")
+                            .padding(.top, 16)
+                    } else if event.joinURL == nil {
+                        Text("这个会议没有线上链接")
+                            .font(Theme.font(12, .medium))
+                            .foregroundStyle(Theme.textFaint)
+                            .padding(.top, 12)
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                BigNumber(value: countdown.value, unit: countdown.unit,
+                          color: past ? Theme.textFaint : Theme.lime)
+                    .frame(maxWidth: 130, alignment: .trailing)
+            }
+            .card()
+        }
+    }
+}
+
+private struct CalendarAccessHero: View {
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("需要日历权限")
+                .font(Theme.font(22, .semibold))
+                .foregroundStyle(Theme.white)
+            Text("用来显示会议、提前提醒，以及查找シャチョケン")
+                .font(Theme.font(13, .regular))
+                .foregroundStyle(Theme.textSoft)
+            Button("打开系统设置") {
+                if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Calendars") {
+                    NSWorkspace.shared.open(url)
+                }
+            }
+            .buttonStyle(.command(.primary))
+            .padding(.top, 10)
+        }
+        .card()
+    }
+}
+
+/// 今日日程(会議の一覧)。行を押すとその会議を選ぶ(加入は上のカードから)
+private struct ScheduleList: View {
+    let events: [MeetingEvent]
+    let selectedID: String?
+    let select: (String) -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            SectionHeader(title: "今日日程") {
+                if !events.isEmpty {
+                    Text("\(events.count)")
+                        .font(Theme.font(12, .semibold).monospacedDigit())
+                        .foregroundStyle(Theme.textFaint)
+                }
+            }
+            .padding(.bottom, 4)
+            if events.isEmpty {
+                Text("没有安排")
+                    .font(Theme.font(15, .regular))
+                    .foregroundStyle(Theme.textFaint)
+                    .frame(height: 34)
+            }
+            ForEach(events) { event in
+                EventRow(event: event, selected: event.id == selectedID) {
+                    select(event.id)
+                }
+            }
+        }
+    }
+}
+
+/// 1 行:時刻・件名・「线上」。選んだ行は左に黄緑の短い線
+private struct EventRow: View {
+    let event: MeetingEvent
+    let selected: Bool
+    let action: () -> Void
+    @State private var hovering = false
+
+    var body: some View {
+        let past = event.end < Date()
+        Button(action: action) {
+            HStack(spacing: 14) {
+                Text(event.start, format: .dateTime.hour().minute())
+                    .font(Theme.font(14, .medium).monospacedDigit())
+                    .foregroundStyle(past ? Theme.textFaint : (selected ? Theme.white : Theme.textSoft))
+                    .frame(width: 44, alignment: .leading)
+                Text(event.title)
+                    .font(Theme.font(15, selected ? .semibold : .regular))
+                    .foregroundStyle(past ? Theme.textFaint : Theme.white)
+                    .lineLimit(1)
+                Spacer(minLength: 8)
+                if event.joinURL != nil && !past {
+                    Text("线上")
+                        .font(Theme.font(12, .medium))
+                        .foregroundStyle(Theme.textFaint)
+                }
+            }
+            .frame(height: 34)
+            .background {
+                if hovering && !selected {
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .fill(Theme.card)
+                        .padding(.horizontal, -8)
+                }
+            }
+            .overlay(alignment: .leading) {
+                if selected {
+                    Capsule()
+                        .fill(Theme.lime)
+                        .frame(width: 3, height: 16)
+                        .offset(x: -12)
+                }
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .onHover { hovering = $0 }
+        .pointerStyle(.link)
+        .help(event.title)
+        .accessibilityAddTraits(selected ? .isSelected : [])
+    }
+}
+
+// MARK: - 当前任务(1 つずつが「もの」)
+
+/// 当前任务。各タスクは左のチェックボックスで完成(メモから消す・直後なら撤销)。
+/// 一覧ごとの操作は「编辑」(テキストで書き換え。書くそばから保存するので閉じても消えない)
+private struct TaskList: View {
     @ObservedObject var coordinator: AppCoordinator
     @State private var editing = false
     @State private var draft = ""
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                SplatBadge(text: "いまのタスク", color: Theme.lime, seed: 9, angle: -3)
-                Spacer()
+        VStack(alignment: .leading, spacing: 0) {
+            SectionHeader(title: "当前任务") {
                 if editing {
-                    Button("完了") {
+                    Button("完成") {
                         coordinator.saveTaskMemo(draft)
                         editing = false
                     }
-                    .buttonStyle(.splat(Theme.lime, minHeight: 32))
+                    .buttonStyle(.command(.primary, height: 24))
                 } else {
-                    Button("編集") {
+                    Button("编辑") {
                         draft = coordinator.settings.taskMemo
                         editing = true
                     }
-                    .buttonStyle(.splat(Theme.white, minHeight: 32))
+                    .buttonStyle(.command(.quiet, height: 20))
                 }
             }
+            .padding(.bottom, 6)
             if editing {
                 TextEditor(text: $draft)
-                    .font(.system(size: Theme.Size.body, weight: .medium))
-                    .foregroundStyle(Theme.ink)
+                    .font(Theme.font(14, .regular))
+                    .foregroundStyle(Theme.white)
                     .scrollContentBackground(.hidden)
-                    .environment(\.colorScheme, .light)
-                    .padding(8)
-                    .frame(minHeight: 140)
-                    .background(Theme.white, in: RoundedRectangle(cornerRadius: 12))
-                    .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(Theme.ink, lineWidth: 2.5))
-                Text("タスク名は字下げなし、中身は Tab で字下げ(または「- 」)。空行でタスクを区切る")
-                    .font(.system(size: Theme.Size.subhead, weight: .semibold))
-                    .foregroundStyle(Theme.textSoft)
+                    .padding(10)
+                    .frame(minHeight: 150)
+                    .background(Theme.fill, in: RoundedRectangle(cornerRadius: Theme.buttonRadius, style: .continuous))
+                    .onChange(of: draft) { _, text in
+                        coordinator.settings.taskMemo = text
+                    }
+                Text("任务名顶格写，内容用 Tab 缩进（或以「- 」开头），空行分隔任务")
+                    .font(Theme.font(12, .medium))
+                    .foregroundStyle(Theme.textFaint)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.top, 6)
             } else {
-                let lines = TaskOutline.parse(coordinator.settings.taskMemo)
-                if lines.isEmpty {
-                    Text("いま取り組んでいることを書いておけます")
-                        .font(.system(size: Theme.Size.subhead, weight: .semibold))
-                        .foregroundStyle(Theme.textSoft)
+                let blocks = TaskOutline.blocks(coordinator.settings.taskMemo)
+                if blocks.isEmpty {
+                    Text("写下现在在做的事")
+                        .font(Theme.font(15, .regular))
+                        .foregroundStyle(Theme.textFaint)
+                        .frame(height: 30)
                 } else {
-                    VStack(alignment: .leading, spacing: 4) {
-                        ForEach(Array(lines.enumerated()), id: \.offset) { _, line in
-                            if let line {
-                                row(line)
-                            } else {
-                                Spacer().frame(height: 6)
+                    ForEach(Array(blocks.enumerated()), id: \.offset) { index, block in
+                        TaskRow(block: block) {
+                            withAnimation(.spring(duration: 0.3, bounce: 0.2)) {
+                                coordinator.completeTask(at: index)
                             }
                         }
                     }
                 }
-            }
-        }
-        .glassCard()
-    }
-
-    @ViewBuilder
-    private func row(_ line: TaskOutline.Line) -> some View {
-        if line.depth == 0 {
-            Text(line.text)
-                .font(.system(size: Theme.Size.headline, weight: .heavy))
-                .fixedSize(horizontal: false, vertical: true)
-        } else {
-            HStack(alignment: .firstTextBaseline, spacing: 8) {
-                Circle()
-                    .fill(line.depth == 1 ? Theme.pink : Theme.cyan)
-                    .overlay(Circle().strokeBorder(Theme.ink, lineWidth: 1.5))
-                    .frame(width: 9, height: 9)
-                    .alignmentGuide(.firstTextBaseline) { $0[.bottom] - 1 }
-                Text(line.text)
-                    .font(.system(size: Theme.Size.body, weight: .semibold))
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-            .padding(.leading, CGFloat(line.depth - 1) * 18 + 4)
-        }
-    }
-}
-
-// MARK: - 次のシャチョケン(カレンダーから)
-
-private struct ShachokenCard: View {
-    let event: MeetingEvent?
-    let keyword: String
-    static let date = Date.FormatStyle(locale: Theme.locale).month().day().weekday(.abbreviated)
-    static let time = Date.FormatStyle(date: .omitted, time: .shortened, locale: Theme.locale)
-
-    var body: some View {
-        TimelineView(.periodic(from: .now, by: 60)) { context in
-            VStack(alignment: .leading, spacing: 10) {
-                SplatBadge(text: "次のシャチョケン", color: Theme.orange, seed: 15, angle: 3)
-                if let event {
-                    let countdown = NextEventPolicy.dayCountdown(to: event.start, now: context.date)
-                    HStack(alignment: .center, spacing: 14) {
-                        SplatNumber(value: countdown.value, unit: countdown.unit,
-                                    color: Theme.orange, size: 34, seed: 33)
-                        Spacer(minLength: 4)
-                        VStack(alignment: .trailing, spacing: 2) {
-                            Text(event.start.formatted(Self.date))
-                                .font(.system(size: Theme.Size.headline, weight: .heavy))
-                            Text("\(event.start.formatted(Self.time)) – \(event.end.formatted(Self.time))")
-                                .font(.system(size: Theme.Size.subhead, weight: .bold).monospacedDigit())
-                                .foregroundStyle(Theme.textSoft)
-                        }
+                if let done = coordinator.lastCompletedTask {
+                    HStack(spacing: 8) {
+                        Image(systemName: "checkmark")
+                            .font(.system(size: 11, weight: .bold))
+                            .foregroundStyle(Theme.lime)
+                        Text("已完成「\(done.title)」")
+                            .lineLimit(1)
+                        Spacer(minLength: 6)
+                        Button("撤销") { coordinator.undoCompleteTask() }
+                            .buttonStyle(.command(.quiet, height: 20))
                     }
-                    Text(event.title)
-                        .font(.system(size: Theme.Size.subhead, weight: .semibold))
-                        .foregroundStyle(Theme.textSoft)
-                        .lineLimit(1)
-                } else {
-                    Text("90 日以内に「\(keyword)」の予定はありません")
-                        .font(.system(size: Theme.Size.subhead, weight: .semibold))
-                        .foregroundStyle(Theme.textSoft)
+                    .font(Theme.font(12, .medium))
+                    .foregroundStyle(Theme.textSoft)
+                    .padding(.top, 6)
+                    .transition(.opacity)
                 }
             }
-            .glassCard()
         }
     }
 }
 
-// MARK: - 座り/立ち(昇降デスク)
+/// タスク 1 つ:左のチェックボックスで完成。タスク名と、中身を 1 行にまとめたもの
+private struct TaskRow: View {
+    let block: TaskOutline.Block
+    let complete: () -> Void
+    @State private var hovering = false
 
-/// 今の姿勢と経過時間。切り替え時刻を過ぎたらボタンをピンクのインクにする
-private struct PostureCard: View {
+    var body: some View {
+        let title = block.title ?? block.items.first?.text ?? ""
+        let rest = block.title == nil ? Array(block.items.dropFirst()) : block.items
+        let detail = rest.map(\.text).joined(separator: " · ")
+        HStack(alignment: .top, spacing: 12) {
+            Button(action: complete) {
+                RoundedRectangle(cornerRadius: 4, style: .continuous)
+                    .strokeBorder(hovering ? Theme.lime : Theme.rgb(0x5A5A5A), lineWidth: 1.5)
+                    .background(RoundedRectangle(cornerRadius: 4, style: .continuous)
+                        .fill(hovering ? Theme.lime : Color.clear))
+                    .overlay {
+                        if hovering {
+                            Image(systemName: "checkmark")
+                                .font(.system(size: 10, weight: .bold))
+                                .foregroundStyle(Theme.black)
+                        }
+                    }
+                    .frame(width: 16, height: 16)
+                    .padding(.top, 2)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .onHover { hovering = $0 }
+            .help("完成（从备忘里移除）")
+            .accessibilityLabel("完成")
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(Theme.font(15, .semibold))
+                    .foregroundStyle(Theme.white)
+                    .fixedSize(horizontal: false, vertical: true)
+                if !detail.isEmpty {
+                    Text(detail)
+                        .font(Theme.font(13, .regular))
+                        .foregroundStyle(Theme.textSoft)
+                        .lineLimit(2)
+                        .help(rest.map { String(repeating: "  ", count: max(0, $0.depth - 1)) + $0.text }
+                            .joined(separator: "\n"))
+                }
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(.vertical, 6)
+    }
+}
+
+// MARK: - 英語タブの上:近い会議
+
+/// 英語タブを開いていても、開始 30 分前から会議を見失わない(小さなカード 1 行)
+private struct MeetingStrip: View {
+    @ObservedObject var coordinator: AppCoordinator
+
+    var body: some View {
+        TimelineView(.periodic(from: .now, by: 15)) { context in
+            if let event = NextEventPolicy.currentOrNext(events: coordinator.todayEvents, now: context.date),
+               event.start.timeIntervalSince(context.date) < 30 * 60 {
+                let running = event.start <= context.date
+                let countdown = NextEventPolicy.heroCountdown(for: event, now: context.date)
+                HStack(spacing: 10) {
+                    Eyebrow(lead: running ? "NOW" : "NEXT")
+                    Text(countdown.value + countdown.unit)
+                        .font(Theme.font(13, .semibold).monospacedDigit())
+                        .foregroundStyle(Theme.white)
+                        .fixedSize()
+                    Text(event.title)
+                        .font(Theme.font(13, .regular))
+                        .foregroundStyle(Theme.textSoft)
+                        .lineLimit(1)
+                    Spacer(minLength: 8)
+                    if let url = event.joinURL {
+                        Button("加入会议") { NSWorkspace.shared.open(url) }
+                            .buttonStyle(.command(.primary, height: 28))
+                    }
+                }
+                .padding(.horizontal, 14)
+                .padding(.vertical, 8)
+                .background(Theme.card, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                .padding(.bottom, 16)
+            }
+        }
+    }
+}
+
+// MARK: - 下の 1 行:坐姿・シャチョケン・电源
+
+private struct PanelFooter: View {
+    @ObservedObject var coordinator: AppCoordinator
+
+    var body: some View {
+        HStack(alignment: .center, spacing: 18) {
+            if coordinator.settings.postureEnabled && coordinator.isWorkingNow {
+                PostureStatus(coordinator: coordinator)
+            }
+            if coordinator.calendarAuthorized {
+                ShachokenStatus(event: coordinator.nextShachoken,
+                                keyword: coordinator.settings.shachokenKeywords)
+                    .layoutPriority(-1)
+            }
+            Spacer(minLength: 0)
+            // 設定ボタンは置かない(使うときは ⌘,)。⌘Q はすぐ終了
+            Group {
+                Button("设置") { coordinator.openSettings() }
+                    .keyboardShortcut(",", modifiers: .command)
+                Button("退出") { NSApp.terminate(nil) }
+                    .keyboardShortcut("q", modifiers: .command)
+            }
+            .frame(width: 0, height: 0)
+            .opacity(0)
+            .accessibilityHidden(true)
+            PowerButton()
+        }
+        .padding(.top, 10)
+        .overlay(alignment: .top) { Theme.hairline.frame(height: 1) }
+    }
+}
+
+/// 电源(退出)。按两下才退出(以免误点后会议提醒和站立提醒都停掉)
+private struct PowerButton: View {
+    @State private var armed = false
+
+    var body: some View {
+        Button {
+            if armed {
+                NSApp.terminate(nil)
+            } else {
+                withAnimation(.spring(duration: 0.25, bounce: 0.3)) { armed = true }
+                Task {
+                    try? await Task.sleep(for: .seconds(3))
+                    withAnimation { armed = false }
+                }
+            }
+        } label: {
+            Image(systemName: "power")
+                .font(.system(size: 12, weight: .semibold))
+        }
+        .buttonStyle(.commandSquare(armed ? .primary : .quiet, size: 24))
+        .help(armed ? "再按一次退出" : "退出 Yudh（按两下，或 ⌘Q）。设置：⌘,")
+        .accessibilityLabel(armed ? "再按一次退出" : "退出 Yudh")
+    }
+}
+
+/// 坐姿:「已坐 23 分钟」。到点了加上「该站起来了」(黄緑)。点击打开屏幕上方的小窗
+private struct PostureStatus: View {
     @ObservedObject var coordinator: AppCoordinator
     static let time = Date.FormatStyle(date: .omitted, time: .shortened, locale: Theme.locale)
 
@@ -327,176 +636,61 @@ private struct PostureCard: View {
             let standing = coordinator.posture == .standing
             let minutes = max(0, Int(context.date.timeIntervalSince(coordinator.postureSince) / 60))
             let due = context.date >= coordinator.postureDueAt
-            let inMeeting = BreakReminder.isInMeeting(events: coordinator.todayEvents,
-                                                      now: context.date)
-            VStack(alignment: .leading, spacing: 12) {
-                HStack(spacing: 12) {
-                    IconTile(symbol: standing ? "figure.stand" : "chair.fill",
-                             color: standing ? Theme.cyan : Theme.lime, seed: standing ? 37 : 43)
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("\(standing ? "立ち作業" : "座り作業") \(minutes) 分")
-                            .font(.system(size: Theme.Size.headline, weight: .heavy))
-                            .monospacedDigit()
-                        Text(detail(standing: standing, due: due, inMeeting: inMeeting))
-                            .font(.system(size: Theme.Size.subhead, weight: .semibold))
-                            .foregroundStyle(Theme.textSoft)
+            let dueAt = coordinator.postureDueAt.formatted(Self.time)
+            Button {
+                coordinator.openPosturePrompt()
+            } label: {
+                HStack(alignment: .firstTextBaseline, spacing: 4) {
+                    Text(standing ? "已站" : "已坐")
+                        .foregroundStyle(Theme.textFaint)
+                    Text("\(minutes) 分钟")
+                        .monospacedDigit()
+                        .foregroundStyle(Theme.textSoft)
+                    if due {
+                        Text(standing ? "· 该坐下了" : "· 该站起来了")
+                            .foregroundStyle(Theme.lime)
                     }
-                    Spacer(minLength: 8)
-                    Button(standing ? "座った" : "立った") {
-                        if standing { coordinator.confirmSat() } else { coordinator.confirmStood() }
-                    }
-                    .buttonStyle(.splat(due ? Theme.pink : Theme.white))
-                    .help(standing ? "座り作業に戻したら押してください" : "デスクを上げて立ったら押してください")
                 }
-                if standing {
-                    // 立ち作業中は、閉じた手順の小窓をここから開き直せる
-                    Button {
-                        coordinator.showStandingGuide()
-                    } label: {
-                        Label("ストレッチ「\(coordinator.promptStretch.name)」の手順を開く",
-                              systemImage: "figure.cooldown")
-                            .font(.system(size: Theme.Size.subhead, weight: .bold))
-                    }
-                    .buttonStyle(.plain)
-                } else {
-                    // 次に出すストレッチの予告(ホバーで手順)
-                    Label("次のストレッチ:\(coordinator.nextStretch.name)",
-                          systemImage: "figure.cooldown")
-                        .font(.system(size: Theme.Size.subhead, weight: .bold))
-                        .help(BreakReminder.body(for: coordinator.nextStretch))
-                }
+                .font(Theme.font(12, .semibold))
+                .lineLimit(1)
+                .fixedSize()
             }
-            .glassCard()
+            .buttonStyle(.plain)
+            .help(standing ? "\(dueAt) 坐下。点击打开拉伸步骤" : "\(dueAt) 站起来。点击打开「站起来了吗？」小窗")
         }
-    }
-
-    private func detail(standing: Bool, due: Bool, inMeeting: Bool) -> String {
-        let next = standing ? "座り作業" : "立ち作業"
-        if due { return inMeeting ? "会議が終わったら\(next)へ" : "そろそろ\(next)へ" }
-        return "\(coordinator.postureDueAt.formatted(Self.time)) ごろ\(next)へ"
     }
 }
 
-// MARK: - 次の会議
-
-/// 残り時間をインクの上の極太数字で。開催中はバッジとインクがライム色に
-private struct NextUpCard: View {
-    let event: MeetingEvent
+/// 下一次シャチョケン(26卒_新卒社長研修,日历里 90 天内)。一个月只看两三次,所以小小的
+private struct ShachokenStatus: View {
+    let event: MeetingEvent?
+    let keyword: String
+    static let date = Date.FormatStyle(locale: Theme.locale).month(.defaultDigits).day().weekday(.abbreviated)
     static let time = Date.FormatStyle(date: .omitted, time: .shortened, locale: Theme.locale)
 
     var body: some View {
-        TimelineView(.periodic(from: .now, by: 15)) { context in
-            let running = event.start <= context.date
-            let countdown = NextEventPolicy.heroCountdown(for: event, now: context.date)
-            VStack(alignment: .leading, spacing: 8) {
-                HStack {
-                    SplatBadge(text: running ? "開催中" : "次の会議",
-                               color: running ? Theme.lime : Theme.pink, seed: 25, angle: -4)
-                    Spacer()
-                    Text("\(event.start.formatted(Self.time)) – \(event.end.formatted(Self.time))")
-                        .font(.system(size: Theme.Size.subhead, weight: .bold).monospacedDigit())
-                }
-                Text(event.title)
-                    .font(.system(size: Theme.Size.title, weight: .heavy))
-                    .lineLimit(2)
-                    .fixedSize(horizontal: false, vertical: true)
-                HStack(alignment: .center) {
-                    SplatNumber(value: countdown.value, unit: countdown.unit,
-                                color: running ? Theme.lime : Theme.yellow, seed: 21)
-                    Spacer()
-                    if let url = event.joinURL {
-                        Button {
-                            NSWorkspace.shared.open(url)
-                        } label: {
-                            Label("参加", systemImage: "video.fill")
-                                .font(.system(size: Theme.Size.headline, weight: .black))
-                        }
-                        .buttonStyle(.splat(Theme.pink, minHeight: 44))
-                    }
+        TimelineView(.periodic(from: .now, by: 60)) { context in
+            HStack(alignment: .firstTextBaseline, spacing: 4) {
+                Text("シャチョケン")
+                    .foregroundStyle(Theme.textFaint)
+                if let event {
+                    let countdown = NextEventPolicy.dayCountdown(to: event.start, now: context.date)
+                    Text("\(countdown.value)\(countdown.unit)")
+                        .foregroundStyle(Theme.textSoft)
+                } else {
+                    Text("暂无")
+                        .foregroundStyle(Theme.textFaint)
                 }
             }
-            .glassCard()
-            .accessibilityElement(children: .combine)
-        }
-    }
-}
-
-// MARK: - 今日の予定
-
-private struct ScheduleCard: View {
-    let events: [MeetingEvent]
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            SplatBadge(text: "今日の予定", color: Theme.cyan, seed: 27, angle: 2)
-            VStack(spacing: 0) {
-                ForEach(Array(events.enumerated()), id: \.element.id) { index, event in
-                    if index > 0 {
-                        Rectangle()
-                            .fill(Theme.outline.opacity(0.18))
-                            .frame(height: 1.5)
-                    }
-                    EventRow(event: event)
-                }
-            }
-        }
-        .glassCard()
-    }
-}
-
-private struct EventRow: View {
-    let event: MeetingEvent
-    @State private var hovering = false
-
-    private var isPast: Bool { event.end < Date() }
-    private var canJoin: Bool { event.joinURL != nil && !isPast }
-
-    var body: some View {
-        if canJoin, let url = event.joinURL {
-            Button {
-                NSWorkspace.shared.open(url)
-            } label: {
-                content
-            }
-            .buttonStyle(.plain)
-            .background(hovering ? Theme.yellow.opacity(0.5) : .clear, in: Capsule(style: .circular))
-            .onHover { inside in
-                hovering = inside
-                if inside { NSCursor.pointingHand.push() } else { NSCursor.pop() }
-            }
-            .help("クリックで会議に参加")
-        } else {
-            content
+            .font(Theme.font(12, .semibold))
+            .lineLimit(1)
+            .help(tooltip)
         }
     }
 
-    private var content: some View {
-        HStack(spacing: 10) {
-            Text(event.start, format: .dateTime.hour().minute())
-                .font(.system(size: Theme.Size.subhead, weight: .heavy).monospacedDigit())
-                .foregroundStyle(isPast ? Theme.textSoft : Theme.text)
-                .frame(width: 44, alignment: .leading)
-
-            // インクのしずく:オンライン会議はシアン、それ以外・終了済みは白
-            let drop = InkSplat(seed: SeededRandom.seed(event.title), lobes: 6, drops: 0, drip: false)
-            drop.fill(canJoin ? Theme.cyan : Theme.white)
-                .overlay(drop.stroke(Theme.ink, lineWidth: 1.5))
-                .frame(width: 14, height: 14)
-
-            Text(event.title)
-                .font(.system(size: Theme.Size.body, weight: isPast ? .medium : .bold))
-                .foregroundStyle(isPast ? Theme.textSoft : Theme.text)
-                .strikethrough(isPast, color: Theme.textSoft)
-                .lineLimit(2)
-            Spacer(minLength: 8)
-            if canJoin {
-                Image(systemName: "video.fill")
-                    .font(.system(size: Theme.Size.subhead, weight: .bold))
-                    .accessibilityLabel("オンライン会議")
-            }
-        }
-        .padding(.horizontal, 8)
-        .frame(minHeight: 40)
-        .contentShape(Rectangle())
+    private var tooltip: String {
+        guard let event else { return "90 天内没有标题含「\(keyword)」的日程" }
+        return "\(event.title)\n\(event.start.formatted(Self.date)) "
+            + "\(event.start.formatted(Self.time)) – \(event.end.formatted(Self.time))"
     }
 }
