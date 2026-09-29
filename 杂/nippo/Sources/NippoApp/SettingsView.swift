@@ -16,9 +16,9 @@ struct SettingsView: View {
                         value: binding(\.reminderLeadMinutes), in: 1...30)
             }
 
-            Section("次のシャチョケン") {
+            Section("次のシャチョケン(26卒_新卒社長研修)") {
                 TextField("件名キーワード(カンマ区切り)", text: binding(\.shachokenKeywords))
-                Text("カレンダーの 90 日先までから、件名にこの言葉を含む次の予定をメニューに出します(全角・半角は区別しません)")
+                Text("カレンダーの 90 日先までから、件名にこの言葉を含む次の予定をメニューの下の帯に出します(全角・半角は区別しません)。既定は「\(AppSettings.defaultShachokenKeywords)」")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }

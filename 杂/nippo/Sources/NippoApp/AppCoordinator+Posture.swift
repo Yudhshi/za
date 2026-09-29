@@ -66,10 +66,17 @@ extension AppCoordinator {
         posturePrompt = nil
     }
 
-    /// 立ち作業中に手順の小窓をもう一度開く(メニューから)
-    func showStandingGuide() {
-        guard posture == .standing else { return }
-        posturePrompt = .standing
+    /// メニューの姿勢チップから小窓を開く:立ち作業中は手順、座り作業中は「立ちましたか?」。
+    /// 座り作業中は切り替え時刻を今にする(次の判定で小窓が閉じないように)
+    func openPosturePrompt() {
+        switch posture {
+        case .standing:
+            posturePrompt = .standing
+        case .sitting:
+            postureRemindAt = Date()
+            if posturePrompt != .askStand { pickStretch() }
+            posturePrompt = .askStand
+        }
     }
 
     func closePosturePrompt() {

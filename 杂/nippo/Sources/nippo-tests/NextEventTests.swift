@@ -83,6 +83,10 @@ func runNextEventTests() {
         T.expectEqual(NextEventPolicy.nextMatching(["シャチョケン"], in: [day(17, "ｼｬﾁｮｹﾝ 事例")],
                                                    now: now)?.id, "17-ｼｬﾁｮｹﾝ 事例", "half-width kana")
         T.expectEqual(NextEventPolicy.nextMatching([""], in: events, now: now)?.id, nil)
+        // 既定のキーワードで、正式名の件名(26卒_新卒社長研修)に当たる
+        T.expectEqual(NextEventPolicy.nextMatching(["新卒社長研修", "シャチョケン"],
+                                                   in: [day(11, "定例"), day(16, "26卒_新卒社長研修")],
+                                                   now: now)?.id, "16-26卒_新卒社長研修")
     }
 
     T.run("dayCountdown: minutes, hours, tomorrow, days, running") {

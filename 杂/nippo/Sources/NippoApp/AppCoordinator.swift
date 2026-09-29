@@ -31,6 +31,7 @@ final class AppCoordinator: ObservableObject {
         didSet { posturePanel.update() }
     }
     lazy var posturePanel = PosturePanelController(coordinator: self)
+    private lazy var settingsWindow = SettingsWindowController(coordinator: self)
 
     let calendarProvider: CalendarProviding = EventKitCalendar()
     private var timer: Timer?
@@ -45,13 +46,21 @@ final class AppCoordinator: ObservableObject {
             fatalError("DB 初期化失敗: \(error)")
         }
         AppLog.shared.configure(root: URL(fileURLWithPath: settings.reportsRoot))
-        AppLog.shared.log("app", "起動 v1.1")
+        AppLog.shared.log("app", "起動 Yudh v0.2")
         quietDays = QuietDayChecker(db: db)
 
         // 初回起動時にログイン項目を自動登録(ユーザーがシステム設定で外したら再登録しない)
         if Bundle.main.bundleIdentifier != nil, !settings.autoLaunchApplied {
             try? SMAppService.mainApp.register()
             settings.autoLaunchApplied = true
+        }
+        // 2026-09-29 に Nippo.app → Yudh.app へ改名。有効なログイン項目は新しい場所で登録し直す(一度だけ)
+        if Bundle.main.bundleIdentifier != nil, !settings.loginItemMovedToYudh {
+            if SMAppService.mainApp.status == .enabled {
+                try? SMAppService.mainApp.unregister()
+                try? SMAppService.mainApp.register()
+            }
+            settings.loginItemMovedToYudh = true
         }
 
         NotificationService.shared.requestPermission()
@@ -130,6 +139,11 @@ final class AppCoordinator: ObservableObject {
                 self.shachokenInFlight = false
             }
         }
+    }
+
+    /// 設定ウインドウを前面に開く(メニューの歯車ボタン)
+    func openSettings() {
+        settingsWindow.show()
     }
 
     func saveTaskMemo(_ text: String) {

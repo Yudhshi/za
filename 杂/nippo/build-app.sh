@@ -1,18 +1,24 @@
 #!/bin/bash
-# Nippo.app を dist/ に組み立てる(CLT のみ・Xcode 不要)
+# Yudh.app(旧 Nippo.app)を dist/ に組み立てる(CLT のみ・Xcode 不要)
 set -euo pipefail
 cd "$(dirname "$0")"
 
 swift build -c release
 
-APP="dist/Nippo.app"
-rm -rf "$APP"
+APP="dist/Yudh.app"
+# 旧名で動いているものを終了し、旧名のアプリも片付ける(同じバンドル ID が 2 つ並ばないように)
+pkill -x Nippo 2>/dev/null || true
+rm -rf "$APP" "dist/Nippo.app"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
-cp .build/release/NippoApp "$APP/Contents/MacOS/Nippo"
+cp .build/release/NippoApp "$APP/Contents/MacOS/Yudh"
 cp Resources/Info.plist "$APP/Contents/Info.plist"
+# アイコンの元絵は Resources/AppIcon/AppIcon.svg(描き直したら node scripts/make-icon.mjs で icns を作り直す)
+cp Resources/AppIcon/AppIcon.icns "$APP/Contents/Resources/AppIcon.icns"
 
 # ad-hoc 署名。TCC 許可はバンドルIDに紐づくため再ビルド後も概ね保持されるが、
 # 権限ダイアログが再出現したら再許可すること。
 codesign --force -s - "$APP"
+# Finder・Dock のアイコンのキャッシュを更新
+touch "$APP"
 
 echo "Built: $APP"
