@@ -58,7 +58,7 @@ private final class PromptPanel: NSPanel {
 
 // MARK: - 小窓の中身
 
-/// デスクトップの上に浮く、透けるガラスのカード。目覚まし時計くん(マスコット)が尋ねる
+/// デスクトップの上に浮く白いカード(v3 レトロポップ)。目覚まし時計くん(マスコット)が尋ねる
 struct PosturePromptView: View {
     @ObservedObject var coordinator: AppCoordinator
 
@@ -72,7 +72,7 @@ struct PosturePromptView: View {
             }
         }
         .frame(width: 380)
-        .padding(20)   // カードの下の影が窓の中に収まるように
+        .padding(20)   // カードの右下の影が窓の中に収まるように
         .environment(\.locale, Theme.locale)
     }
 
@@ -87,7 +87,7 @@ struct PosturePromptView: View {
                 .padding(.leading, -6)
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)
-                    .font(Theme.font(28, .black))
+                    .font(Theme.font(30, .black))
                 Text(detail)
                     .font(Theme.font(Theme.Size.body, .bold))
                     .foregroundStyle(Theme.textSoft)
@@ -110,9 +110,9 @@ struct PosturePromptView: View {
                 } label: {
                     Text("立った!").frame(maxWidth: .infinity)
                 }
-                .buttonStyle(.rubber(Theme.mustard, height: 44))
+                .buttonStyle(.pop(Theme.green, height: 46, wide: true))
                 Button("15分後") { coordinator.snoozePosture(minutes: 15) }
-                    .buttonStyle(.rubber(Theme.cream, height: 44))
+                    .buttonStyle(.pop(Theme.white, height: 46))
             }
         }
         .card()
@@ -128,9 +128,9 @@ struct PosturePromptView: View {
                 } label: {
                     Text("座った").frame(maxWidth: .infinity)
                 }
-                .buttonStyle(.rubber(Theme.teal, height: 44))
+                .buttonStyle(.pop(Theme.green, height: 46, wide: true))
                 Button("あと5分") { coordinator.snoozePosture(minutes: 5) }
-                    .buttonStyle(.rubber(Theme.cream, height: 44))
+                    .buttonStyle(.pop(Theme.white, height: 46))
             }
         }
         .card()
@@ -150,15 +150,16 @@ private struct StandingGuide: View {
                     Mascot(size: 52)
                         .padding(.leading, -6)
                     VStack(alignment: .leading, spacing: 0) {
-                        Tag(text: "立ち作業 のこり", symbol: "figure.stand", color: Theme.teal)
-                        BigNumber(value: Self.clock(remaining), unit: "", size: 44)
+                        Tag(text: "立ち作業 のこり", symbol: "figure.stand", color: Theme.cyan)
+                        SplatNumber(value: Self.clock(remaining), unit: "", size: 44)
+                            .padding(.top, 4)
                     }
                     Spacer()
                     Button("閉じる") { coordinator.closePosturePrompt() }
-                        .buttonStyle(.rubber(Theme.cream, height: 30))
+                        .buttonStyle(.pop(Theme.white, height: 32))
                         .help("閉じてもカウントは続きます。時間になったらまた知らせます")
                 }
-                RubberProgress(progress: total > 0 ? 1 - remaining / total : 1)
+                PopProgress(progress: total > 0 ? 1 - remaining / total : 1)
                 stretch
             }
             .card()
@@ -196,21 +197,21 @@ private struct StandingGuide: View {
             HStack(spacing: 10) {
                 if step > 0 && !done {
                     Button("戻る") { coordinator.moveStretchStep(by: -1) }
-                        .buttonStyle(.rubber(Theme.cream, height: 38))
+                        .buttonStyle(.pop(Theme.white, height: 38))
                 }
                 Spacer()
                 if !done {
                     Button(step == s.steps.count - 1 ? "できた!" : "次へ") {
                         coordinator.moveStretchStep(by: 1)
                     }
-                    .buttonStyle(.rubber(Theme.mustard, height: 38))
+                    .buttonStyle(.pop(Theme.green, height: 38))
                 }
             }
         }
         .foregroundStyle(Theme.ink)
         .padding(14)
-        .background(Theme.cream, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous)
+        .background(Theme.white, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous)
             .strokeBorder(Theme.ink, lineWidth: 2))
     }
 
@@ -221,21 +222,16 @@ private struct StandingGuide: View {
     }
 }
 
-/// ゴムのチューブに赤が満ちていく進捗バー(太い輪郭 + 上のつや)
-private struct RubberProgress: View {
+/// 緑が満ちていく進捗バー(太い輪郭)
+private struct PopProgress: View {
     let progress: Double
 
     var body: some View {
         GeometryReader { geo in
             ZStack(alignment: .leading) {
-                Capsule(style: .continuous).fill(Theme.cream)
-                Capsule(style: .continuous).fill(Theme.red)
+                Capsule(style: .continuous).fill(Theme.white)
+                Capsule(style: .continuous).fill(Theme.green)
                     .frame(width: max(18, min(1, progress) * geo.size.width))
-                Capsule(style: .continuous).fill(Theme.white.opacity(0.45))
-                    .frame(height: 4)
-                    .padding(.horizontal, 10)
-                    .frame(maxHeight: .infinity, alignment: .top)
-                    .padding(.top, 3)
             }
             .overlay(Capsule(style: .continuous).strokeBorder(Theme.ink, lineWidth: 2.5))
         }

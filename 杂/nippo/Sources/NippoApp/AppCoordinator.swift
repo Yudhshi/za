@@ -32,6 +32,8 @@ final class AppCoordinator: ObservableObject {
     }
     lazy var posturePanel = PosturePanelController(coordinator: self)
     private lazy var settingsWindow = SettingsWindowController(coordinator: self)
+    /// 英語タブ(すきま時間の英語)
+    lazy var english = EnglishCoordinator(db: db)
 
     let calendarProvider: CalendarProviding = EventKitCalendar()
     private var timer: Timer?
@@ -46,21 +48,24 @@ final class AppCoordinator: ObservableObject {
             fatalError("DB 初期化失敗: \(error)")
         }
         AppLog.shared.configure(root: URL(fileURLWithPath: settings.reportsRoot))
-        AppLog.shared.log("app", "起動 Yudh v0.2")
+        AppLog.shared.log("app", "起動 Yudh v0.3")
         quietDays = QuietDayChecker(db: db)
 
-        // 初回起動時にログイン項目を自動登録(ユーザーがシステム設定で外したら再登録しない)
-        if Bundle.main.bundleIdentifier != nil, !settings.autoLaunchApplied {
-            try? SMAppService.mainApp.register()
-            settings.autoLaunchApplied = true
-        }
-        // 2026-09-29 に Nippo.app → Yudh.app へ改名。有効なログイン項目は新しい場所で登録し直す(一度だけ)
-        if Bundle.main.bundleIdentifier != nil, !settings.loginItemMovedToYudh {
-            if SMAppService.mainApp.status == .enabled {
+        if Bundle.main.bundleIdentifier != nil {
+            // 2026-09-29 に Nippo.app → Yudh.app へ改名。ログイン項目を新しい場所で登録し直す(一度だけ)
+            if !settings.loginItemMovedToYudh {
                 try? SMAppService.mainApp.unregister()
-                try? SMAppService.mainApp.register()
+                settings.loginItemMovedToYudh = true
             }
-            settings.loginItemMovedToYudh = true
+            // ログイン時に起動は常にオン(設定の切り替えは無い)。
+            // システム設定で明示的に切られた(承認待ち)ときだけは尊重する
+            if SMAppService.mainApp.status == .notRegistered {
+                do {
+                    try SMAppService.mainApp.register()
+                } catch {
+                    AppLog.shared.log("app", "ログイン項目の登録に失敗: \(error)")
+                }
+            }
         }
 
         NotificationService.shared.requestPermission()

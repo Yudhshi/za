@@ -1,7 +1,8 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
   <!--
-    Yudh のアプリアイコン(1930 年代のラバーホース・アニメ風)。
-    目覚まし時計のキャラクター:パイカットの目・白い手袋・ゴムホースの腕・大きな靴。
+    Yudh のアプリアイコン v3:目覚まし時計くん。
+    ラバーホース(パイカットの目)× スプラトゥーン(インクの飛び散り)× ネオブルータリズム(太い墨線・固い影)
+    × ガラス(上半分のつや)。要素は少なく、16px でも「緑に黄色のインク、白い顔」と読めるように。
     macOS のアイコン格子(1024 の中に 824 角の角丸、角半径 185)に合わせてある。
     書き出しは scripts/make-icon.mjs(PNG → AppIcon.icns)
   -->
@@ -9,165 +10,69 @@
     <clipPath id="squircle">
       <rect x="100" y="100" width="824" height="824" rx="185" ry="185"/>
     </clipPath>
-    <radialGradient id="vignette" cx="512" cy="470" r="560" gradientUnits="userSpaceOnUse">
-      <stop offset="0.45" stop-color="#7A3A10" stop-opacity="0"/>
-      <stop offset="1" stop-color="#5A2608" stop-opacity="0.55"/>
-    </radialGradient>
-    <radialGradient id="glow" cx="512" cy="470" r="330" gradientUnits="userSpaceOnUse">
-      <stop offset="0" stop-color="#FFF6DD" stop-opacity="0.95"/>
-      <stop offset="1" stop-color="#FFF6DD" stop-opacity="0"/>
-    </radialGradient>
-    <linearGradient id="sheen" x1="0" y1="100" x2="0" y2="520" gradientUnits="userSpaceOnUse">
-      <stop offset="0" stop-color="#FFFFFF" stop-opacity="0.34"/>
+    <linearGradient id="bg" x1="0" y1="100" x2="0" y2="924" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#3FE27E"/>
+      <stop offset="1" stop-color="#1CB957"/>
+    </linearGradient>
+    <linearGradient id="sheen" x1="0" y1="100" x2="0" y2="560" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#FFFFFF" stop-opacity="0.42"/>
       <stop offset="1" stop-color="#FFFFFF" stop-opacity="0"/>
     </linearGradient>
-    <linearGradient id="bodyShade" x1="0" y1="230" x2="0" y2="770" gradientUnits="userSpaceOnUse">
-      <stop offset="0" stop-color="#E8523A"/>
-      <stop offset="1" stop-color="#B92A1B"/>
-    </linearGradient>
-    <filter id="grain" x="0" y="0" width="100%" height="100%">
-      <feTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves="2" seed="7" result="n"/>
-      <feColorMatrix type="matrix" values="0 0 0 0 0.35  0 0 0 0 0.2  0 0 0 0 0.08  0 0 0 0.22 0"/>
-    </filter>
     <filter id="drop" x="-10%" y="-10%" width="120%" height="125%">
-      <feDropShadow dx="0" dy="12" stdDeviation="14" flood-color="#000" flood-opacity="0.32"/>
+      <feDropShadow dx="0" dy="12" stdDeviation="14" flood-color="#000" flood-opacity="0.3"/>
     </filter>
-
-    <!-- 白い手袋(指を上に開いた形)。輪郭は黒い下敷き+白い塗りで 1 本の線にまとめる -->
-    <g id="glove">
-      <g fill="#1C1410" stroke="#1C1410" stroke-width="20" stroke-linejoin="round">
-        <rect x="-26" y="-62" width="24" height="70" rx="12" transform="rotate(-14 -14 0)"/>
-        <rect x="-10" y="-72" width="24" height="80" rx="12"/>
-        <rect x="8" y="-64" width="24" height="72" rx="12" transform="rotate(14 20 0)"/>
-        <rect x="-62" y="-6" width="24" height="54" rx="12" transform="rotate(-58 -50 20)"/>
-        <ellipse cx="0" cy="14" rx="40" ry="36"/>
-        <path d="M-30 40 L30 40 L40 74 Q0 86 -40 74 Z"/>
-      </g>
-      <g fill="#FFFFFF">
-        <rect x="-26" y="-62" width="24" height="70" rx="12" transform="rotate(-14 -14 0)"/>
-        <rect x="-10" y="-72" width="24" height="80" rx="12"/>
-        <rect x="8" y="-64" width="24" height="72" rx="12" transform="rotate(14 20 0)"/>
-        <rect x="-62" y="-6" width="24" height="54" rx="12" transform="rotate(-58 -50 20)"/>
-        <ellipse cx="0" cy="14" rx="40" ry="36"/>
-        <path d="M-30 40 L30 40 L40 74 Q0 86 -40 74 Z"/>
-      </g>
-      <g fill="none" stroke="#1C1410" stroke-width="7" stroke-linecap="round">
-        <path d="M-9 -18 L-6 2"/>
-        <path d="M9 -18 L8 2"/>
-        <path d="M-32 46 Q0 54 32 46"/>
-        <path d="M-12 18 L-12 34 M0 18 L0 36 M12 18 L12 34" stroke-width="6"/>
-      </g>
-    </g>
   </defs>
 
   <g filter="url(#drop)">
     <g clip-path="url(#squircle)">
-      <!-- 地:からし色のサンバースト + 周辺減光 + フィルムの粒子 -->
-      <rect x="0" y="0" width="1024" height="1024" fill="#F2B233"/>
-      <g fill="#F7CB5E" transform="translate(512 470)">
-        <path id="ray" d="M0 0 L-70 -760 L70 -760 Z"/>
-        <use href="#ray" transform="rotate(22.5)"/>
-        <use href="#ray" transform="rotate(45)"/>
-        <use href="#ray" transform="rotate(67.5)"/>
-        <use href="#ray" transform="rotate(90)"/>
-        <use href="#ray" transform="rotate(112.5)"/>
-        <use href="#ray" transform="rotate(135)"/>
-        <use href="#ray" transform="rotate(157.5)"/>
-        <use href="#ray" transform="rotate(180)"/>
-        <use href="#ray" transform="rotate(202.5)"/>
-        <use href="#ray" transform="rotate(225)"/>
-        <use href="#ray" transform="rotate(247.5)"/>
-        <use href="#ray" transform="rotate(270)"/>
-        <use href="#ray" transform="rotate(292.5)"/>
-        <use href="#ray" transform="rotate(315)"/>
-        <use href="#ray" transform="rotate(337.5)"/>
-      </g>
-      <rect x="0" y="0" width="1024" height="1024" fill="url(#glow)"/>
-      <rect x="0" y="0" width="1024" height="1024" fill="url(#vignette)"/>
+      <rect x="0" y="0" width="1024" height="1024" fill="url(#bg)"/>
 
-      <!-- 床の影 -->
-      <ellipse cx="512" cy="872" rx="250" ry="30" fill="#5A2608" opacity="0.35"/>
-
-      <!-- 脚(ゴムホース)と靴 -->
-      <g fill="none" stroke="#1C1410" stroke-width="26" stroke-linecap="round">
-        <path d="M452 760 Q440 800 420 830"/>
-        <path d="M572 760 Q584 800 604 830"/>
-      </g>
-      <g stroke="#1C1410" stroke-width="12">
-        <path d="M322 858 Q322 800 392 800 Q448 800 452 858 Z" fill="#1C1410"/>
-        <path d="M572 858 Q576 800 632 800 Q702 800 702 858 Z" fill="#1C1410"/>
-      </g>
-      <g fill="none" stroke="#FFFFFF" stroke-width="10" stroke-linecap="round" opacity="0.8">
-        <path d="M350 826 Q360 812 380 810"/>
-        <path d="M600 826 Q610 812 630 810"/>
+      <!-- インクの飛び散り(黄)とピンクのしずく -->
+      <g fill="#FFD60A" transform="rotate(-8 512 540)"><path d="M809.9 511.4 Q879.5 559.3 798.6 580.8 Q717.6 602.4 752.7 683.4 Q787.7 764.3 722.4 761.2 Q657.0 758.2 629.2 819.0 Q601.4 879.8 526.4 830.9 Q451.5 781.9 397.7 794.2 Q343.9 806.5 341.2 758.4 Q338.5 710.2 259.6 662.1 Q180.6 614.0 211.2 576.0 Q241.9 537.9 215.4 500.3 Q188.9 462.8 253.5 422.8 Q318.1 382.9 319.5 318.4 Q321.0 254.0 403.5 277.9 Q486.1 301.8 521.9 268.0 Q557.7 234.3 592.1 300.7 Q626.4 367.1 712.2 348.1 Q798.0 329.2 769.1 396.3 Q740.2 463.5 809.9 511.4 Z"/><circle cx="324.6" cy="898.0" r="31.6"/><circle cx="130.1" cy="339.8" r="36.0"/><circle cx="809.5" cy="756.2" r="23.3"/><rect x="402.5" y="697.5" width="61.7" height="160.7" rx="30.8"/><circle cx="433.3" cy="858.2" r="46.2"/></g>
+      <g fill="#FF4FA3">
+        <circle cx="820" cy="770" r="26"/>
+        <circle cx="200" cy="222" r="16"/>
       </g>
 
-      <!-- ベル(左右)と打ち金 -->
-      <g stroke="#1C1410" stroke-width="18" stroke-linejoin="round">
-        <path d="M300 250 L350 300" stroke-linecap="round" fill="none"/>
-        <path d="M724 250 L674 300" stroke-linecap="round" fill="none"/>
-        <path d="M232 318 A112 112 0 0 1 402 176 Z" fill="#2F9E97"/>
-        <path d="M792 318 A112 112 0 0 0 622 176 Z" fill="#2F9E97"/>
-        <circle cx="512" cy="196" r="26" fill="#2F9E97"/>
+      <!-- 固い影(右下にずらした墨) -->
+      <g fill="#111111" transform="translate(20 20)">
+        <path d="M268 360 A108 108 0 0 1 430 214 Z" transform="rotate(-8 350 290)"/>
+        <path d="M756 360 A108 108 0 0 0 594 214 Z" transform="rotate(8 674 290)"/>
+        <circle cx="512" cy="540" r="212"/>
       </g>
-      <path d="M512 222 L512 250" stroke="#1C1410" stroke-width="22" stroke-linecap="round"/>
+
+      <!-- ベル(ピンクのドーム)と打ち金 -->
+      <g stroke="#111111" stroke-width="22" stroke-linejoin="round">
+        <path d="M512 300 L512 262" stroke-linecap="round"/>
+        <circle cx="512" cy="248" r="24" fill="#FF4FA3"/>
+        <path d="M268 360 A108 108 0 0 1 430 214 Z" fill="#FF4FA3" transform="rotate(-8 350 290)"/>
+        <path d="M756 360 A108 108 0 0 0 594 214 Z" fill="#FF4FA3" transform="rotate(8 674 290)"/>
+      </g>
       <g fill="none" stroke="#FFFFFF" stroke-width="12" stroke-linecap="round" opacity="0.7">
-        <path d="M262 270 Q280 222 322 206"/>
-        <path d="M680 206 Q718 214 742 244"/>
+        <path d="M300 300 Q318 262 356 246"/>
+        <path d="M668 246 Q704 256 724 290"/>
       </g>
 
-      <!-- 腕(ゴムホース)と手袋 -->
-      <g fill="none" stroke="#1C1410" stroke-width="28" stroke-linecap="round">
-        <path d="M262 520 C196 540 168 470 196 380"/>
-        <path d="M762 540 C832 560 862 500 842 420"/>
-      </g>
-      <use href="#glove" transform="translate(196 330) rotate(-12) scale(1.25)"/>
-      <use href="#glove" transform="translate(846 372) rotate(16) scale(1.25)"/>
-
-      <!-- 時計の胴(赤)と文字盤 -->
-      <circle cx="512" cy="500" r="268" fill="url(#bodyShade)" stroke="#1C1410" stroke-width="22"/>
-      <circle cx="512" cy="500" r="206" fill="#FFF1D6" stroke="#1C1410" stroke-width="14"/>
-      <path d="M318 400 A220 220 0 0 1 438 294" fill="none" stroke="#FFFFFF" stroke-width="20"
-            stroke-linecap="round" opacity="0.55"/>
-      <g stroke="#1C1410" stroke-linecap="round">
-        <path d="M512 310 L512 334" stroke-width="14"/>
-        <path d="M702 500 L678 500" stroke-width="14"/>
-        <path d="M512 690 L512 666" stroke-width="14"/>
-        <path d="M322 500 L346 500" stroke-width="14"/>
-      </g>
-
-      <!-- 顔:パイカットの目・ほっぺ・口 -->
-      <g stroke="#1C1410" stroke-width="10">
-        <ellipse cx="458" cy="448" rx="46" ry="66" fill="#FFFFFF"/>
-        <ellipse cx="566" cy="448" rx="46" ry="66" fill="#FFFFFF"/>
-      </g>
-      <g fill="#1C1410">
-        <ellipse cx="468" cy="458" rx="26" ry="42"/>
-        <ellipse cx="576" cy="458" rx="26" ry="42"/>
+      <!-- 顔 -->
+      <circle cx="512" cy="540" r="212" fill="#FFFFFF" stroke="#111111" stroke-width="24"/>
+      <g fill="#111111">
+        <ellipse cx="456" cy="506" rx="34" ry="56"/>
+        <ellipse cx="568" cy="506" rx="34" ry="56"/>
       </g>
       <g fill="#FFFFFF">
-        <path d="M472 446 L500 408 L478 406 Z"/>
-        <path d="M580 446 L608 408 L586 406 Z"/>
+        <path d="M462 494 L494 460 L475 452 Z"/>
+        <path d="M574 494 L606 460 L587 452 Z"/>
       </g>
-      <g fill="none" stroke="#1C1410" stroke-width="10" stroke-linecap="round">
-        <path d="M418 368 Q450 350 482 366"/>
-        <path d="M542 366 Q574 350 606 368"/>
+      <g fill="#FF4FA3" opacity="0.85">
+        <ellipse cx="398" cy="596" rx="28" ry="16"/>
+        <ellipse cx="626" cy="596" rx="28" ry="16"/>
       </g>
-      <g fill="#F28C8C" opacity="0.7">
-        <ellipse cx="404" cy="548" rx="30" ry="18"/>
-        <ellipse cx="620" cy="548" rx="30" ry="18"/>
-      </g>
-      <path d="M430 544 Q512 574 594 544 Q590 632 512 640 Q434 632 430 544 Z"
-            fill="#1C1410" stroke="#1C1410" stroke-width="8" stroke-linejoin="round"/>
-      <path d="M470 612 Q512 580 554 612 Q540 632 512 634 Q484 632 470 612 Z" fill="#E8523A"/>
-      <path d="M444 553 Q512 576 580 553 L576 568 Q512 588 448 568 Z" fill="#FFFFFF"/>
-      <circle cx="512" cy="508" r="12" fill="#1C1410"/>
+      <path d="M446 604 Q512 660 578 604" fill="none" stroke="#111111" stroke-width="24" stroke-linecap="round"/>
 
-      <!-- ガラスのつや(上半分)と粒子 -->
-      <rect x="100" y="100" width="824" height="420" fill="url(#sheen)"/>
-      <rect x="0" y="0" width="1024" height="1024" filter="url(#grain)" opacity="0.6"/>
+      <!-- ガラスのつや -->
+      <rect x="100" y="100" width="824" height="460" fill="url(#sheen)"/>
     </g>
     <rect x="100" y="100" width="824" height="824" rx="185" ry="185" fill="none"
-          stroke="#FFFFFF" stroke-opacity="0.25" stroke-width="4"/>
+          stroke="#FFFFFF" stroke-opacity="0.35" stroke-width="4"/>
   </g>
 </svg>

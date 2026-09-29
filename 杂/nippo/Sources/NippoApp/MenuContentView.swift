@@ -2,33 +2,49 @@ import AppKit
 import SwiftUI
 import NippoCore
 
-/// メニューパネル本体(2026-09 ラバーホース × ガラス)。よく見るものほど上・大きく、開いてすぐ全体が見える横長 2 列:
-/// 上:日付と、勤務時間の小さなチップ(お休みの日はその旨も)
-/// 中:左に次の会議(残り時間・参加)と今日の予定、右にいまのタスク
-/// 下:座り/立ち(普段は小窓で知らせるので状態だけ)・シャチョケン(月に数回しか見ない)・設定・終了
+/// パネルのタブ(開き直しても前回のタブ)
+enum PanelTab: String {
+    case today, english
+}
+
+/// メニューパネル本体(2026-09 v3 レトロポップ × ネオブルータリズム)。開いてすぐ全体が見える横長:
+/// 上:カラーバー・日付・タブ(今日 / 英語)・勤務時間の小さなチップ
+/// 中(今日):左に次の会議と今日の予定、右にいまのタスク
+/// 中(英語):単語・同替・聴写・辞書(すきま時間の英語)
+/// 下:座り/立ち(普段は小窓で知らせるので状態だけ)・シャチョケン(月に数回しか見ない)・終了
 /// 中段が画面より高くなったときだけスクロールする(上下の帯は常に見える)
 struct MenuContentView: View {
     @ObservedObject var coordinator: AppCoordinator
+    @AppStorage("panelTab") private var tab: PanelTab = .today
     @State private var contentHeight: CGFloat = 360
 
     private var maxHeight: CGFloat {
-        (NSScreen.main?.visibleFrame.height ?? 900) - 200
+        (NSScreen.main?.visibleFrame.height ?? 900) - 220
     }
 
     var body: some View {
         VStack(spacing: 0) {
-            PanelHeader(coordinator: coordinator)
-                .padding([.horizontal, .top], Theme.panelPadding)
+            ColorBars()
+
+            PanelHeader(coordinator: coordinator, english: coordinator.english, tab: $tab)
+                .padding(.horizontal, Theme.panelPadding)
+                .padding(.top, 14)
                 .padding(.bottom, Theme.gap)
 
             ScrollView {
-                columns
-                    .padding(.horizontal, Theme.panelPadding)
-                    // カードの下の影が切れないように
-                    .padding(.bottom, Theme.lift + 2)
-                    .background(GeometryReader { geo in
-                        Color.clear.preference(key: ContentHeightKey.self, value: geo.size.height)
-                    })
+                Group {
+                    switch tab {
+                    case .today: columns
+                    case .english: EnglishView(english: coordinator.english)
+                    }
+                }
+                .padding(.horizontal, Theme.panelPadding)
+                // カードの右下の影が切れないように
+                .padding(.trailing, Theme.shadow)
+                .padding(.bottom, Theme.shadow + 2)
+                .background(GeometryReader { geo in
+                    Color.clear.preference(key: ContentHeightKey.self, value: geo.size.height)
+                })
             }
             .scrollIndicators(.automatic)
             .frame(height: min(contentHeight, maxHeight))
@@ -41,11 +57,15 @@ struct MenuContentView: View {
                 .padding(.bottom, Theme.panelPadding)
         }
         .frame(width: Theme.panelWidth)
-        .background(PanelBackdrop())
+        .background(Theme.base)
         .environment(\.locale, Theme.locale)
         .onAppear {
             coordinator.refreshTodayEvents()
             coordinator.refreshShachoken(force: true)
+            coordinator.english.loadIfNeeded()
+        }
+        .onChange(of: tab) { _, newTab in
+            if newTab == .english { coordinator.english.loadIfNeeded() }
         }
     }
 
@@ -69,7 +89,7 @@ struct MenuContentView: View {
 
         if !coordinator.calendarAuthorized {
             VStack(alignment: .leading, spacing: 10) {
-                Tag(text: "カレンダー", symbol: "exclamationmark.triangle.fill", color: Theme.blush)
+                Tag(text: "カレンダー", symbol: "exclamationmark.triangle.fill", color: Theme.pink)
                 Text("カレンダーへのアクセスが必要です")
                     .font(Theme.font(Theme.Size.headline, .heavy))
                 Text("会議の表示・通知と、シャチョケンの確認に使います")
@@ -81,12 +101,12 @@ struct MenuContentView: View {
                         NSWorkspace.shared.open(url)
                     }
                 }
-                .buttonStyle(.rubber(Theme.mustard))
+                .buttonStyle(.pop(Theme.green))
             }
             .card()
         } else if hero == nil && rest.isEmpty {
             VStack(alignment: .leading, spacing: 8) {
-                Tag(text: "今日の予定", symbol: "calendar", color: Theme.teal)
+                Tag(text: "今日の予定", symbol: "calendar", color: Theme.cyan)
                 Text("今日の会議はありません")
                     .font(Theme.font(Theme.Size.title, .heavy))
                 Text("勤務日は、会議の開始 \(coordinator.settings.reminderLeadMinutes) 分前に通知します")
@@ -111,75 +131,141 @@ private struct ContentHeightKey: PreferenceKey {
     static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = nextValue() }
 }
 
-// MARK: - 上の帯:日付・お休み・勤務時間
+// MARK: - 上の帯:日付・タブ・勤務時間
 
 private struct PanelHeader: View {
     @ObservedObject var coordinator: AppCoordinator
+    @ObservedObject var english: EnglishCoordinator
+    @Binding var tab: PanelTab
 
     var body: some View {
         HStack(spacing: 10) {
-            Mascot(size: 46)
+            Mascot(size: 44)
                 .padding(.leading, -4)
-            HStack(alignment: .lastTextBaseline, spacing: 6) {
-                Text(Date(), format: .dateTime.month().day())
-                    .font(Theme.font(Theme.Size.date, .black))
-                Text(Date(), format: .dateTime.weekday(.wide))
-                    .font(Theme.font(Theme.Size.body, .heavy))
-                    .foregroundStyle(Theme.textSoft)
+            VStack(alignment: .leading, spacing: 3) {
+                HStack(alignment: .lastTextBaseline, spacing: 6) {
+                    Text(Date(), format: .dateTime.month().day())
+                        .font(Theme.font(Theme.Size.date, .black))
+                    Text(Date(), format: .dateTime.weekday(.wide))
+                        .font(Theme.font(Theme.Size.body, .bold))
+                        .foregroundStyle(Theme.textSoft)
+                }
+                if let reason = coordinator.quietReasonToday {
+                    Tag(text: "お休み(\(reason))", symbol: "moon.zzz.fill", color: Theme.yellow)
+                        .help("会議の通知と立ち作業リマインドは止まっています")
+                }
             }
             .foregroundStyle(Theme.text)
             .fixedSize()
             .accessibilityElement(children: .combine)
             Spacer(minLength: 8)
-            if let reason = coordinator.quietReasonToday {
-                Label("お休み(\(reason))", systemImage: "moon.zzz.fill")
-                    .chip(fill: Theme.mustard, text: Theme.ink)
-                    .help("会議の通知と立ち作業リマインドは止まっています")
+            TabSwitch(tab: $tab, englishBadge: english.loaded ? english.remainingTotal : nil)
+            // 英語タブでは入力欄を出さない(数字キーの操作と取り合わないように)
+            WorkTimeChip(coordinator: coordinator, allowsInput: tab == .today) {
+                tab = .today
             }
-            WorkTimeChip(coordinator: coordinator)
         }
     }
 }
 
+/// 今日 / 英語 の切り替え(⌘1 / ⌘2)。英語には今日の残り数
+private struct TabSwitch: View {
+    @Binding var tab: PanelTab
+    let englishBadge: Int?
+
+    var body: some View {
+        HStack(spacing: 2) {
+            segment(.today, "今日", badge: nil, key: "1")
+            segment(.english, "英語", badge: englishBadge, key: "2")
+        }
+        .padding(3)
+        // iOS 26/27 の切り替えのように、うっすらガラス(文字は 75% の白の上なので読みやすさは保つ)
+        .background(Theme.card.opacity(0.75), in: Capsule(style: .continuous))
+        .glassEffect(.regular, in: Capsule(style: .continuous))
+        .overlay(Capsule(style: .continuous).strokeBorder(Theme.outline, lineWidth: 2))
+    }
+
+    private func segment(_ value: PanelTab, _ title: String, badge: Int?,
+                         key: KeyEquivalent) -> some View {
+        let selected = tab == value
+        return Button {
+            tab = value
+        } label: {
+            HStack(spacing: 5) {
+                Text(title)
+                    .font(Theme.font(14, .heavy))
+                if let badge, badge > 0 {
+                    Text("\(badge)")
+                        .font(.system(size: 12, weight: .black).monospacedDigit())
+                        .foregroundStyle(Theme.ink)
+                        .padding(.horizontal, 6)
+                        .background(Theme.pink, in: Capsule(style: .continuous))
+                        .overlay(Capsule(style: .continuous).strokeBorder(Theme.ink, lineWidth: 1.5))
+                }
+            }
+            .foregroundStyle(selected ? Theme.card : Theme.text)
+            .padding(.horizontal, 13)
+            .frame(height: 28)
+            .background(selected ? Theme.text : Color.clear, in: Capsule(style: .continuous))
+            .contentShape(Capsule(style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .keyboardShortcut(key, modifiers: .command)
+        .help("\(title)(⌘\(key.character))")
+    }
+}
+
 /// 勤務時間(出勤時刻は手入力。勤怠システムとは連携しない)。
-/// 入力済みなら小さなチップ(押すと修正)、未入力ならその場に入力欄を出す
+/// 入力済みなら小さなチップ(押すと修正)、未入力なら今日タブではその場に入力欄を出す
 private struct WorkTimeChip: View {
     @ObservedObject var coordinator: AppCoordinator
+    let allowsInput: Bool
+    let showToday: () -> Void
     @State private var input = ""
     @State private var editing = false
     @State private var error: String?
     static let time = Date.FormatStyle(date: .omitted, time: .shortened, locale: Theme.locale)
 
+    init(coordinator: AppCoordinator, allowsInput: Bool, showToday: @escaping () -> Void) {
+        self.coordinator = coordinator
+        self.allowsInput = allowsInput
+        self.showToday = showToday
+    }
+
     var body: some View {
-        if let began = coordinator.workBeganAt, !editing {
+        if let began = coordinator.workBeganAt, !(editing && allowsInput) {
             TimelineView(.periodic(from: .now, by: 30)) { context in
                 Button {
                     input = ""
                     error = nil
                     editing = true
+                    showToday()
                 } label: {
                     HStack(spacing: 6) {
-                        Image(systemName: "briefcase.fill")
-                            .foregroundStyle(Theme.textSoft)
                         Text("勤務")
                             .foregroundStyle(Theme.textSoft)
-                        Text(WorkStart.durationText(from: began, to: context.date))
+                        Text(Self.clock(from: began, to: context.date))
                             .font(Theme.font(Theme.Size.headline, .black).monospacedDigit())
                         Text("\(began.formatted(Self.time))〜")
                             .monospacedDigit()
-                            .foregroundStyle(Theme.textSoft)
-                        Image(systemName: "pencil")
                             .foregroundStyle(Theme.textSoft)
                     }
                     .chip()
                 }
                 .buttonStyle(.plain)
-                .help("出勤時刻を修正")
+                .help("勤務 \(WorkStart.durationText(from: began, to: context.date))。押すと出勤時刻を修正")
             }
+        } else if !allowsInput {
+            Button(action: showToday) {
+                Label("出勤 未入力", systemImage: "briefcase.fill")
+                    .chip(fill: Theme.yellow, text: Theme.ink)
+            }
+            .buttonStyle(.plain)
+            .help("今日タブで出勤時刻を入力")
         } else {
             VStack(alignment: .trailing, spacing: 4) {
                 HStack(spacing: 6) {
-                    Label(editing ? "出勤を修正" : "出勤時刻", systemImage: "briefcase.fill")
+                    Text(editing ? "出勤を修正" : "出勤")
                         .font(Theme.font(Theme.Size.caption, .heavy))
                         .foregroundStyle(Theme.text)
                     // 白い枠の中はダークでも明るい配色で描く(プレースホルダーとカーソルを見えるように)
@@ -189,13 +275,13 @@ private struct WorkTimeChip: View {
                         .font(Theme.font(Theme.Size.headline, .heavy).monospacedDigit())
                         .foregroundStyle(Theme.ink)
                         .multilineTextAlignment(.center)
-                        .frame(width: 64, height: 30)
+                        .frame(width: 64, height: 32)
                         .background(Theme.white, in: Capsule(style: .continuous))
                         .overlay(Capsule(style: .continuous).strokeBorder(Theme.ink, lineWidth: 2))
                         .onSubmit(save)
                         .help("8:53 なら 853 と入力して Enter")
                     Button("記録", action: save)
-                        .buttonStyle(.rubber(Theme.mustard, height: 30))
+                        .buttonStyle(.pop(Theme.green, height: 32))
                         .disabled(input.trimmingCharacters(in: .whitespaces).isEmpty)
                     if editing {
                         Button {
@@ -204,7 +290,7 @@ private struct WorkTimeChip: View {
                         } label: {
                             Image(systemName: "xmark")
                         }
-                        .buttonStyle(.rubberRound(size: 30))
+                        .buttonStyle(.popRound(size: 32))
                         .help("やめる")
                     }
                 }
@@ -215,6 +301,12 @@ private struct WorkTimeChip: View {
                 }
             }
         }
+    }
+
+    /// 「3:12」(時間:分)。チップを短く保つ(ホバーで「3時間12分」)
+    static func clock(from start: Date, to now: Date) -> String {
+        let minutes = max(0, Int(now.timeIntervalSince(start) / 60))
+        return String(format: "%d:%02d", minutes / 60, minutes % 60)
     }
 
     private func save() {
@@ -230,7 +322,7 @@ private struct WorkTimeChip: View {
 
 // MARK: - 次の会議
 
-/// 残り時間を大きな数字で。開催中はタグが青緑に
+/// 残り時間を黄色いインクの上の極太数字で。開催中は「ON AIR」
 private struct NextUpCard: View {
     let event: MeetingEvent
     static let time = Date.FormatStyle(date: .omitted, time: .shortened, locale: Theme.locale)
@@ -239,11 +331,11 @@ private struct NextUpCard: View {
         TimelineView(.periodic(from: .now, by: 15)) { context in
             let running = event.start <= context.date
             let countdown = NextEventPolicy.heroCountdown(for: event, now: context.date)
-            VStack(alignment: .leading, spacing: 6) {
+            VStack(alignment: .leading, spacing: 8) {
                 HStack {
-                    Tag(text: running ? "開催中" : "次の会議",
-                        symbol: running ? "play.fill" : "alarm.fill",
-                        color: running ? Theme.teal : Theme.mustard)
+                    Tag(text: running ? "ON AIR" : "次の会議",
+                        symbol: running ? "dot.radiowaves.left.and.right" : "alarm.fill",
+                        color: running ? Theme.red : Theme.yellow)
                     Spacer()
                     Text("\(event.start.formatted(Self.time)) – \(event.end.formatted(Self.time))")
                         .font(Theme.font(Theme.Size.body, .heavy).monospacedDigit())
@@ -254,15 +346,16 @@ private struct NextUpCard: View {
                     .fixedSize(horizontal: false, vertical: true)
                     .help(event.title)
                 HStack(alignment: .center) {
-                    BigNumber(value: countdown.value, unit: countdown.unit)
+                    SplatNumber(value: countdown.value, unit: countdown.unit,
+                                color: running ? Theme.green : Theme.yellow)
                     Spacer()
                     if let url = event.joinURL {
                         Button {
                             NSWorkspace.shared.open(url)
                         } label: {
-                            Label("参加", systemImage: "hand.point.right.fill")
+                            Label("参加", systemImage: "play.fill")
                         }
-                        .buttonStyle(.rubber(Theme.red, text: Theme.white, height: 40))
+                        .buttonStyle(.pop(Theme.green, height: 42))
                         .help("会議に参加")
                     }
                 }
@@ -280,7 +373,7 @@ private struct ScheduleCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
-            Tag(text: "今日の予定", symbol: "calendar", color: Theme.teal)
+            Tag(text: "今日の予定", symbol: "calendar", color: Theme.cyan)
                 .padding(.bottom, 2)
             VStack(spacing: 0) {
                 ForEach(Array(events.enumerated()), id: \.element.id) { index, event in
@@ -312,7 +405,7 @@ private struct EventRow: View {
                 content
             }
             .buttonStyle(.plain)
-            .background(hovering ? Theme.mustard.opacity(0.35) : .clear,
+            .background(hovering ? Theme.yellow.opacity(0.45) : Color.clear,
                         in: RoundedRectangle(cornerRadius: 10, style: .continuous))
             .onHover { inside in
                 hovering = inside
@@ -326,17 +419,18 @@ private struct EventRow: View {
     }
 
     private var content: some View {
-        HStack(spacing: 9) {
+        HStack(spacing: 10) {
             Text(event.start, format: .dateTime.hour().minute())
                 .font(Theme.font(Theme.Size.caption + 1, .heavy).monospacedDigit())
                 .foregroundStyle(isPast ? Theme.textSoft : Theme.text)
-                .frame(width: 42, alignment: .leading)
+                .strikethrough(isPast, color: Theme.textSoft)
+                .frame(width: 44, alignment: .leading)
 
-            // オンライン会議は青緑、それ以外・終了済みは白抜き
+            // オンライン会議はシアン、それ以外・終了済みは白抜き
             Circle()
-                .fill(canJoin ? Theme.teal : Theme.cream)
-                .overlay(Circle().strokeBorder(Theme.outline, lineWidth: 2))
-                .frame(width: 12, height: 12)
+                .fill(canJoin ? Theme.cyan : Theme.white)
+                .overlay(Circle().strokeBorder(Theme.ink, lineWidth: 2))
+                .frame(width: 13, height: 13)
 
             Text(event.title)
                 .font(Theme.font(Theme.Size.body, isPast ? .medium : .bold))
@@ -352,7 +446,7 @@ private struct EventRow: View {
             }
         }
         .padding(.horizontal, 6)
-        .frame(minHeight: 32)
+        .frame(minHeight: 34)
         .contentShape(Rectangle())
     }
 }
@@ -369,20 +463,20 @@ private struct TaskMemoCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack {
-                Tag(text: "いまのタスク", symbol: "checklist", color: Theme.blush)
+                Tag(text: "いまのタスク", symbol: "checklist", color: Theme.pink)
                 Spacer()
                 if editing {
                     Button("完了") {
                         coordinator.saveTaskMemo(draft)
                         editing = false
                     }
-                    .buttonStyle(.rubber(Theme.mustard, height: 28))
+                    .buttonStyle(.pop(Theme.green, height: 30))
                 } else {
                     Button("編集") {
                         draft = coordinator.settings.taskMemo
                         editing = true
                     }
-                    .buttonStyle(.rubber(Theme.cream, height: 28))
+                    .buttonStyle(.pop(Theme.white, height: 30))
                 }
             }
             if editing {
@@ -432,9 +526,9 @@ private struct TaskMemoCard: View {
         } else {
             HStack(alignment: .firstTextBaseline, spacing: 8) {
                 Circle()
-                    .fill(line.depth == 1 ? Theme.red : Theme.teal)
-                    .overlay(Circle().strokeBorder(Theme.outline, lineWidth: 1.5))
-                    .frame(width: 8, height: 8)
+                    .fill(line.depth == 1 ? Theme.pink : Theme.cyan)
+                    .overlay(Circle().strokeBorder(Theme.ink, lineWidth: 1.5))
+                    .frame(width: 9, height: 9)
                     .alignmentGuide(.firstTextBaseline) { $0[.bottom] - 1 }
                 Text(line.text)
                     .font(Theme.font(Theme.Size.body, .bold))
@@ -445,7 +539,7 @@ private struct TaskMemoCard: View {
     }
 }
 
-// MARK: - 下の帯:座り/立ち・シャチョケン・設定・終了
+// MARK: - 下の帯:座り/立ち・シャチョケン・終了
 
 private struct PanelFooter: View {
     @ObservedObject var coordinator: AppCoordinator
@@ -461,20 +555,18 @@ private struct PanelFooter: View {
                     .layoutPriority(-1)
             }
             Spacer(minLength: 0)
-            Button {
-                coordinator.openSettings()
-            } label: {
-                Image(systemName: "gearshape.fill")
-            }
-            .buttonStyle(.rubberRound())
-            .help("設定")
-            .accessibilityLabel("設定")
+            // 設定ボタンは置かない(使うときは ⌘, で開く)
+            Button("設定") { coordinator.openSettings() }
+                .keyboardShortcut(",", modifiers: .command)
+                .frame(width: 0, height: 0)
+                .opacity(0)
+                .accessibilityHidden(true)
             Button {
                 NSApp.terminate(nil)
             } label: {
                 Image(systemName: "power")
             }
-            .buttonStyle(.rubberRound())
+            .buttonStyle(.popRound())
             .help("Yudh を終了")
             .accessibilityLabel("Yudh を終了")
         }
@@ -501,8 +593,7 @@ private struct PostureChip: View {
                     Text(detail(standing: standing, due: due))
                         .foregroundStyle(due ? Theme.ink : Theme.textSoft)
                 }
-                .chip(fill: due ? Theme.mustard : Theme.card, text: due ? Theme.ink : Theme.text,
-                      height: 30)
+                .chip(fill: due ? Theme.yellow : Theme.card, text: due ? Theme.ink : Theme.text)
             }
             .buttonStyle(.plain)
             .help(standing ? "ストレッチの手順を開く" : "「立ちましたか?」の小窓を開く")
@@ -539,7 +630,7 @@ private struct ShachokenChip: View {
                         .foregroundStyle(Theme.textSoft)
                 }
             }
-            .chip(height: 30)
+            .chip()
             .help(tooltip)
         }
     }

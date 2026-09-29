@@ -4,7 +4,8 @@ import NippoCore
 func runDatabaseTests() {
     T.run("in-memory db migrates all tables, legacy note/checklist/transcript tables kept") {
         let db = try AppDatabase.inMemory()
-        for table in ["vacation", "punch_record", "transcript_line", "note", "checklist_item"] {
+        for table in ["vacation", "punch_record", "transcript_line", "note", "checklist_item",
+                      "english_card", "english_log"] {
             T.expect(try db.dbQueue.read { try $0.tableExists(table) }, "\(table) exists")
         }
     }

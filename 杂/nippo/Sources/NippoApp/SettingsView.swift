@@ -1,11 +1,9 @@
 import SwiftUI
-import ServiceManagement
 import NippoCore
 
 struct SettingsView: View {
     @ObservedObject var coordinator: AppCoordinator
     @ObservedObject var settings: AppSettings
-    @State private var launchAtLogin = SMAppService.mainApp.status == .enabled
     @State private var newVacation = Date()
     @State private var vacations: [String] = []
 
@@ -87,15 +85,9 @@ struct SettingsView: View {
                 Text("DB・ログの保存先。変更はアプリ再起動後に完全反映されます")
                     .font(.caption)
                     .foregroundStyle(.secondary)
-                Toggle("ログイン時に起動", isOn: $launchAtLogin)
-                    .onChange(of: launchAtLogin) { _, enable in
-                        do {
-                            if enable { try SMAppService.mainApp.register() }
-                            else { try SMAppService.mainApp.unregister() }
-                        } catch {
-                            launchAtLogin = SMAppService.mainApp.status == .enabled
-                        }
-                    }
+                Text("ログイン時に常に起動します")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
         }
         .formStyle(.grouped)
