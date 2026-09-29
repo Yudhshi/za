@@ -108,6 +108,12 @@ final class EnglishCoordinator: ObservableObject {
         let undo: EnglishUndo
     }
 
+    /// 答えた直後のスタンプ(NICE! / MISS)。少しして自然に消える
+    struct Flash: Equatable {
+        let id = UUID()
+        let good: Bool
+    }
+
     /// 1 日の目標(問)
     static let dailyGoal = 20
 
@@ -138,6 +144,7 @@ final class EnglishCoordinator: ObservableObject {
     @Published var dictQuery = ""
 
     @Published private(set) var lastAction: LastAction?
+    @Published private(set) var flash: Flash?
     @Published private(set) var todayCount = 0
     @Published private(set) var streak = 0
     @Published private(set) var remaining: [Mode: Int] = [:]
@@ -321,6 +328,11 @@ final class EnglishCoordinator: ObservableObject {
         let point = try? store.undoPoint(for: card.id)
         let saved = record(card.id, kind: .vocab, rating: rating)
         remember(.vocab, point, "\(card.word) → \(saved.map { Self.intervalLabel($0.state.interval) } ?? "記録")")
+        switch rating {
+        case .good, .easy: celebrate(true)
+        case .again: celebrate(false)
+        case .hard: break
+        }
         lastAnswered[.vocab] = card.id
         nextVocab()
         refreshStats()
@@ -395,6 +407,7 @@ final class EnglishCoordinator: ObservableObject {
         let correct = index == q.answerIndex
         record(id, kind: .para, rating: correct ? .good : .again)
         remember(.para, point, "\(q.entry.w) → " + (correct ? "正解" : "今日もう一度"))
+        celebrate(correct)
         lastAnswered[.para] = id
         refreshStats()
     }
@@ -442,6 +455,7 @@ final class EnglishCoordinator: ObservableObject {
         let point = try? store.undoPoint(for: item.id)
         record(item.id, kind: .spell, rating: rating)
         remember(.spell, point, "\(item.word.w) → \(message)")
+        if result != .almost { celebrate(result == .correct) }
         lastAnswered[.spell] = item.id
         refreshStats()
     }
@@ -453,6 +467,7 @@ final class EnglishCoordinator: ObservableObject {
         let point = try? store.undoPoint(for: item.id)
         record(item.id, kind: .spell, rating: .again)
         remember(.spell, point, "\(item.word.w) → 今日もう一度")
+        celebrate(false)
         lastAnswered[.spell] = item.id
         refreshStats()
     }
@@ -501,6 +516,15 @@ final class EnglishCoordinator: ObservableObject {
         if mode != action.mode { mode = action.mode }
         focus(action.undo.id)
         refreshStats()
+    }
+
+    private func celebrate(_ good: Bool) {
+        let stamp = Flash(good: good)
+        flash = stamp
+        Task { [weak self] in
+            try? await Task.sleep(for: .milliseconds(900))
+            if self?.flash == stamp { self?.flash = nil }
+        }
     }
 
     private func remember(_ mode: Mode, _ point: EnglishUndo?, _ message: String) {

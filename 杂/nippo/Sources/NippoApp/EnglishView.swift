@@ -1,161 +1,134 @@
 import SwiftUI
 import NippoCore
 
-/// 英語タブ。OOUI:もの(単語・考点词・語料・辞書)を選ぶ → カード(1 つ)か一覧(まとまり)を見る →
-/// カードに付いた操作をする。すきま時間向けに 1 問 10 秒前後、キーボードだけで回せる
-/// (単語:Space → 1〜4、考点词:1〜4 → Enter、語料:入力 → Enter、⌘Z で直前の答えを取り消し)
+/// 英語タブ(v5 ゲームの UI)。OOUI:もの(単語・考点词・語料・辞書)を選ぶ → カード(1 つ)か一覧(まとまり)→
+/// カードに付いた操作。1 問 10 秒前後、キーボードだけで回せる
+/// (単語:Space → 1〜4、考点词:1〜4 → Enter、語料:入力 → Enter、⌘Z で直前の答えを取り消し)。
+/// 正解で「NICE!」、まちがいで「MISS」のスタンプ。今日の数は TURF ゲージ、連続日数は COMBO
 struct EnglishView: View {
     @ObservedObject var english: EnglishCoordinator
 
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.gap) {
-            HStack(spacing: 10) {
-                ObjectSwitch(english: english)
+            HStack(alignment: .center, spacing: 10) {
+                ModeMenu(english: english)
                 if english.mode != .dict {
-                    PresentationSwitch(english: english)
+                    Button {
+                        withAnimation(.spring(duration: 0.25, bounce: 0.3)) {
+                            english.presentation = english.presentation == .card ? .list : .card
+                        }
+                    } label: {
+                        Image(systemName: english.presentation == .card ? "list.bullet" : "rectangle.portrait")
+                    }
+                    .buttonStyle(.commandSquare(english.presentation == .list ? .primary : .ghost, size: 30))
+                    .help(english.presentation == .card ? "一覧を見る" : "カードに戻る")
                 }
                 Spacer(minLength: 8)
-                GoalMeter(count: english.todayCount, goal: EnglishCoordinator.dailyGoal,
-                          streak: english.streak)
+                HUDStat(label: "Turf", value: "\(english.todayCount)/\(EnglishCoordinator.dailyGoal)",
+                        detail: english.streak > 0 ? "COMBO ×\(english.streak)" : nil,
+                        segments: 10,
+                        filled: Double(english.todayCount) / Double(EnglishCoordinator.dailyGoal) * 10,
+                        alignment: .trailing)
+                    .help("1 日 \(EnglishCoordinator.dailyGoal) 問が目標。COMBO は連続日数")
             }
             if !english.loaded {
                 HStack(spacing: 10) {
                     ProgressView().controlSize(.small)
-                    Text("読み込み中…")
-                        .font(Theme.font(Theme.Size.body, .bold))
+                    Text("LOADING…")
+                        .font(Theme.display(16))
+                        .foregroundStyle(Theme.white)
                 }
                 .padding(16)
-                .block()
             } else if !english.hasData {
-                MissingDataBlock()
+                MissingDataCard()
             } else if english.presentation == .list && english.mode != .dict {
-                CollectionBlock(english: english)
+                CollectionCard(english: english)
             } else {
                 switch english.mode {
-                case .vocab: VocabCardBlock(english: english)
-                case .para: ParaphraseCardBlock(english: english)
-                case .spell: SpellCardBlock(english: english)
-                case .dict: DictionaryBlock(english: english)
+                case .vocab: VocabBattle(english: english)
+                case .para: ParaphraseCard(english: english)
+                case .spell: SpellCard(english: english)
+                case .dict: DictionaryCard(english: english)
                 }
             }
         }
     }
 }
 
-/// もの(オブジェクト)の切り替え:単語・考点词・語料・辞書。各々に今日の残り
-private struct ObjectSwitch: View {
+/// もの(オブジェクト)の切り替え。選んだタイルに黄緑の札がすべって来る。各々に今日の残り
+private struct ModeMenu: View {
     @ObservedObject var english: EnglishCoordinator
+    @Namespace private var plate
 
     var body: some View {
-        HStack(spacing: 0) {
-            ForEach(Array(EnglishCoordinator.Mode.allCases.enumerated()), id: \.element) { index, mode in
-                if index > 0 {
-                    Rectangle().fill(Theme.rule).frame(width: Theme.line, height: 32)
-                }
-                segment(mode)
+        HStack(spacing: 4) {
+            ForEach(EnglishCoordinator.Mode.allCases) { mode in
+                tile(mode)
             }
         }
         .fixedSize()
-        .overlay(Rectangle().strokeBorder(Theme.rule, lineWidth: Theme.line))
     }
 
-    private func segment(_ mode: EnglishCoordinator.Mode) -> some View {
+    private func tile(_ mode: EnglishCoordinator.Mode) -> some View {
         let selected = english.mode == mode
         return Button {
-            english.mode = mode
+            withAnimation(.spring(duration: 0.3, bounce: 0.35)) { english.mode = mode }
         } label: {
             HStack(spacing: 6) {
                 Text(mode.title)
-                    .font(Theme.font(14, .heavy))
+                    .font(Theme.font(Theme.Size.body, .black))
                 if let count = english.remaining[mode], count > 0 {
-                    CountBadge(count: count)
+                    Plate(text: "\(count)", fill: Theme.violet, textColor: Theme.white)
                 }
             }
-            .foregroundStyle(selected ? Theme.onInverse : Theme.text)
-            .padding(.horizontal, 11)
+            .foregroundStyle(selected ? Theme.black : Theme.white)
+            .padding(.horizontal, 14)
             .frame(height: 32)
-            .background(selected ? Theme.inverse : Theme.surface)
-            .contentShape(Rectangle())
+            .background {
+                if selected {
+                    Slant().fill(Theme.lime).matchedGeometryEffect(id: "mode", in: plate)
+                } else {
+                    Slant().fill(Theme.tile)
+                }
+            }
+            .contentShape(Slant())
         }
         .buttonStyle(.plain)
         .help(mode.detail)
-    }
-}
-
-/// カード(1 つ)/ 一覧(まとまり)
-private struct PresentationSwitch: View {
-    @ObservedObject var english: EnglishCoordinator
-
-    var body: some View {
-        HStack(spacing: 0) {
-            segment(.card, "カード", symbol: "rectangle")
-            Rectangle().fill(Theme.rule).frame(width: Theme.line, height: 32)
-            segment(.list, "一覧", symbol: "list.bullet")
-        }
-        .fixedSize()
-        .overlay(Rectangle().strokeBorder(Theme.rule, lineWidth: Theme.line))
-    }
-
-    private func segment(_ value: EnglishCoordinator.Presentation, _ title: String,
-                         symbol: String) -> some View {
-        let selected = english.presentation == value
-        return Button {
-            english.presentation = value
-        } label: {
-            Image(systemName: symbol)
-                .font(.system(size: 13, weight: .bold))
-                .foregroundStyle(selected ? Theme.onInverse : Theme.text)
-                .frame(width: 34, height: 32)
-                .background(selected ? Theme.inverse : Theme.surface)
-                .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .help(title)
-        .accessibilityLabel(title)
-    }
-}
-
-/// 今日の問題数(目標つき)と連続日数
-private struct GoalMeter: View {
-    let count: Int
-    let goal: Int
-    let streak: Int
-
-    var body: some View {
-        HStack(spacing: 8) {
-            Text("\(count)/\(goal)")
-                .font(Theme.font(Theme.Size.caption, .heavy).monospacedDigit())
-            ZStack(alignment: .leading) {
-                Theme.surface
-                Theme.lime
-                    .frame(width: 60 * CGFloat(min(1, Double(count) / Double(max(goal, 1)))))
-            }
-            .frame(width: 60, height: 8)
-            .overlay(Rectangle().strokeBorder(Theme.rule, lineWidth: Theme.line))
-            if streak > 0 {
-                Text("\(streak)日連続")
-                    .font(Theme.font(Theme.Size.caption, .heavy))
-            }
-        }
-        .foregroundStyle(Theme.text)
-        .fixedSize()
-        .help("1 日 \(goal) 問が目標。連続 \(streak) 日")
+        .accessibilityAddTraits(selected ? .isSelected : [])
     }
 }
 
 // MARK: - カードの共通部品
 
-/// カードの右上にすみれのインク(文字とは重ねない)
-private struct CardInk: View {
-    var seed: UInt64 = 5
+/// バトルカード:濃い灰の面、右上を斜めに落とし、すみれのインクを角に。正解・まちがいのスタンプを上に重ねる
+private struct BattleCard<Content: View>: View {
+    @ObservedObject var english: EnglishCoordinator
+    var ink: UInt64 = 5
+    @ViewBuilder var content: () -> Content
 
     var body: some View {
-        InkSplat(seed: seed, lobes: 9, drops: 2, drip: false, depth: 0.32)
-            .fill(Theme.violet)
-            .frame(width: 170, height: 150)
-            .offset(x: 56, y: -52)
-            .allowsHitTesting(false)
-            .accessibilityHidden(true)
+        content()
+            .padding(18)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(alignment: .topTrailing) {
+                InkSplat(seed: ink, lobes: 9, drops: 2, drip: false, depth: 0.34)
+                    .fill(Theme.violet)
+                    .frame(width: 190, height: 170)
+                    .offset(x: 64, y: -60)
+                    .allowsHitTesting(false)
+            }
+            .background(Theme.surface)
+            .clipShape(CutRect(topTrailing: 22))
+            .overlay(alignment: .topTrailing) {
+                if let flash = english.flash {
+                    Stamp(text: flash.good ? "NICE!" : "MISS", good: flash.good)
+                        .offset(x: -30, y: 44)
+                        .transition(.scale(scale: 0.3).combined(with: .opacity))
+                        .id(flash.id)
+                }
+            }
+            .animation(.spring(duration: 0.35, bounce: 0.55), value: english.flash)
     }
 }
 
@@ -176,10 +149,10 @@ private struct UndoLine: View {
                 } label: {
                     HStack(spacing: 6) {
                         Text("元に戻す")
-                        KeyHint("⌘Z")
+                        Text("⌘Z").font(Theme.label(10))
                     }
                 }
-                .buttonStyle(.sharp(.plain, height: 24))
+                .buttonStyle(.command(.ghost, height: 24))
                 .keyboardShortcut("z", modifiers: .command)
             }
             .font(Theme.font(Theme.Size.caption, .bold))
@@ -189,75 +162,82 @@ private struct UndoLine: View {
     }
 }
 
+/// 大きな見出し語(学ぶ綴りなのでまっすぐ・標準幅。インクと重ならないよう右をあける)
+private struct HeadWord: View {
+    let text: String
+
+    var body: some View {
+        Text(text)
+            .font(Theme.font(Theme.Size.word, .black))
+            .foregroundStyle(Theme.white)
+            .lineLimit(1)
+            .minimumScaleFactor(0.45)
+            .textSelection(.enabled)
+            .padding(.top, 12)
+            .padding(.trailing, 120)
+    }
+}
+
 // MARK: - 単語
 
-private struct VocabCardBlock: View {
+private struct VocabBattle: View {
     @ObservedObject var english: EnglishCoordinator
 
     var body: some View {
         if let card = english.vocabCard {
-            VStack(alignment: .leading, spacing: 0) {
-                HStack(spacing: 6) {
-                    WovenTag(text: card.level)
-                    if card.isNew { WovenTag(text: "New", style: .violet) }
-                    if card.known { WovenTag(text: "Known", style: .lime) }
-                }
-                Text(card.word)
-                    .font(Theme.font(Theme.Size.word, .black))
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.45)
-                    .textSelection(.enabled)
-                    .padding(.top, 10)
-                    .padding(.trailing, 110)
-                HStack(spacing: 10) {
-                    Text([card.phonetic, card.pos].compactMap { $0 }.joined(separator: " · "))
-                        .font(Theme.font(Theme.Size.headline, .medium))
-                        .foregroundStyle(Theme.textSoft)
-                    Button {
-                        english.speakWord()
-                    } label: {
-                        Image(systemName: "speaker.wave.2.fill")
+            BattleCard(english: english) {
+                VStack(alignment: .leading, spacing: 0) {
+                    HStack(spacing: 6) {
+                        Plate(text: card.level)
+                        if card.isNew { Plate(text: "New", fill: Theme.violet, textColor: Theme.white) }
+                        if card.known { Plate(text: "Known", fill: Theme.lime) }
                     }
-                    .buttonStyle(.sharpSquare(size: 28))
-                    .help("発音を聞く")
-                }
-                if english.revealed || card.known {
-                    Rectangle()
-                        .fill(Theme.hairline)
-                        .frame(height: 1)
-                        .padding(.vertical, 12)
-                    Text(card.meaning)
-                        .font(Theme.font(22, .heavy))
-                        .fixedSize(horizontal: false, vertical: true)
-                        .textSelection(.enabled)
-                    if let example = card.example {
-                        HStack(alignment: .firstTextBaseline, spacing: 8) {
-                            Text(example)
-                                .font(Theme.font(Theme.Size.body, .medium))
-                                .fixedSize(horizontal: false, vertical: true)
-                                .textSelection(.enabled)
-                            Button {
-                                english.speakExample()
-                            } label: {
-                                Image(systemName: "speaker.wave.2")
-                            }
-                            .buttonStyle(.plain)
-                            .help("例文を聞く")
+                    HeadWord(text: card.word)
+                    HStack(spacing: 10) {
+                        Text([card.phonetic, card.pos].compactMap { $0 }.joined(separator: " · "))
+                            .font(Theme.font(Theme.Size.headline, .medium))
+                            .foregroundStyle(Theme.textSoft)
+                        Button {
+                            english.speakWord()
+                        } label: {
+                            Image(systemName: "speaker.wave.2.fill")
                         }
-                        .padding(.top, 6)
+                        .buttonStyle(.commandSquare(.ghost, size: 26))
+                        .help("発音を聞く")
                     }
+                    if english.revealed || card.known {
+                        Text(card.meaning)
+                            .font(Theme.font(24, .black))
+                            .foregroundStyle(Theme.lime)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .textSelection(.enabled)
+                            .padding(.top, 16)
+                        if let example = card.example {
+                            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                                Text(example)
+                                    .font(Theme.font(Theme.Size.body, .medium))
+                                    .foregroundStyle(Theme.white.opacity(0.9))
+                                    .fixedSize(horizontal: false, vertical: true)
+                                    .textSelection(.enabled)
+                                Button {
+                                    english.speakExample()
+                                } label: {
+                                    Image(systemName: "speaker.wave.2")
+                                        .foregroundStyle(Theme.textSoft)
+                                }
+                                .buttonStyle(.plain)
+                                .help("例文を聞く")
+                            }
+                            .padding(.top, 6)
+                        }
+                    }
+                    actions(card)
+                        .padding(.top, 18)
+                    UndoLine(english: english)
                 }
-                actions(card)
-                    .padding(.top, 16)
-                UndoLine(english: english)
             }
-            .padding(16)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .overlay(alignment: .topTrailing) { CardInk() }
-            .clipped()
-            .block()
         } else {
-            DoneBlock(english: english, message: "今日の単語はここまで")
+            StageClear(english: english, message: "今日の単語はここまで")
         }
     }
 
@@ -270,125 +250,118 @@ private struct VocabCardBlock: View {
                     .foregroundStyle(Theme.textSoft)
                 Spacer()
                 Button("出題に戻す") { english.restoreCurrent() }
-                    .buttonStyle(.sharp(.primary))
+                    .buttonStyle(.command(.primary))
             }
         } else if english.revealed {
-            HStack(spacing: 8) {
-                rateButton("もう一回", key: "1", rating: .again, kind: .plain)
-                rateButton("あいまい", key: "2", rating: .hard, kind: .plain)
+            HStack(spacing: 10) {
+                rateButton("もう一回", key: "1", rating: .again, kind: .ghost)
+                rateButton("あいまい", key: "2", rating: .hard, kind: .ghost)
                 rateButton("覚えた", key: "3", rating: .good, kind: .primary)
-                rateButton("簡単", key: "4", rating: .easy, kind: .accent)
+                rateButton("簡単", key: "4", rating: .easy, kind: .light)
             }
         } else {
-            HStack(spacing: 8) {
+            HStack(spacing: 10) {
                 Button {
                     english.reveal()
                 } label: {
-                    HStack(spacing: 8) {
+                    HStack(spacing: 10) {
+                        KeyHint("SPACE")
                         Text("意味を見る")
-                        KeyHint("space")
                     }
                 }
-                .buttonStyle(.sharp(.primary, height: 42, wide: true))
+                .buttonStyle(.command(.primary, height: 44, wide: true))
                 .keyboardShortcut(.space, modifiers: [])
                 Button("知ってる") { english.markKnown() }
-                    .buttonStyle(.sharp(.plain, height: 42))
+                    .buttonStyle(.command(.ghost, height: 44))
                     .help("もう出さない(一覧の「知ってる」から戻せる)")
             }
         }
     }
 
     private func rateButton(_ title: String, key: KeyEquivalent, rating: SRSRating,
-                            kind: SharpButtonStyle.Kind) -> some View {
+                            kind: CommandButtonStyle.Kind) -> some View {
         Button {
             english.rate(rating)
         } label: {
-            HStack(spacing: 6) {
-                Text(title)
+            HStack(spacing: 8) {
                 KeyHint(String(key.character))
+                Text(title)
             }
         }
-        .buttonStyle(.sharp(kind, height: 42, wide: true))
+        .buttonStyle(.command(kind, height: 42, wide: true))
         .keyboardShortcut(key, modifiers: [])
     }
 }
 
 // MARK: - 考点词
 
-private struct ParaphraseCardBlock: View {
+private struct ParaphraseCard: View {
     @ObservedObject var english: EnglishCoordinator
 
     var body: some View {
         if let q = english.question {
-            VStack(alignment: .leading, spacing: 0) {
-                HStack(spacing: 6) {
-                    WovenTag(text: q.entry.skill == "listening" ? "Listening" : "Reading")
-                    Text("真題での言い換えはどれ?")
-                        .font(Theme.font(Theme.Size.caption, .bold))
+            BattleCard(english: english, ink: 9) {
+                VStack(alignment: .leading, spacing: 0) {
+                    HStack(spacing: 8) {
+                        Plate(text: q.entry.skill == "listening" ? "Listening" : "Reading")
+                        Text("真題での言い換えはどれ?")
+                            .font(Theme.font(Theme.Size.caption, .bold))
+                            .foregroundStyle(Theme.textSoft)
+                    }
+                    HeadWord(text: q.entry.w)
+                    Text([q.entry.pos, q.entry.zh].compactMap { $0 }.joined(separator: " · "))
+                        .font(Theme.font(Theme.Size.headline, .medium))
                         .foregroundStyle(Theme.textSoft)
-                }
-                Text(q.entry.w)
-                    .font(Theme.font(Theme.Size.word, .black))
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.45)
-                    .padding(.top, 10)
-                    .padding(.trailing, 110)
-                Text([q.entry.pos, q.entry.zh].compactMap { $0 }.joined(separator: " · "))
-                    .font(Theme.font(Theme.Size.headline, .medium))
-                    .foregroundStyle(Theme.textSoft)
-                LazyVGrid(columns: [GridItem(.flexible(), spacing: 10), GridItem(.flexible(), spacing: 10)],
-                          spacing: 10) {
-                    ForEach(Array(q.choices.enumerated()), id: \.offset) { index, choice in
-                        choiceButton(index, choice, question: q)
-                    }
-                }
-                .padding(.top, 16)
-                .padding(.trailing, 3)
-                if let picked = english.picked {
-                    HStack(alignment: .center, spacing: 12) {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(picked == q.answerIndex ? "正解" : "ざんねん。今日もう一度出ます")
-                                .font(Theme.font(Theme.Size.headline, .heavy))
-                            Text("言い換え:" + q.entry.syn.joined(separator: " · "))
-                                .font(Theme.font(Theme.Size.body, .medium))
-                                .fixedSize(horizontal: false, vertical: true)
-                                .textSelection(.enabled)
+                    LazyVGrid(columns: [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)],
+                              spacing: 10) {
+                        ForEach(Array(q.choices.enumerated()), id: \.offset) { index, choice in
+                            choiceButton(index, choice, question: q)
                         }
-                        Spacer()
-                        Button {
-                            english.nextParaphrase()
-                        } label: {
-                            HStack(spacing: 8) {
-                                Text("次へ")
-                                KeyHint("⏎")
+                    }
+                    .padding(.top, 18)
+                    if let picked = english.picked {
+                        HStack(alignment: .center, spacing: 12) {
+                            VStack(alignment: .leading, spacing: 3) {
+                                Text(picked == q.answerIndex ? "正解" : "ざんねん。今日もう一度出ます")
+                                    .font(Theme.font(Theme.Size.headline, .black))
+                                    .foregroundStyle(picked == q.answerIndex ? Theme.lime : Theme.white)
+                                Text("言い換え:" + q.entry.syn.joined(separator: " · "))
+                                    .font(Theme.font(Theme.Size.body, .medium))
+                                    .foregroundStyle(Theme.white.opacity(0.9))
+                                    .fixedSize(horizontal: false, vertical: true)
+                                    .textSelection(.enabled)
                             }
+                            Spacer()
+                            Button {
+                                english.nextParaphrase()
+                            } label: {
+                                HStack(spacing: 8) {
+                                    Text("次へ")
+                                    KeyHint("⏎")
+                                }
+                            }
+                            .buttonStyle(.command(.primary))
+                            .keyboardShortcut(.defaultAction)
                         }
-                        .buttonStyle(.sharp(.primary))
-                        .keyboardShortcut(.defaultAction)
+                        .padding(.top, 16)
                     }
-                    .padding(.top, 14)
+                    UndoLine(english: english)
                 }
-                UndoLine(english: english)
             }
-            .padding(16)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .overlay(alignment: .topTrailing) { CardInk(seed: 9) }
-            .clipped()
-            .block()
         } else {
-            DoneBlock(english: english, message: "今日の考点词はここまで")
+            StageClear(english: english, message: "今日の考点词はここまで")
         }
     }
 
     private func choiceButton(_ index: Int, _ choice: String, question q: ParaphraseQuestion) -> some View {
         let picked = english.picked
-        let kind: SharpButtonStyle.Kind
+        let kind: CommandButtonStyle.Kind
         if picked != nil && index == q.answerIndex {
-            kind = .accent
-        } else if picked == index {
             kind = .primary
+        } else if picked == index {
+            kind = .violet
         } else {
-            kind = .plain
+            kind = .ghost
         }
         return Button {
             english.choose(index)
@@ -396,7 +369,7 @@ private struct ParaphraseCardBlock: View {
             HStack(spacing: 10) {
                 KeyHint("\(index + 1)")
                 Text(choice)
-                    .font(Theme.font(17, .heavy))
+                    .font(Theme.font(17, .black))
                     .lineLimit(1)
                     .minimumScaleFactor(0.7)
                 Spacer(minLength: 0)
@@ -407,214 +380,216 @@ private struct ParaphraseCardBlock: View {
                 }
             }
         }
-        .buttonStyle(.sharp(kind, height: 48, wide: true))
+        .buttonStyle(.command(kind, height: 48, wide: true))
         .keyboardShortcut(KeyEquivalent(Character("\(index + 1)")), modifiers: [])
-        .opacity(picked != nil && index != q.answerIndex && index != picked ? 0.5 : 1)
+        .opacity(picked != nil && index != q.answerIndex && index != picked ? 0.45 : 1)
     }
 }
 
 // MARK: - 語料(聴写)
 
-private struct SpellCardBlock: View {
+private struct SpellCard: View {
     @ObservedObject var english: EnglishCoordinator
     @FocusState private var focused: Bool
 
     var body: some View {
         if let item = english.spellItem {
-            VStack(alignment: .leading, spacing: 0) {
-                HStack(spacing: 6) {
-                    WovenTag(text: "Wang Lu")
-                    Text(item.word.set)
-                        .font(Theme.font(Theme.Size.caption, .bold))
-                        .foregroundStyle(Theme.textSoft)
-                    if item.isNew { WovenTag(text: "New", style: .violet) }
-                }
-                HStack(spacing: 8) {
-                    Button {
-                        english.play()
-                        focused = true
-                    } label: {
-                        HStack(spacing: 8) {
-                            Label("聞く", systemImage: "play.fill")
-                            KeyHint("⌘R")
-                        }
+            BattleCard(english: english, ink: 13) {
+                VStack(alignment: .leading, spacing: 0) {
+                    HStack(spacing: 8) {
+                        Plate(text: "Wang Lu")
+                        Text(item.word.set)
+                            .font(Theme.font(Theme.Size.caption, .bold))
+                            .foregroundStyle(Theme.textSoft)
+                        if item.isNew { Plate(text: "New", fill: Theme.violet, textColor: Theme.white) }
                     }
-                    .buttonStyle(.sharp(.primary, height: 40))
-                    .keyboardShortcut("r", modifiers: .command)
-                    Button {
-                        english.play(slow: true)
-                        focused = true
-                    } label: {
-                        Label("ゆっくり", systemImage: "tortoise.fill")
-                    }
-                    .buttonStyle(.sharp(.plain, height: 40))
-                    Spacer()
-                    Text("英国英語の読み上げ・イヤホン推奨")
-                        .font(Theme.font(Theme.Size.caption, .bold))
-                        .foregroundStyle(Theme.textSoft)
-                }
-                .padding(.top, 14)
-                // 白い枠の中はダークでも明るい配色で描く
-                TextField("", text: $english.spellInput,
-                          prompt: Text("聞こえた語を入力して Enter").foregroundStyle(Theme.inkSoft))
-                    .textFieldStyle(.plain)
-                    .environment(\.colorScheme, .light)
-                    .font(Theme.font(26, .heavy))
-                    .foregroundStyle(Theme.black)
-                    .autocorrectionDisabled(true)
-                    .padding(.horizontal, 14)
-                    .frame(height: 54)
-                    .background(Theme.white)
-                    .overlay(Rectangle().strokeBorder(Theme.rule, lineWidth: 2))
-                    .focused($focused)
-                    .onSubmit {
-                        english.submitSpelling()
-                        focused = true
-                    }
-                    .padding(.top, 12)
-                if let result = english.spellResult {
-                    resultBox(result, item.word)
+                    Text("LISTEN & TYPE")
+                        .font(Theme.display(30))
+                        .foregroundStyle(Theme.white)
                         .padding(.top, 12)
-                }
-                HStack(spacing: 10) {
-                    if english.spellResult == nil {
-                        Button("わからない") { english.giveUpSpelling() }
-                            .buttonStyle(.sharp(.plain))
-                        Spacer()
+                    HStack(spacing: 10) {
                         Button {
-                            english.submitSpelling()
-                        } label: {
-                            HStack(spacing: 8) {
-                                Text("答え合わせ")
-                                KeyHint("⏎")
-                            }
-                        }
-                        .buttonStyle(.sharp(.primary))
-                    } else {
-                        Spacer()
-                        Button {
-                            english.submitSpelling()
+                            english.play()
                             focused = true
                         } label: {
                             HStack(spacing: 8) {
-                                Text("次へ")
-                                KeyHint("⏎")
+                                Image(systemName: "play.fill")
+                                Text("聞く")
+                                Text("⌘R").font(Theme.label(10))
                             }
                         }
-                        .buttonStyle(.sharp(.primary))
+                        .buttonStyle(.command(.primary, height: 40))
+                        .keyboardShortcut("r", modifiers: .command)
+                        Button {
+                            english.play(slow: true)
+                            focused = true
+                        } label: {
+                            Label("ゆっくり", systemImage: "tortoise.fill")
+                        }
+                        .buttonStyle(.command(.ghost, height: 40))
+                        Spacer()
+                        Text("英国英語の読み上げ・イヤホン推奨")
+                            .font(Theme.font(Theme.Size.caption, .bold))
+                            .foregroundStyle(Theme.textSoft)
                     }
+                    .padding(.top, 12)
+                    TextField("", text: $english.spellInput,
+                              prompt: Text("聞こえた語を入力して Enter").foregroundStyle(Theme.textSoft))
+                        .textFieldStyle(.plain)
+                        .font(Theme.font(26, .black))
+                        .foregroundStyle(Theme.white)
+                        .autocorrectionDisabled(true)
+                        .padding(.horizontal, 14)
+                        .frame(height: 54)
+                        .background(Theme.black)
+                        .overlay(Rectangle().stroke(Theme.lime, lineWidth: 2))
+                        .focused($focused)
+                        .onSubmit {
+                            english.submitSpelling()
+                            focused = true
+                        }
+                        .padding(.top, 14)
+                    if let result = english.spellResult {
+                        resultBox(result, item.word)
+                            .padding(.top, 12)
+                    }
+                    HStack(spacing: 10) {
+                        if english.spellResult == nil {
+                            Button("わからない") { english.giveUpSpelling() }
+                                .buttonStyle(.command(.ghost))
+                            Spacer()
+                            Button {
+                                english.submitSpelling()
+                            } label: {
+                                HStack(spacing: 8) {
+                                    Text("答え合わせ")
+                                    KeyHint("⏎")
+                                }
+                            }
+                            .buttonStyle(.command(.primary))
+                        } else {
+                            Spacer()
+                            Button {
+                                english.submitSpelling()
+                                focused = true
+                            } label: {
+                                HStack(spacing: 8) {
+                                    Text("次へ")
+                                    KeyHint("⏎")
+                                }
+                            }
+                            .buttonStyle(.command(.primary))
+                        }
+                    }
+                    .padding(.top, 14)
+                    UndoLine(english: english)
                 }
-                .padding(.top, 14)
-                UndoLine(english: english)
             }
-            .padding(16)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .block()
             .onAppear { focused = true }
         } else {
-            DoneBlock(english: english, message: "今日の語料はここまで")
+            StageClear(english: english, message: "今日の語料はここまで")
         }
     }
 
-    /// 採点:正解は黄緑、おしい・まちがいは墨(文字は常に読める組み合わせ)
+    /// 採点:正解は黄緑に墨、おしい・まちがいはすみれに白
     private func resultBox(_ result: SpellResult, _ word: DictationWord) -> some View {
         let (title, fill, textColor): (String, Color, Color) = {
             switch result {
             case .correct: return ("正解", Theme.lime, Theme.black)
-            case .almost: return ("おしい(1 文字ちがい)· 明日もう一度", Theme.inverse, Theme.onInverse)
-            case .wrong: return ("正解はこちら · 今日もう一度", Theme.inverse, Theme.onInverse)
+            case .almost: return ("おしい(1 文字ちがい)· 明日もう一度", Theme.violet, Theme.white)
+            case .wrong: return ("正解はこちら · 今日もう一度", Theme.violet, Theme.white)
             }
         }()
         return VStack(alignment: .leading, spacing: 2) {
             Text(title)
-                .font(Theme.font(Theme.Size.caption, .heavy))
+                .font(Theme.font(Theme.Size.caption, .black))
             Text(word.w)
-                .font(Theme.font(28, .black))
+                .font(Theme.font(30, .black))
                 .textSelection(.enabled)
             Text([word.ipa.map { "/\($0)/" }, word.zh].compactMap { $0 }.joined(separator: " · "))
                 .font(Theme.font(Theme.Size.body, .medium))
                 .fixedSize(horizontal: false, vertical: true)
         }
         .foregroundStyle(textColor)
-        .padding(12)
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(fill)
-        .overlay(Rectangle().strokeBorder(Theme.rule, lineWidth: Theme.line))
+        .background(CutRect(topTrailing: 12).fill(fill))
     }
 }
 
 // MARK: - 辞書
 
-private struct DictionaryBlock: View {
+private struct DictionaryCard: View {
     @ObservedObject var english: EnglishCoordinator
     @FocusState private var focused: Bool
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            TextField("", text: $english.dictQuery,
-                      prompt: Text("英単語を入力(例:sustainable)").foregroundStyle(Theme.inkSoft))
-                .textFieldStyle(.plain)
-                .environment(\.colorScheme, .light)
-                .font(Theme.font(22, .heavy))
-                .foregroundStyle(Theme.black)
-                .autocorrectionDisabled(true)
-                .padding(.horizontal, 14)
-                .frame(height: 50)
-                .background(Theme.white)
-                .overlay(Rectangle().strokeBorder(Theme.rule, lineWidth: 2))
-                .focused($focused)
-            if english.dictQuery.trimmingCharacters(in: .whitespaces).isEmpty {
-                Text("仕事中に出てきた単語をその場で。引いた語は単語カードに足して、あとで復習できます")
-                    .font(Theme.font(Theme.Size.body, .medium))
-                    .foregroundStyle(Theme.textSoft)
-                    .fixedSize(horizontal: false, vertical: true)
-            } else if let hit = english.dictHit {
-                VStack(alignment: .leading, spacing: 6) {
-                    HStack(alignment: .firstTextBaseline, spacing: 10) {
-                        Text(hit.word)
-                            .font(Theme.font(36, .black))
-                            .textSelection(.enabled)
-                        Text("/\(hit.ipa)/")
-                            .font(Theme.font(Theme.Size.headline, .medium))
-                            .foregroundStyle(Theme.textSoft)
-                        Button {
-                            Speaker.shared.say(hit.word)
-                        } label: {
-                            Image(systemName: "speaker.wave.2.fill")
-                        }
-                        .buttonStyle(.sharpSquare(size: 28))
-                        .help("発音を聞く")
-                        Spacer()
-                    }
-                    Text(hit.zh.replacingOccurrences(of: ";", with: "\n"))
-                        .font(Theme.font(17, .bold))
+        BattleCard(english: english, ink: 17) {
+            VStack(alignment: .leading, spacing: 12) {
+                TextField("", text: $english.dictQuery,
+                          prompt: Text("英単語を入力(例:sustainable)").foregroundStyle(Theme.textSoft))
+                    .textFieldStyle(.plain)
+                    .font(Theme.font(22, .black))
+                    .foregroundStyle(Theme.white)
+                    .autocorrectionDisabled(true)
+                    .padding(.horizontal, 14)
+                    .frame(height: 50)
+                    .background(Theme.black)
+                    .overlay(Rectangle().stroke(Theme.lime, lineWidth: 2))
+                    .focused($focused)
+                    .padding(.trailing, 110)
+                if english.dictQuery.trimmingCharacters(in: .whitespaces).isEmpty {
+                    Text("仕事中に出てきた単語をその場で。引いた語は単語カードに足して、あとで復習できます")
+                        .font(Theme.font(Theme.Size.body, .medium))
+                        .foregroundStyle(Theme.textSoft)
                         .fixedSize(horizontal: false, vertical: true)
-                        .textSelection(.enabled)
-                    HStack {
-                        Spacer()
-                        if english.isInDeck(hit) {
-                            Text("単語カードに追加済み")
-                                .font(Theme.font(Theme.Size.caption, .heavy))
+                } else if let hit = english.dictHit {
+                    VStack(alignment: .leading, spacing: 6) {
+                        HStack(alignment: .firstTextBaseline, spacing: 10) {
+                            Text(hit.word)
+                                .font(Theme.font(38, .black))
+                                .foregroundStyle(Theme.white)
+                                .textSelection(.enabled)
+                            Text("/\(hit.ipa)/")
+                                .font(Theme.font(Theme.Size.headline, .medium))
                                 .foregroundStyle(Theme.textSoft)
-                        } else {
                             Button {
-                                english.addToDeck(hit)
+                                Speaker.shared.say(hit.word)
                             } label: {
-                                Label("単語カードに追加", systemImage: "plus")
+                                Image(systemName: "speaker.wave.2.fill")
                             }
-                            .buttonStyle(.sharp(.primary))
+                            .buttonStyle(.commandSquare(.ghost, size: 26))
+                            .help("発音を聞く")
+                            Spacer()
                         }
+                        Text(hit.zh.replacingOccurrences(of: ";", with: "\n"))
+                            .font(Theme.font(18, .black))
+                            .foregroundStyle(Theme.lime)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .textSelection(.enabled)
+                        HStack {
+                            Spacer()
+                            if english.isInDeck(hit) {
+                                Plate(text: "In deck", fill: Theme.tile, textColor: Theme.textSoft)
+                            } else {
+                                Button {
+                                    english.addToDeck(hit)
+                                } label: {
+                                    Label("単語カードに追加", systemImage: "plus")
+                                }
+                                .buttonStyle(.command(.primary))
+                            }
+                        }
+                        .padding(.top, 4)
                     }
-                    .padding(.top, 4)
+                } else {
+                    Text("「\(english.dictQuery)」は見つかりませんでした")
+                        .font(Theme.font(Theme.Size.body, .bold))
+                        .foregroundStyle(Theme.textSoft)
                 }
-            } else {
-                Text("「\(english.dictQuery)」は見つかりませんでした")
-                    .font(Theme.font(Theme.Size.body, .bold))
-                    .foregroundStyle(Theme.textSoft)
             }
         }
-        .padding(16)
-        .block()
         .onAppear { focused = true }
     }
 }
@@ -622,12 +597,12 @@ private struct DictionaryBlock: View {
 // MARK: - 一覧(まとまり)
 
 /// 出たことのあるものの一覧。行を押すとカードで開く(期限前の復習・「知ってる」を戻すのもカードから)
-private struct CollectionBlock: View {
+private struct CollectionCard: View {
     @ObservedObject var english: EnglishCoordinator
 
     var body: some View {
         let rows = english.listRows()
-        VStack(alignment: .leading, spacing: 0) {
+        VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 6) {
                 ForEach(EnglishCoordinator.ListFilter.allCases) { filter in
                     if filter != .known || english.mode == .vocab {
@@ -636,31 +611,24 @@ private struct CollectionBlock: View {
                 }
                 Spacer()
             }
-            .padding(10)
-            .overlay(alignment: .bottom) {
-                Rectangle().fill(Theme.rule).frame(height: Theme.line)
-            }
             if rows.isEmpty {
                 Text(emptyMessage)
                     .font(Theme.font(Theme.Size.body, .medium))
                     .foregroundStyle(Theme.textSoft)
-                    .padding(14)
+                    .padding(.vertical, 8)
             } else {
-                ForEach(Array(rows.enumerated()), id: \.element.id) { index, row in
-                    if index > 0 {
-                        Rectangle().fill(Theme.hairline).frame(height: 1)
+                VStack(spacing: 2) {
+                    ForEach(rows) { row in
+                        CollectionRow(row: row) { english.focus(row.id) }
                     }
-                    CollectionRow(row: row) { english.focus(row.id) }
                 }
                 if rows.count >= 200 {
                     Text("先頭の 200 件を表示")
                         .font(Theme.font(Theme.Size.caption, .bold))
                         .foregroundStyle(Theme.textSoft)
-                        .padding(12)
                 }
             }
         }
-        .block()
     }
 
     private var emptyMessage: String {
@@ -681,13 +649,12 @@ private struct CollectionBlock: View {
                 Text("\(english.listCount(filter))")
                     .monospacedDigit()
             }
-            .font(Theme.font(12, .heavy))
-            .foregroundStyle(selected ? Theme.onInverse : Theme.text)
-            .padding(.horizontal, 10)
+            .font(Theme.font(Theme.Size.caption, .black))
+            .foregroundStyle(selected ? Theme.black : Theme.white)
+            .padding(.horizontal, 12)
             .frame(height: 26)
-            .background(selected ? Theme.inverse : Theme.surface)
-            .overlay(Rectangle().strokeBorder(Theme.rule, lineWidth: Theme.line))
-            .contentShape(Rectangle())
+            .background(Slant(skew: 6).fill(selected ? Theme.lime : Theme.tile))
+            .contentShape(Slant(skew: 6))
         }
         .buttonStyle(.plain)
     }
@@ -701,25 +668,27 @@ private struct CollectionRow: View {
     var body: some View {
         Button(action: open) {
             HStack(spacing: 12) {
+                Text("▶")
+                    .font(.system(size: 9, weight: .black))
+                    .foregroundStyle(hovering ? Theme.lime : Color.clear)
                 Text(row.title)
-                    .font(Theme.font(Theme.Size.body, .heavy))
+                    .font(Theme.font(Theme.Size.body, .black))
+                    .foregroundStyle(Theme.white)
                     .lineLimit(1)
-                    .frame(width: 180, alignment: .leading)
+                    .frame(width: 170, alignment: .leading)
                 Text(row.gloss)
                     .font(Theme.font(Theme.Size.caption, .medium))
                     .foregroundStyle(Theme.textSoft)
                     .lineLimit(1)
                 Spacer(minLength: 8)
                 Text(row.dueLabel)
-                    .font(Theme.font(12, .heavy))
-                Image(systemName: "chevron.right")
-                    .font(.system(size: 11, weight: .bold))
-                    .foregroundStyle(Theme.textSoft)
+                    .font(Theme.font(12, .black))
+                    .foregroundStyle(row.dueLabel == "今日" ? Theme.lime : Theme.white)
             }
-            .foregroundStyle(Theme.text)
-            .padding(.horizontal, 12)
-            .frame(height: 38)
-            .background(hovering ? Theme.hairline : Color.clear)
+            .padding(.leading, 6)
+            .padding(.trailing, 14)
+            .frame(height: 34)
+            .background { if hovering { Slant().fill(Theme.tile) } }
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -731,51 +700,58 @@ private struct CollectionRow: View {
 
 // MARK: - 今日のぶんが終わった・素材が無い
 
-private struct DoneBlock: View {
+private struct StageClear: View {
     @ObservedObject var english: EnglishCoordinator
     let message: String
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            WovenTag(text: "Done", style: .lime)
-            Text(message)
-                .font(Theme.font(Theme.Size.title, .heavy))
-            Text("復習の続きは明日また出ます。まだやるなら、新しいものを 10 問足せます")
-                .font(Theme.font(Theme.Size.body, .medium))
-                .foregroundStyle(Theme.textSoft)
-                .fixedSize(horizontal: false, vertical: true)
-            HStack(spacing: 8) {
-                Button("新しいのをもう 10 問") { english.addMoreNew() }
-                    .buttonStyle(.sharp(.primary))
-                Button("一覧を見る") { english.presentation = .list }
-                    .buttonStyle(.sharp(.plain))
+        BattleCard(english: english, ink: 21) {
+            VStack(alignment: .leading, spacing: 10) {
+                Text("STAGE CLEAR!")
+                    .font(Theme.display(34))
+                    .foregroundStyle(Theme.lime)
+                Text(message)
+                    .font(Theme.font(Theme.Size.title, .black))
+                    .foregroundStyle(Theme.white)
+                Text("復習の続きは明日また出ます。まだやるなら、新しいものを 10 問足せます")
+                    .font(Theme.font(Theme.Size.body, .medium))
+                    .foregroundStyle(Theme.textSoft)
+                    .fixedSize(horizontal: false, vertical: true)
+                HStack(spacing: 10) {
+                    Button("新しいのをもう 10 問") { english.addMoreNew() }
+                        .buttonStyle(.command(.primary))
+                    Button("一覧を見る") { english.presentation = .list }
+                        .buttonStyle(.command(.ghost))
+                }
+                .padding(.top, 4)
+                UndoLine(english: english)
             }
-            UndoLine(english: english)
         }
-        .padding(16)
-        .block()
     }
 }
 
-private struct MissingDataBlock: View {
+private struct MissingDataCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            WovenTag(text: "No data", style: .violet)
+            Text("NO DATA")
+                .font(Theme.display(34))
+                .foregroundStyle(Theme.violet)
             Text("IELTS アプリの素材を取り込むと使えます")
-                .font(Theme.font(Theme.Size.title, .heavy))
+                .font(Theme.font(Theme.Size.title, .black))
+                .foregroundStyle(Theme.white)
             Text("ターミナルで IELTS アプリのフォルダを指定してビルドし直してください")
                 .font(Theme.font(Theme.Size.body, .medium))
                 .foregroundStyle(Theme.textSoft)
             Text("IELTS_DIR=~/Downloads/ielts-dist-v71 ./build-app.sh")
                 .font(.system(size: 13, weight: .semibold, design: .monospaced))
-                .foregroundStyle(Theme.black)
+                .foregroundStyle(Theme.lime)
                 .textSelection(.enabled)
                 .padding(10)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .background(Theme.white)
-                .overlay(Rectangle().strokeBorder(Theme.rule, lineWidth: Theme.line))
+                .background(Theme.black)
         }
-        .padding(16)
-        .block()
+        .padding(18)
+        .background(Theme.surface)
+        .clipShape(CutRect(topTrailing: 22))
     }
 }

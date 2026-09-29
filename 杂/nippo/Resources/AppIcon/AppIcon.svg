@@ -1,42 +1,26 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
   <!--
-    Yudh のアプリアイコン v4:黒の地に黄緑のインク(スプラトゥーン)、その上に「Y」。
-    Y の 2 本の腕は 10 時 10 分の時計の針、真ん中の点が針の軸(会議の時間を見張るアプリ)。
-    地の細い縦線はプリーツ。角のすみれ色のしずくは対戦相手のインク。
+    Yudh のアプリアイコン v5:すみれの地に黄緑のインク(スプラトゥーンのナワバリの 2 色)、
+    その上にゲームのロゴのような斜体の「Y」(すみれの押し出しで立体に)。縦線・キャラクターは使わない。
     macOS のアイコン格子(1024 の中に 824 角の角丸、角半径 185)に合わせてある。
     書き出しは scripts/make-icon.mjs(PNG → AppIcon.icns)
   -->
   <defs>
-    <clipPath id="squircle">
-      <rect x="100" y="100" width="824" height="824" rx="185" ry="185"/>
-    </clipPath>
-    <pattern id="pleats" width="12" height="12" patternUnits="userSpaceOnUse">
-      <rect width="12" height="12" fill="#0B0B0B"/>
-      <rect width="3" height="12" fill="#191919"/>
-    </pattern>
+    <clipPath id="sq"><rect x="100" y="100" width="824" height="824" rx="185" ry="185"/></clipPath>
+    <linearGradient id="vg" x1="0" y1="100" x2="0" y2="924" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#6E45FF"/><stop offset="1" stop-color="#3712C9"/></linearGradient>
     <linearGradient id="sheen" x1="0" y1="100" x2="0" y2="520" gradientUnits="userSpaceOnUse">
-      <stop offset="0" stop-color="#FFFFFF" stop-opacity="0.16"/>
-      <stop offset="1" stop-color="#FFFFFF" stop-opacity="0"/>
+      <stop offset="0" stop-color="#FFFFFF" stop-opacity="0.22"/><stop offset="1" stop-color="#FFFFFF" stop-opacity="0"/>
     </linearGradient>
-    <filter id="drop" x="-10%" y="-10%" width="120%" height="125%">
-      <feDropShadow dx="0" dy="12" stdDeviation="14" flood-color="#000" flood-opacity="0.32"/>
-    </filter>
+    <filter id="drop" x="-10%" y="-10%" width="120%" height="125%"><feDropShadow dx="0" dy="12" stdDeviation="14" flood-color="#000" flood-opacity="0.3"/></filter>
   </defs>
-  <g filter="url(#drop)">
-    <g clip-path="url(#squircle)">
-      <rect x="0" y="0" width="1024" height="1024" fill="url(#pleats)"/>
-      <g fill="#5A2DFF"><path d="M1028.0 917.7 Q1057.2 936.8 1029.2 947.1 Q1001.1 957.3 1000.0 991.4 Q998.9 1025.5 966.1 1026.5 Q933.2 1027.4 909.2 1050.6 Q885.1 1073.8 868.5 1047.8 Q851.8 1021.8 821.6 1029.1 Q791.3 1036.4 794.5 998.6 Q797.6 960.8 776.3 951.7 Q755.0 942.5 772.0 914.2 Q789.1 885.9 794.5 852.1 Q800.0 818.3 823.9 827.3 Q847.8 836.2 880.7 817.0 Q913.7 797.7 924.2 813.5 Q934.6 829.3 978.5 833.4 Q1022.4 837.5 1010.6 868.0 Q998.9 898.5 1028.0 917.7 Z"/><circle cx="1043.6" cy="834.1" r="11.6"/><circle cx="716.3" cy="958.0" r="13.3"/></g>
-      <g fill="#C8FF1A" transform="rotate(-6 512 520)"><path d="M761.5 489.3 Q807.6 524.5 761.0 560.9 Q714.3 597.2 744.9 646.5 Q775.4 695.7 701.7 694.1 Q628.0 692.5 598.9 745.5 Q569.8 798.4 543.0 766.1 Q516.3 733.9 454.1 750.6 Q391.9 767.4 398.1 726.9 Q404.3 686.4 347.7 699.0 Q291.1 711.6 282.4 639.7 Q273.8 567.9 255.3 530.2 Q236.9 492.5 277.3 471.6 Q317.7 450.7 293.2 409.2 Q268.7 367.7 310.4 356.0 Q352.2 344.3 376.6 292.3 Q401.1 240.3 445.7 284.2 Q490.4 328.1 530.9 285.8 Q571.4 243.5 597.0 294.2 Q622.7 344.9 685.4 335.2 Q748.2 325.6 731.8 389.9 Q715.3 454.1 761.5 489.3 Z"/><circle cx="319.0" cy="257.3" r="32.7"/><circle cx="560.7" cy="203.5" r="36.2"/><circle cx="265.8" cy="240.3" r="27.1"/><rect x="381.1" y="656.5" width="50.1" height="148.7" rx="25.0"/><circle cx="406.1" cy="805.2" r="37.6"/></g>
-      <!-- Y = 10 時 10 分の針 + 軸 -->
-      <g stroke="#0A0A0A" stroke-width="76" stroke-linecap="butt" fill="none">
-        <path d="M512 522 L404 398"/>
-        <path d="M512 522 L620 398"/>
-        <path d="M512 500 L512 690"/>
-      </g>
-      <circle cx="512" cy="522" r="26" fill="#C8FF1A"/>
-      <rect x="100" y="100" width="824" height="420" fill="url(#sheen)"/>
+  <g filter="url(#drop)"><g clip-path="url(#sq)">
+    <rect width="1024" height="1024" fill="url(#vg)"/>
+    <g fill="#C8FF1A" transform="rotate(-8 512 512)"><path d="M773.6 479.7 Q822.0 516.7 773.1 555.0 Q724.2 593.2 756.2 645.0 Q788.2 696.7 711.0 695.1 Q633.7 693.4 603.2 749.0 Q572.6 804.7 544.5 770.7 Q516.5 736.8 451.3 754.5 Q386.1 772.1 392.6 729.5 Q399.1 687.0 339.7 700.2 Q280.3 713.4 271.2 637.9 Q262.2 562.4 242.8 522.7 Q223.4 483.1 265.8 461.1 Q308.3 439.1 282.5 395.5 Q256.8 351.9 300.6 339.6 Q344.4 327.2 370.0 272.6 Q395.7 218.0 442.5 264.1 Q489.3 310.3 531.8 265.8 Q574.3 221.4 601.2 274.6 Q628.1 327.9 693.9 317.7 Q759.7 307.6 742.5 375.2 Q725.3 442.8 773.6 479.7 Z"/><circle cx="309.6" cy="235.8" r="34.4"/><circle cx="563.0" cy="179.2" r="38.0"/><circle cx="253.8" cy="217.9" r="28.5"/><rect x="374.7" y="655.5" width="52.6" height="156.4" rx="26.3"/><circle cx="401.0" cy="811.9" r="39.5"/></g>
+    <g transform="translate(91.6 0) skewX(-10)">
+      <path d="M318 300 L452 300 L512 420 L572 300 L706 300 L574 560 L574 748 L450 748 L450 560 Z" fill="#3712C9" transform="translate(22 22)"/>
+      <path d="M318 300 L452 300 L512 420 L572 300 L706 300 L574 560 L574 748 L450 748 L450 560 Z" fill="#0A0A0A"/>
+      
     </g>
-    <rect x="100" y="100" width="824" height="824" rx="185" ry="185" fill="none"
-          stroke="#FFFFFF" stroke-opacity="0.14" stroke-width="4"/>
   </g>
+  <rect x="100" y="100" width="824" height="824" rx="185" ry="185" fill="none" stroke="#FFFFFF" stroke-opacity="0.18" stroke-width="4"/></g>
 </svg>

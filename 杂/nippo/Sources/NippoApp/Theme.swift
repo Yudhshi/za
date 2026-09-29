@@ -1,61 +1,44 @@
 import AppKit
 import SwiftUI
 
-/// デザイントークン(2026-09 v4:スプラトゥーン × 日本のアヴァンギャルド)。
-/// 地:生成りの紙と墨(山本耀司・川久保玲の白と黒)。角は立てる(丸いカプセルやキャラクターは使わない)。
-/// インク:黄緑とすみれ(スプラトゥーンのナワバリの 2 色)を、日付・残り時間・カードの角にだけ大きく飛ばす。
-/// 構造:ブロックは継ぎ合わせ(sacai)。上端はプリーツの細い縦線(三宅一生)。
-/// 文字:英字の見出しは横に広い大文字、数字は縦長の極太、本文は SF Pro(日本語はヒラギノ角ゴ)。
-/// 読みやすさ最優先:文字は紙・白・墨・黄緑の上にだけ置く(すみれの上は白文字)。本文 16:1・補足 6.6:1 以上、最小 13pt
+/// デザイントークン(2026-09 v5:ゲームの UI として作る)。
+/// アプリの画面ではなく、ゲームの HUD とメニュー画面のつもりで:黒いステージに黄緑とすみれのインク(スプラトゥーンのナワバリの 2 色)、
+/// 斜めに切った札とボタン、ゲージ、選択カーソル「▶」、正解で「NICE!」のスタンプ。
+/// システムのライト/ダークに関係なく常に黒いステージ(ゲーム画面なので)。
+/// 読みやすさ:文字は黒・濃い灰・黄緑・白・すみれの面の上だけ。本文 17:1、補足 6.7:1 以上、最小 13pt。
+/// 斜めにするのは英字の大見出しと札の形だけで、日本語の本文はまっすぐ
 enum Theme {
     static let panelWidth: CGFloat = 660
-    static let leftColumnWidth: CGFloat = 340
+    static let leftColumnWidth: CGFloat = 350
     static let panelPadding: CGFloat = 16
     static let gap: CGFloat = 14
-    /// ブロック・ボタンの線
-    static let line: CGFloat = 1.5
+    /// 札・ボタンの斜めの量
+    static let slant: CGFloat = 8
 
     /// 日付・時刻の表記はシステム言語に関係なく日本語(UI 文言と揃える)
     static let locale = Locale(identifier: "ja_JP")
 
-    // インク(ライト/ダーク共通)
-    static let lime = rgb(0xC8FF1A)      // 墨文字 16.8:1
+    // インクと地(固定色)。カッコ内はその上の文字とのコントラスト
+    static let lime = rgb(0xC8FF1A)      // 黒文字 16.8:1。ステージ上の黄緑文字も 16.8:1
     static let violet = rgb(0x5A2DFF)    // 白文字 6.5:1
     static let black = rgb(0x0A0A0A)
-    static let paper = rgb(0xF2F0EB)
     static let white = rgb(0xFFFFFF)
-    /// 白い入力欄など、常に明るい面の上の補足
-    static let inkSoft = rgb(0x57544E)
-
-    /// パネルの地(ごくわずかに下が透ける)
-    static let background = dynamic(light: 0xF2F0EB, dark: 0x0B0B0B, lightAlpha: 0.97, darkAlpha: 0.97)
-    /// ブロックの面
-    static let surface = dynamic(light: 0xFFFFFF, dark: 0x151515)
-    static let text = dynamic(light: 0x0A0A0A, dark: 0xF2F0EB)
-    static let textSoft = dynamic(light: 0x57544E, dark: 0xA9A59C)
-    /// 線(ダークでは生成り)
-    static let rule = dynamic(light: 0x0A0A0A, dark: 0xF2F0EB)
-    static let hairline = dynamic(light: 0x0A0A0A, dark: 0xF2F0EB, lightAlpha: 0.14, darkAlpha: 0.16)
-    /// 反転(選択中の行・主ボタン)
-    static let inverse = dynamic(light: 0x0A0A0A, dark: 0xF2F0EB)
-    static let onInverse = dynamic(light: 0xF2F0EB, dark: 0x0A0A0A)
+    /// ステージ(パネルの地)
+    static let stage = rgb(0x0A0A0A)
+    /// 札・カードの面
+    static let surface = rgb(0x151515)
+    /// タイル(選ばれていないメニュー)・入力欄
+    static let tile = rgb(0x1C1C1C)
+    static let text = white
+    /// 補足(7:1 以上)
+    static let textSoft = rgb(0xA3A3A3)
+    /// 終わった予定など(5.7:1)
+    static let textFaint = rgb(0x8A8A8A)
+    static let hairline = Color.white.opacity(0.14)
 
     static func rgb(_ hex: UInt32) -> Color {
-        Color(nsColor: nsColor(hex))
-    }
-
-    static func dynamic(light: UInt32, dark: UInt32,
-                        lightAlpha: CGFloat = 1, darkAlpha: CGFloat = 1) -> Color {
-        Color(nsColor: NSColor(name: nil) { appearance in
-            appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
-                ? nsColor(dark, alpha: darkAlpha) : nsColor(light, alpha: lightAlpha)
-        })
-    }
-
-    private static func nsColor(_ hex: UInt32, alpha: CGFloat = 1) -> NSColor {
-        NSColor(srgbRed: CGFloat((hex >> 16) & 0xFF) / 255,
-                green: CGFloat((hex >> 8) & 0xFF) / 255,
-                blue: CGFloat(hex & 0xFF) / 255, alpha: alpha)
+        Color(.sRGB, red: Double((hex >> 16) & 0xFF) / 255, green: Double((hex >> 8) & 0xFF) / 255,
+              blue: Double(hex & 0xFF) / 255, opacity: 1)
     }
 
     /// 本文・見出し(SF Pro。日本語はヒラギノ角ゴ)
@@ -63,9 +46,14 @@ enum Theme {
         .system(size: size, weight: weight)
     }
 
-    /// 英字の見出しラベル(横に広い大文字。.tracking と合わせて使う)
-    static func label(_ size: CGFloat = 10.5) -> Font {
-        .system(size: size, weight: .heavy).width(.expanded)
+    /// ゲームのタイトルのような英字(横に広い極太の斜体)
+    static func display(_ size: CGFloat) -> Font {
+        .system(size: size, weight: .black).width(.expanded).italic()
+    }
+
+    /// 英字の小さなラベル(横に広い斜体。.tracking と合わせて使う)
+    static func label(_ size: CGFloat = 11) -> Font {
+        .system(size: size, weight: .heavy).width(.expanded).italic()
     }
 
     /// 大きな数字(縦長の極太・等幅)
@@ -74,13 +62,63 @@ enum Theme {
     }
 
     enum Size {
-        static let numeral: CGFloat = 60
-        static let word: CGFloat = 52
-        static let date: CGFloat = 30
-        static let title: CGFloat = 19
-        static let headline: CGFloat = 16
+        static let numeral: CGFloat = 72
+        static let word: CGFloat = 60
+        static let date: CGFloat = 40
+        static let title: CGFloat = 20
+        static let headline: CGFloat = 17
         static let body: CGFloat = 15
         static let caption: CGFloat = 13
+    }
+}
+
+// MARK: - 形
+
+/// 平行四辺形(ゲームの札・ボタン)
+struct Slant: Shape {
+    var skew: CGFloat = Theme.slant
+
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        path.move(to: CGPoint(x: rect.minX + skew, y: rect.minY))
+        path.addLine(to: CGPoint(x: rect.maxX, y: rect.minY))
+        path.addLine(to: CGPoint(x: rect.maxX - skew, y: rect.maxY))
+        path.addLine(to: CGPoint(x: rect.minX, y: rect.maxY))
+        path.closeSubpath()
+        return path
+    }
+}
+
+/// 角を斜めに落とした四角(カード)
+struct CutRect: Shape {
+    var topTrailing: CGFloat = 0
+    var bottomLeading: CGFloat = 0
+
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        path.move(to: CGPoint(x: rect.minX, y: rect.minY))
+        path.addLine(to: CGPoint(x: rect.maxX - topTrailing, y: rect.minY))
+        path.addLine(to: CGPoint(x: rect.maxX, y: rect.minY + topTrailing))
+        path.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY))
+        path.addLine(to: CGPoint(x: rect.minX + bottomLeading, y: rect.maxY))
+        path.addLine(to: CGPoint(x: rect.minX, y: rect.maxY - bottomLeading))
+        path.closeSubpath()
+        return path
+    }
+}
+
+/// 左の辺だけ斜めの四角(継ぎ合わせの布)
+struct SlashedPanel: Shape {
+    var slash: CGFloat = 34
+
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        path.move(to: CGPoint(x: rect.minX + slash, y: rect.minY))
+        path.addLine(to: CGPoint(x: rect.maxX, y: rect.minY))
+        path.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY))
+        path.addLine(to: CGPoint(x: rect.minX, y: rect.maxY))
+        path.closeSubpath()
+        return path
     }
 }
 
@@ -156,105 +194,135 @@ struct InkSplat: Shape {
     }
 }
 
-/// プリーツ(細い縦線の帯)。パネルの上端に
-struct Pleats: View {
+/// 網点(丸だけ。角から離れるほど小さく)。文字の無いところの飾り
+struct Halftone: View {
+    var color: Color = Theme.black.opacity(0.35)
+    var step: CGFloat = 12
+
     var body: some View {
         Canvas { context, size in
-            var x: CGFloat = 0
-            while x < size.width {
-                context.fill(Path(CGRect(x: x, y: 0, width: 1, height: size.height)),
-                             with: .color(Theme.rule.opacity(0.85)))
-                x += 3
+            let diagonal = hypot(size.width, size.height)
+            var y: CGFloat = step / 2
+            while y < size.height {
+                var x: CGFloat = step / 2
+                while x < size.width {
+                    let t = 1 - hypot(x, y) / diagonal
+                    let d = max(0, t * step * 0.75)
+                    if d > 0.8 {
+                        context.fill(Path(ellipseIn: CGRect(x: x - d / 2, y: y - d / 2, width: d, height: d)),
+                                     with: .color(color))
+                    }
+                    x += step
+                }
+                y += step
             }
         }
-        .frame(height: 7)
+        .allowsHitTesting(false)
         .accessibilityHidden(true)
     }
 }
 
-// MARK: - ブロック・ラベル・ボタン
+// MARK: - 札・見出し・ゲージ・ボタン
 
-extension View {
-    /// ブロック:面 + 細い線(角は立てる)
-    func block() -> some View {
-        self
-            .foregroundStyle(Theme.text)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(Theme.surface)
-            .overlay(Rectangle().strokeBorder(Theme.rule, lineWidth: Theme.line))
-    }
+/// 斜めの札(「TUE」「B1」「NEW」「CLEAR!」など)
+struct Plate: View {
+    let text: String
+    var fill: Color = Theme.white
+    var textColor: Color = Theme.black
 
-    /// 情報チップ(四角・細い線)
-    func chip(fill: Color = Theme.surface, text: Color = Theme.text, height: CGFloat = 32) -> some View {
-        self
-            .font(Theme.font(Theme.Size.caption, .bold))
-            .foregroundStyle(text)
-            .lineLimit(1)
-            .padding(.horizontal, 11)
-            .frame(height: height)
-            .background(fill)
-            .overlay(Rectangle().strokeBorder(Theme.rule, lineWidth: Theme.line))
+    var body: some View {
+        Text(text.uppercased())
+            .font(Theme.label(11))
+            .tracking(1.2)
+            .foregroundStyle(textColor)
+            .padding(.horizontal, 12)
+            .frame(height: 22)
+            .background(Slant(skew: 6).fill(fill))
+            .fixedSize()
     }
 }
 
-/// ブロックの見出し:英字ラベル + 日本語 + 右に添え物。下に線
-struct BlockHeader<Trailing: View>: View {
+/// セクションの見出し:大きな英字(ゲームのタイトル風)+ 日本語 + 右に添え物
+struct SectionTitle<Trailing: View>: View {
     let en: String
     let ja: String
     @ViewBuilder var trailing: () -> Trailing
 
     var body: some View {
-        HStack(spacing: 8) {
+        HStack(alignment: .firstTextBaseline, spacing: 10) {
             Text(en.uppercased())
-                .font(Theme.label())
-                .tracking(1.4)
+                .font(Theme.display(20))
+                .foregroundStyle(Theme.white)
             Text(ja)
                 .font(Theme.font(Theme.Size.caption, .heavy))
+                .foregroundStyle(Theme.textSoft)
             Spacer(minLength: 8)
             trailing()
-        }
-        .padding(.horizontal, 12)
-        .frame(height: 36)
-        .overlay(alignment: .bottom) {
-            Rectangle().fill(Theme.rule).frame(height: Theme.line)
         }
         .accessibilityElement(children: .combine)
     }
 }
 
-extension BlockHeader where Trailing == EmptyView {
+extension SectionTitle where Trailing == EmptyView {
     init(en: String, ja: String) {
         self.init(en: en, ja: ja) { EmptyView() }
     }
 }
 
-/// 織りネームのような小さな札(四角・横に広い大文字)
-struct WovenTag: View {
-    enum Style { case ink, violet, lime }
-
-    let text: String
-    var style: Style = .ink
+/// HUD のゲージ(斜めのコマを並べる)
+struct HUDGauge: View {
+    let segments: Int
+    let filled: Double
+    var color: Color = Theme.lime
 
     var body: some View {
-        let (fill, textColor): (Color, Color) = {
-            switch style {
-            case .ink: return (Theme.inverse, Theme.onInverse)
-            case .violet: return (Theme.violet, Theme.white)
-            case .lime: return (Theme.lime, Theme.black)
+        HStack(spacing: 3) {
+            ForEach(0..<max(segments, 1), id: \.self) { index in
+                Slant(skew: 4)
+                    .fill(Double(index) < filled ? color : Color.white.opacity(0.18))
+                    .frame(width: 14, height: 8)
             }
-        }()
-        Text(text.uppercased())
-            .font(Theme.label(10.5))
-            .tracking(1.2)
-            .foregroundStyle(textColor)
-            .padding(.horizontal, 7)
-            .frame(height: 20)
-            .background(fill)
-            .fixedSize()
+        }
+        .accessibilityHidden(true)
     }
 }
 
-/// キーボードの手がかり(「1」「⏎」など)
+/// HUD の数値:黄緑の英字ラベル + 値 + 補足、下にゲージ
+struct HUDStat: View {
+    let label: String
+    let value: String
+    var detail: String?
+    /// ゲージのコマ数(0 ならゲージなし)
+    var segments = 0
+    var filled: Double = 0
+    var alignment: HorizontalAlignment = .leading
+
+    var body: some View {
+        VStack(alignment: alignment, spacing: 5) {
+            HStack(alignment: .firstTextBaseline, spacing: 7) {
+                Text(label.uppercased())
+                    .font(Theme.label(11))
+                    .tracking(1.2)
+                    .foregroundStyle(Theme.lime)
+                Text(value)
+                    .font(Theme.font(Theme.Size.headline, .black).monospacedDigit())
+                    .foregroundStyle(Theme.white)
+                if let detail {
+                    Text(detail)
+                        .font(Theme.font(Theme.Size.caption, .bold).monospacedDigit())
+                        .foregroundStyle(Theme.textSoft)
+                }
+            }
+            .lineLimit(1)
+            if segments > 0 {
+                HUDGauge(segments: segments, filled: filled)
+            }
+        }
+        .fixedSize()
+    }
+}
+
+/// キーボードの手がかり(ゲームのボタン表示のような斜体の数字)
 struct KeyHint: View {
     let key: String
 
@@ -262,66 +330,62 @@ struct KeyHint: View {
 
     var body: some View {
         Text(key)
-            .font(.system(size: 10, weight: .heavy).monospacedDigit())
-            .padding(.horizontal, 4)
-            .frame(minWidth: 16, minHeight: 16)
-            .overlay(Rectangle().strokeBorder(lineWidth: 1))
-            .opacity(0.75)
+            .font(Theme.display(13))
             .accessibilityHidden(true)
     }
 }
 
-/// 角の立ったボタン。主ボタンは墨(ダークでは生成り)の後ろに黄緑を少しずらして刷る(版ずれ)
-struct SharpButtonStyle: ButtonStyle {
-    enum Kind { case primary, accent, plain }
+/// ゲームのコマンドボタン(斜めの札)。押すと少し縮む
+struct CommandButtonStyle: ButtonStyle {
+    enum Kind { case primary, light, ghost, violet }
 
-    var kind: Kind = .plain
-    var height: CGFloat = 36
+    var kind: Kind = .primary
+    var height: CGFloat = 38
     /// 横いっぱいに広げる
     var wide = false
-    /// アイコンだけの正方形
+    /// アイコンだけ
     var square = false
     @Environment(\.isEnabled) private var isEnabled
 
     func makeBody(configuration: Configuration) -> some View {
         let pressed = configuration.isPressed
-        let (fill, textColor, border): (Color, Color, Color) = {
+        let (fill, textColor): (Color, Color) = {
             switch kind {
-            case .primary: return (Theme.inverse, Theme.onInverse, Theme.inverse)
-            case .accent: return (Theme.lime, Theme.black, Theme.black)
-            case .plain: return (Theme.surface, Theme.text, Theme.rule)
+            case .primary: return (Theme.lime, Theme.black)
+            case .light: return (Theme.white, Theme.black)
+            case .ghost: return (Color.clear, Theme.white)
+            case .violet: return (Theme.violet, Theme.white)
             }
         }()
         configuration.label
-            .font(Theme.font(square ? Theme.Size.headline : 14, .heavy))
+            .font(Theme.font(square ? Theme.Size.headline : 15, .heavy))
             .foregroundStyle(textColor)
             .lineLimit(1)
-            .padding(.horizontal, square ? 0 : 14)
-            .frame(minWidth: square ? height : nil, maxWidth: wide ? .infinity : nil, minHeight: height)
-            .background(fill)
-            .overlay(Rectangle().strokeBorder(border, lineWidth: Theme.line))
-            .contentShape(Rectangle())
-            .offset(x: pressed ? 2 : 0, y: pressed ? 2 : 0)
-            .background(alignment: .topLeading) {
-                if kind == .primary {
-                    Theme.lime.offset(x: 3, y: 3)
+            .padding(.horizontal, square ? 0 : 18)
+            .frame(minWidth: square ? height + 6 : nil, maxWidth: wide ? .infinity : nil, minHeight: height)
+            .background(Slant().fill(fill))
+            .overlay {
+                if kind == .ghost {
+                    Slant().stroke(Theme.white, lineWidth: 2)
                 }
             }
+            .contentShape(Slant())
+            .scaleEffect(pressed ? 0.95 : 1)
             .opacity(isEnabled ? 1 : 0.35)
-            .animation(.easeOut(duration: 0.08), value: pressed)
+            .animation(.spring(duration: 0.18, bounce: 0.4), value: pressed)
     }
 }
 
-extension ButtonStyle where Self == SharpButtonStyle {
-    static var sharp: SharpButtonStyle { .init() }
+extension ButtonStyle where Self == CommandButtonStyle {
+    static var command: CommandButtonStyle { .init() }
 
-    static func sharp(_ kind: SharpButtonStyle.Kind, height: CGFloat = 36,
-                      wide: Bool = false) -> SharpButtonStyle {
+    static func command(_ kind: CommandButtonStyle.Kind, height: CGFloat = 38,
+                        wide: Bool = false) -> CommandButtonStyle {
         .init(kind: kind, height: height, wide: wide)
     }
 
-    /// アイコンだけの正方形ボタン
-    static func sharpSquare(_ kind: SharpButtonStyle.Kind = .plain, size: CGFloat = 32) -> SharpButtonStyle {
+    /// アイコンだけのコマンド
+    static func commandSquare(_ kind: CommandButtonStyle.Kind = .light, size: CGFloat = 30) -> CommandButtonStyle {
         .init(kind: kind, height: size, square: true)
     }
 }
@@ -337,19 +401,37 @@ struct SplatNumeral: View {
         VStack(spacing: 0) {
             Text(value)
                 .font(Theme.numeral(size))
-                .foregroundStyle(Theme.black)
                 .contentTransition(.numericText())
                 .lineLimit(1)
-                .minimumScaleFactor(0.5)
-                .padding(.horizontal, 14)
-                .padding(.vertical, 4)
-                .background(InkSplat(seed: seed, lobes: 11, depth: 0.14).fill(Theme.lime))
+                .minimumScaleFactor(0.45)
             if !unit.isEmpty {
                 Text(unit)
-                    .font(Theme.font(Theme.Size.caption, .heavy))
-                    .padding(.top, 2)
+                    .font(Theme.font(Theme.Size.caption, .black))
             }
         }
+        .foregroundStyle(Theme.black)
+        .padding(.horizontal, 16)
+        .padding(.vertical, 8)
+        .background(InkSplat(seed: seed, lobes: 11, depth: 0.14).fill(Theme.lime))
         .accessibilityElement(children: .combine)
+    }
+}
+
+/// スタンプ(「NICE!」「MISS」):インクの上に斜めの極太英字
+struct Stamp: View {
+    let text: String
+    var good = true
+
+    var body: some View {
+        Text(text)
+            .font(Theme.display(40))
+            .foregroundStyle(good ? Theme.black : Theme.white)
+            .padding(.horizontal, 30)
+            .padding(.vertical, 18)
+            .background(InkSplat(seed: good ? 33 : 37, lobes: 10, depth: 0.22)
+                .fill(good ? Theme.lime : Theme.violet))
+            .rotationEffect(.degrees(-10))
+            .allowsHitTesting(false)
+            .accessibilityLabel(good ? "正解" : "まちがい")
     }
 }
