@@ -3,6 +3,8 @@
   "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+    <key>CFBundleDevelopmentRegion</key>
+    <string>zh_CN</string>
     <key>CFBundleIdentifier</key>
     <string>jp.michiteki.nippo</string>
     <key>CFBundleName</key>
@@ -16,14 +18,14 @@
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>CFBundleShortVersionString</key>
-    <string>0.3.0</string>
+    <string>0.4.0</string>
     <key>CFBundleVersion</key>
-    <string>3</string>
+    <string>4</string>
     <key>LSMinimumSystemVersion</key>
     <string>26.0</string>
     <key>LSUIElement</key>
     <true/>
     <key>NSCalendarsFullAccessUsageDescription</key>
-    <string>本日の予定をメニューに表示し、会議前の通知と有給・休暇日の判定を行うためにカレンダーへのアクセスが必要です。</string>
+    <string>需要访问日历，用来在菜单里显示今天的会议、在开会前提醒你，以及查找下一次シャチョケン。</string>
 </dict>
 </plist>

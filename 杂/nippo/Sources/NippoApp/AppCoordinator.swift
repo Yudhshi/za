@@ -45,10 +45,10 @@ final class AppCoordinator: ObservableObject {
         do {
             db = try AppDatabase(path: dbPath)
         } catch {
-            fatalError("DB 初期化失敗: \(error)")
+            fatalError("DB 初期化失敗： \(error)")
         }
         AppLog.shared.configure(root: URL(fileURLWithPath: settings.reportsRoot))
-        AppLog.shared.log("app", "起動 Yudh v0.3")
+        AppLog.shared.log("app", "起動 Yudh v0.4")
         quietDays = QuietDayChecker(db: db)
 
         if Bundle.main.bundleIdentifier != nil {
@@ -63,7 +63,7 @@ final class AppCoordinator: ObservableObject {
                 do {
                     try SMAppService.mainApp.register()
                 } catch {
-                    AppLog.shared.log("app", "ログイン項目の登録に失敗: \(error)")
+                    AppLog.shared.log("app", "ログイン項目の登録に失敗： \(error)")
                 }
             }
         }
@@ -170,7 +170,7 @@ final class AppCoordinator: ObservableObject {
         let blocks = TaskOutline.blocks(memo)
         guard blocks.indices.contains(index) else { return }
         let block = blocks[index]
-        lastCompletedTask = CompletedTask(title: block.title ?? block.items.first?.text ?? "タスク",
+        lastCompletedTask = CompletedTask(title: block.title ?? block.items.first?.text ?? "任务",
                                           previousMemo: memo)
         settings.taskMemo = TaskOutline.removing(block: index, from: memo)
         objectWillChange.send()
@@ -204,9 +204,9 @@ final class AppCoordinator: ObservableObject {
             let fireDate = e.start.addingTimeInterval(TimeInterval(-lead * 60))
             guard fireDate.timeIntervalSinceNow > 1 else { continue }
             let id = "nippo-meet-\(e.id)-\(Int(e.start.timeIntervalSince1970))-\(lead)"
-            let title = "まもなく会議: \(e.title)"
-            let body = "\(f.string(from: e.start)) 開始"
-                + (e.joinURL != nil ? "。クリックで参加" : "")
+            let title = "即将开会：\(e.title)"
+            let body = "\(f.string(from: e.start)) 开始"
+                + (e.joinURL != nil ? "。点击加入会议" : "")
             let signature = [title, body, e.joinURL?.absoluteString ?? ""]
                 .joined(separator: "\n")
             next[id] = signature
@@ -236,11 +236,11 @@ final class AppCoordinator: ObservableObject {
     /// 「853」などを今日の出勤時刻として保存する。失敗したら理由を返す
     func setWorkBegan(_ text: String) -> String? {
         guard let (h, m) = WorkStart.parse(text) else {
-            return "時刻を読めませんでした(例:8:53 なら 853)"
+            return "看不懂这个时间（例：8:53 就输入 853）"
         }
         guard let date = Calendar.current.date(bySettingHour: h, minute: m, second: 0, of: Date()),
               date <= Date() else {
-            return "これからの時刻は入力できません"
+            return "不能填还没到的时间"
         }
         settings.workBeganTime = String(format: "%02d:%02d", h, m)
         settings.workBeganDay = DayKey.key(for: Date())

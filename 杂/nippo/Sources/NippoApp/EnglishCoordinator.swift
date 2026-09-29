@@ -16,20 +16,20 @@ final class EnglishCoordinator: ObservableObject {
 
         var title: String {
             switch self {
-            case .vocab: return "単語"
+            case .vocab: return "单词"
             case .para: return "考点词"
-            case .spell: return "語料"
-            case .dict: return "辞書"
+            case .spell: return "语料"
+            case .dict: return "词典"
             }
         }
 
         /// カードでやること(ツールチップ用)
         var detail: String {
             switch self {
-            case .vocab: return "単語カード(IELTS 分層詞池・B1 から)。意味を思い出して、覚え具合を付ける"
-            case .para: return "考点词(刘洪波 考点词真经)。真題での言い換えを 4 択で選ぶ"
-            case .spell: return "語料(王陆 语料库)。読み上げを聞いて書き取る"
-            case .dict: return "辞書(ECDICT)。引いた語は単語カードに足せる"
+            case .vocab: return "单词卡（IELTS 分级词池，从 B1 开始）。先回想意思，再给记忆程度打分"
+            case .para: return "考点词（刘洪波《考点词真经》）。四选一：真题里它会被换成哪个词"
+            case .spell: return "语料（王陆语料库）。听朗读，写出单词"
+            case .dict: return "词典(ECDICT)。查到的词可以加进单词卡"
             }
         }
 
@@ -66,9 +66,9 @@ final class EnglishCoordinator: ObservableObject {
 
         var title: String {
             switch self {
-            case .today: return "今日"
-            case .learning: return "学習中"
-            case .known: return "知ってる"
+            case .today: return "今天"
+            case .learning: return "学习中"
+            case .known: return "已掌握"
             }
         }
     }
@@ -251,7 +251,7 @@ final class EnglishCoordinator: ObservableObject {
         return chosen.prefix(200).map { card in
             let (title, gloss) = describe(card.id)
             return ListRow(id: card.id, title: title, gloss: gloss,
-                           dueLabel: card.known ? "知ってる" : Self.dueLabel(card.due, today: today))
+                           dueLabel: card.known ? "已掌握" : Self.dueLabel(card.due, today: today))
         }
     }
 
@@ -298,7 +298,7 @@ final class EnglishCoordinator: ObservableObject {
         return (id, "")
     }
 
-    /// 「今日」「明日」「3日後」「10/12」
+    /// 「今天」「明天」「3天后」「10/12」
     static func dueLabel(_ due: String, today: String) -> String {
         let f = DateFormatter()
         f.calendar = Calendar(identifier: .gregorian)
@@ -307,9 +307,9 @@ final class EnglishCoordinator: ObservableObject {
         guard let d = f.date(from: due), let t = f.date(from: today) else { return due }
         let days = Calendar(identifier: .gregorian).dateComponents([.day], from: t, to: d).day ?? 0
         switch days {
-        case ..<1: return "今日"
-        case 1: return "明日"
-        case 2...30: return "\(days)日後"
+        case ..<1: return "今天"
+        case 1: return "明天"
+        case 2...30: return "\(days)天后"
         default:
             let c = Calendar(identifier: .gregorian).dateComponents([.month, .day], from: d)
             return "\(c.month ?? 0)/\(c.day ?? 0)"
@@ -327,7 +327,7 @@ final class EnglishCoordinator: ObservableObject {
         guard let card = vocabCard, revealed, !card.known else { return }
         let point = try? store.undoPoint(for: card.id)
         let saved = record(card.id, kind: .vocab, rating: rating)
-        remember(.vocab, point, "\(card.word) → \(saved.map { Self.intervalLabel($0.state.interval) } ?? "記録")")
+        remember(.vocab, point, "\(card.word) → \(saved.map { Self.intervalLabel($0.state.interval) } ?? "已记录")")
         switch rating {
         case .good, .easy: celebrate(true)
         case .again: celebrate(false)
@@ -347,7 +347,7 @@ final class EnglishCoordinator: ObservableObject {
         } catch {
             AppLog.shared.log("english", "markKnown failed: \(error)")
         }
-        remember(.vocab, point, "\(card.word) → 知ってる(もう出さない)")
+        remember(.vocab, point, "\(card.word) → 已掌握（不再出现）")
         lastAnswered[.vocab] = card.id
         nextVocab()
         refreshStats()
@@ -392,7 +392,7 @@ final class EnglishCoordinator: ObservableObject {
         }
         if id.hasPrefix("dict:"), let hit = library.lookup(String(id.dropFirst(5))) {
             return VocabCard(id: id, word: hit.word, phonetic: "/\(hit.ipa)/", pos: nil,
-                             meaning: hit.zh, example: nil, level: "辞書", isNew: false, known: known)
+                             meaning: hit.zh, example: nil, level: "词典", isNew: false, known: known)
         }
         return nil
     }
@@ -406,7 +406,7 @@ final class EnglishCoordinator: ObservableObject {
         let point = try? store.undoPoint(for: id)
         let correct = index == q.answerIndex
         record(id, kind: .para, rating: correct ? .good : .again)
-        remember(.para, point, "\(q.entry.w) → " + (correct ? "正解" : "今日もう一度"))
+        remember(.para, point, "\(q.entry.w) → " + (correct ? "正确" : "今天再来一次"))
         celebrate(correct)
         lastAnswered[.para] = id
         refreshStats()
@@ -448,9 +448,9 @@ final class EnglishCoordinator: ObservableObject {
         let rating: SRSRating
         let message: String
         switch result {
-        case .correct: rating = .good; message = "正解"
-        case .almost: rating = .hard; message = "おしい・明日もう一度"
-        case .wrong: rating = .again; message = "今日もう一度"
+        case .correct: rating = .good; message = "正确"
+        case .almost: rating = .hard; message = "差一点 · 明天再来"
+        case .wrong: rating = .again; message = "今天再来一次"
         }
         let point = try? store.undoPoint(for: item.id)
         record(item.id, kind: .spell, rating: rating)
@@ -466,7 +466,7 @@ final class EnglishCoordinator: ObservableObject {
         spellResult = .wrong
         let point = try? store.undoPoint(for: item.id)
         record(item.id, kind: .spell, rating: .again)
-        remember(.spell, point, "\(item.word.w) → 今日もう一度")
+        remember(.spell, point, "\(item.word.w) → 今天再来一次")
         celebrate(false)
         lastAnswered[.spell] = item.id
         refreshStats()
@@ -535,12 +535,12 @@ final class EnglishCoordinator: ObservableObject {
         lastAction = LastAction(mode: mode, message: message, undo: point)
     }
 
-    /// 「明日また」「3日後にまた」「今日もう一度」
+    /// 「明天再复习」「3 天后再复习」「今天再来一次」
     static func intervalLabel(_ days: Int) -> String {
         switch days {
-        case ..<1: return "今日もう一度"
-        case 1: return "明日また"
-        default: return "\(days)日後にまた"
+        case ..<1: return "今天再来一次"
+        case 1: return "明天再复习"
+        default: return "\(days) 天后再复习"
         }
     }
 

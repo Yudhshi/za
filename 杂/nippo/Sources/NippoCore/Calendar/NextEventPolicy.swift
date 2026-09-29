@@ -24,12 +24,12 @@ public enum NextEventPolicy {
             max(1, Int(ceil(interval / 60)))
         }
         guard event.start > now else {
-            return ("\(ceilMinutes(event.end.timeIntervalSince(now)))", "分で終了")
+            return ("\(ceilMinutes(event.end.timeIntervalSince(now)))", "分钟后结束")
         }
         let minutes = ceilMinutes(event.start.timeIntervalSince(now))
-        if minutes < 60 { return ("\(minutes)", "分後") }
+        if minutes < 60 { return ("\(minutes)", "分钟后") }
         let c = calendar.dateComponents([.hour, .minute], from: event.start)
-        return (String(format: "%d:%02d", c.hour!, c.minute!), "開始")
+        return (String(format: "%d:%02d", c.hour!, c.minute!), "开始")
     }
 
     /// 件名にキーワードのどれかを含む、まだ終わっていない最初の予定(全角/半角・大小文字は区別しない)
@@ -48,17 +48,17 @@ public enum NextEventPolicy {
     /// 先の予定までの大きな数字と単位:「開催中」「25 / 分後」「2 / 時間後」「明日」「4 / 日後」
     public static func dayCountdown(to start: Date, now: Date,
                                     calendar: Calendar = .current) -> (value: String, unit: String) {
-        guard start > now else { return ("開催中", "") }
+        guard start > now else { return ("进行中", "") }
         let days = calendar.dateComponents([.day], from: calendar.startOfDay(for: now),
                                            to: calendar.startOfDay(for: start)).day ?? 0
         switch days {
         case 0:
             let minutes = max(1, Int(ceil(start.timeIntervalSince(now) / 60)))
-            return minutes < 60 ? ("\(minutes)", "分後") : ("\(minutes / 60)", "時間後")
+            return minutes < 60 ? ("\(minutes)", "分钟后") : ("\(minutes / 60)", "小时后")
         case 1:
-            return ("明日", "")
+            return ("明天", "")
         default:
-            return ("\(days)", "日後")
+            return ("\(days)", "天后")
         }
     }
 
@@ -70,7 +70,7 @@ public enum NextEventPolicy {
         let minutes = max(1, Int(ceil(next.start.timeIntervalSince(now) / 60)))
         let countdown: String
         if minutes < 60 {
-            countdown = "\(minutes)分"
+            countdown = "\(minutes)分钟"
         } else {
             countdown = String(format: "%d:%02d", minutes / 60, minutes % 60)
         }
@@ -78,6 +78,6 @@ public enum NextEventPolicy {
         if title.count > maxTitleLength {
             title = String(title.prefix(maxTitleLength)) + "…"
         }
-        return "\(title)まで \(countdown)"
+        return "\(title) 还有\(countdown)"
     }
 }

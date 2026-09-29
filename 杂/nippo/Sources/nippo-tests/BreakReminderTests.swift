@@ -62,15 +62,15 @@ func runBreakReminderTests() {
         let defaults = BreakReminder.stretches(from: BreakReminder.defaultStretches)
         T.expectEqual(defaults.count, 7)
         T.expect(defaults.allSatisfy { $0.steps.count >= 2 }, "every default has steps")
-        T.expect(!BreakReminder.defaultStretches.contains("頭の上")
-                 && !BreakReminder.defaultStretches.contains("バンザイ"), "no overhead moves")
+        T.expect(!BreakReminder.defaultStretches.contains("举过头")
+                 && !BreakReminder.defaultStretches.contains("举起双手"), "no overhead moves")
     }
 
     T.run("body: numbered steps, optional extra line, caution last") {
         let s = BreakReminder.Stretch(name: "肩甲骨寄せ(約 1 分)", steps: ["腕を下ろす", "肩甲骨を寄せる"])
-        T.expectEqual(BreakReminder.body(for: s), "① 腕を下ろす\n② 肩甲骨を寄せる\n※しびれ・痛みが出たら中止")
+        T.expectEqual(BreakReminder.body(for: s), "① 腕を下ろす\n② 肩甲骨を寄せる\n※ 如有麻木或疼痛请停止")
         T.expectEqual(BreakReminder.body(for: s, extra: "水を一杯"),
-                      "① 腕を下ろす\n② 肩甲骨を寄せる\n水を一杯\n※しびれ・痛みが出たら中止")
+                      "① 腕を下ろす\n② 肩甲骨を寄せる\n水を一杯\n※ 如有麻木或疼痛请停止")
     }
 
     T.run("desiredPrompt: ask when due, keep the standing guide, hide in Meet") {

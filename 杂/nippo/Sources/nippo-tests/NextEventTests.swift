@@ -38,19 +38,19 @@ func runNextEventTests() {
         let now1 = tokyoDate(2026, 7, 10, 16, 25, 30)
         let t1 = NextEventPolicy.statusTitle(events: [ev("a", "1on1", startH: 16, startM: 30)],
                                              now: now1)
-        T.expectEqual(t1, "1on1まで 5分")
+        T.expectEqual(t1, "1on1 还有5分钟")
 
-        // 83 分後 → 「まで 1:23」
+        // 83 分後 → 「还有1:23」
         let now2 = tokyoDate(2026, 7, 10, 16, 7)
         let t2 = NextEventPolicy.statusTitle(events: [ev("b", "定例MTG", startH: 17, startM: 30)],
                                              now: now2)
-        T.expectEqual(t2, "定例MTGまで 1:23")
+        T.expectEqual(t2, "定例MTG 还有1:23")
 
         // 長いタイトルは省略
         let t3 = NextEventPolicy.statusTitle(
             events: [ev("c", "RoadSyncチーム全体定例ミーティング", startH: 17, startM: 30)],
             now: tokyoDate(2026, 7, 10, 17, 0))
-        T.expect(t3?.contains("…まで") == true, "truncated, got \(String(describing: t3))")
+        T.expect(t3?.contains("… 还有") == true, "truncated, got \(String(describing: t3))")
 
         // 次がなければ nil
         T.expectEqual(NextEventPolicy.statusTitle(events: [], now: now1), nil)
@@ -60,11 +60,11 @@ func runNextEventTests() {
         let e = ev("x", "定例", startH: 16, startM: 30)   // 16:30–17:30
         func at(_ h: Int, _ m: Int, _ s: Int = 0) -> Date { tokyoDate(2026, 7, 10, h, m, s) }
         let soon = NextEventPolicy.heroCountdown(for: e, now: at(16, 18, 30), calendar: tokyoCalendar)
-        T.expectEqual(soon.value, "12"); T.expectEqual(soon.unit, "分後")   // 11:30 → 切り上げ 12
+        T.expectEqual(soon.value, "12"); T.expectEqual(soon.unit, "分钟后")   // 11:30 → 切り上げ 12
         let later = NextEventPolicy.heroCountdown(for: e, now: at(15, 0), calendar: tokyoCalendar)
-        T.expectEqual(later.value, "16:30"); T.expectEqual(later.unit, "開始")
+        T.expectEqual(later.value, "16:30"); T.expectEqual(later.unit, "开始")
         let running = NextEventPolicy.heroCountdown(for: e, now: at(17, 7), calendar: tokyoCalendar)
-        T.expectEqual(running.value, "23"); T.expectEqual(running.unit, "分で終了")
+        T.expectEqual(running.value, "23"); T.expectEqual(running.unit, "分钟后结束")
         let lastSecond = NextEventPolicy.heroCountdown(for: e, now: at(17, 29, 50), calendar: tokyoCalendar)
         T.expectEqual(lastSecond.value, "1", "never shows 0")
     }
@@ -95,10 +95,10 @@ func runNextEventTests() {
             let r = NextEventPolicy.dayCountdown(to: d, now: now, calendar: tokyoCalendar)
             return r.value + r.unit
         }
-        T.expectEqual(c(tokyoDate(2026, 7, 10, 12, 25)), "25分後")
-        T.expectEqual(c(tokyoDate(2026, 7, 10, 14, 30)), "2時間後")
-        T.expectEqual(c(tokyoDate(2026, 7, 11, 9, 0)), "明日")
-        T.expectEqual(c(tokyoDate(2026, 7, 14, 9, 0)), "4日後")
-        T.expectEqual(c(tokyoDate(2026, 7, 10, 11, 0)), "開催中")
+        T.expectEqual(c(tokyoDate(2026, 7, 10, 12, 25)), "25分钟后")
+        T.expectEqual(c(tokyoDate(2026, 7, 10, 14, 30)), "2小时后")
+        T.expectEqual(c(tokyoDate(2026, 7, 11, 9, 0)), "明天")
+        T.expectEqual(c(tokyoDate(2026, 7, 14, 9, 0)), "4天后")
+        T.expectEqual(c(tokyoDate(2026, 7, 10, 11, 0)), "进行中")
     }
 }

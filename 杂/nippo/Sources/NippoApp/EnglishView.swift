@@ -1,129 +1,91 @@
 import SwiftUI
 import NippoCore
 
-/// 英語タブ(v5 ゲームの UI)。OOUI:もの(単語・考点词・語料・辞書)を選ぶ → カード(1 つ)か一覧(まとまり)→
-/// カードに付いた操作。1 問 10 秒前後、キーボードだけで回せる
-/// (単語:Space → 1〜4、考点词:1〜4 → Enter、語料:入力 → Enter、⌘Z で直前の答えを取り消し)。
-/// 正解で「NICE!」、まちがいで「MISS」のスタンプ。今日の数は TURF ゲージ、連続日数は COMBO
+/// 英語タブ(v6)。主役は 1 枚のカード(単語・考点词・语料・词典)。ほかは灰色で静かに。
+/// OOUI:もの(单词・考点词・语料・词典)を選ぶ → カード(1 つ)か列表(まとまり)→ カードに付いた操作。
+/// 1 問 10 秒前後、キーボードだけで回せる(单词:空格 → 1〜4、考点词:1〜4 → 回车、语料:输入 → 回车、⌘Z 撤销)
 struct EnglishView: View {
     @ObservedObject var english: EnglishCoordinator
 
     var body: some View {
-        VStack(alignment: .leading, spacing: Theme.gap) {
-            HStack(alignment: .center, spacing: 10) {
-                ModeMenu(english: english)
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(alignment: .firstTextBaseline, spacing: 18) {
+                UnderlineTabs(items: EnglishCoordinator.Mode.allCases.map { mode in
+                    TabItem(value: mode, title: mode.title, badge: english.remaining[mode])
+                }, selection: $english.mode)
                 if english.mode != .dict {
-                    Button {
+                    Button(english.presentation == .card ? "列表" : "卡片") {
                         withAnimation(.spring(duration: 0.25, bounce: 0.3)) {
                             english.presentation = english.presentation == .card ? .list : .card
                         }
-                    } label: {
-                        Image(systemName: english.presentation == .card ? "list.bullet" : "rectangle.portrait")
                     }
-                    .buttonStyle(.commandSquare(english.presentation == .list ? .primary : .ghost, size: 30))
-                    .help(english.presentation == .card ? "一覧を見る" : "カードに戻る")
+                    .buttonStyle(.command(.quiet, height: 20))
+                    .help(english.presentation == .card ? "查看列表" : "回到卡片")
                 }
                 Spacer(minLength: 8)
-                HUDStat(label: "Turf", value: "\(english.todayCount)/\(EnglishCoordinator.dailyGoal)",
-                        detail: english.streak > 0 ? "COMBO ×\(english.streak)" : nil,
-                        segments: 10,
-                        filled: Double(english.todayCount) / Double(EnglishCoordinator.dailyGoal) * 10,
-                        alignment: .trailing)
-                    .help("1 日 \(EnglishCoordinator.dailyGoal) 問が目標。COMBO は連続日数")
+                progress
             }
-            if !english.loaded {
-                HStack(spacing: 10) {
-                    ProgressView().controlSize(.small)
-                    Text("LOADING…")
-                        .font(Theme.display(16))
-                        .foregroundStyle(Theme.white)
-                }
-                .padding(16)
-            } else if !english.hasData {
-                MissingDataCard()
-            } else if english.presentation == .list && english.mode != .dict {
-                CollectionCard(english: english)
-            } else {
-                switch english.mode {
-                case .vocab: VocabBattle(english: english)
-                case .para: ParaphraseCard(english: english)
-                case .spell: SpellCard(english: english)
-                case .dict: DictionaryCard(english: english)
-                }
-            }
-        }
-    }
-}
-
-/// もの(オブジェクト)の切り替え。選んだタイルに黄緑の札がすべって来る。各々に今日の残り
-private struct ModeMenu: View {
-    @ObservedObject var english: EnglishCoordinator
-    @Namespace private var plate
-
-    var body: some View {
-        HStack(spacing: 4) {
-            ForEach(EnglishCoordinator.Mode.allCases) { mode in
-                tile(mode)
-            }
-        }
-        .fixedSize()
-    }
-
-    private func tile(_ mode: EnglishCoordinator.Mode) -> some View {
-        let selected = english.mode == mode
-        return Button {
-            withAnimation(.spring(duration: 0.3, bounce: 0.35)) { english.mode = mode }
-        } label: {
-            HStack(spacing: 6) {
-                Text(mode.title)
-                    .font(Theme.font(Theme.Size.body, .black))
-                if let count = english.remaining[mode], count > 0 {
-                    Plate(text: "\(count)", fill: Theme.violet, textColor: Theme.white)
-                }
-            }
-            .foregroundStyle(selected ? Theme.black : Theme.white)
-            .padding(.horizontal, 14)
-            .frame(height: 32)
-            .background {
-                if selected {
-                    Slant().fill(Theme.lime).matchedGeometryEffect(id: "mode", in: plate)
+            Group {
+                if !english.loaded {
+                    HStack(spacing: 10) {
+                        ProgressView().controlSize(.small)
+                        Text("加载中…")
+                            .font(Theme.font(14, .medium))
+                            .foregroundStyle(Theme.textSoft)
+                    }
+                } else if !english.hasData {
+                    MissingData()
+                } else if english.presentation == .list && english.mode != .dict {
+                    WordList(english: english)
                 } else {
-                    Slant().fill(Theme.tile)
+                    switch english.mode {
+                    case .vocab: VocabView(english: english)
+                    case .para: ParaphraseCard(english: english)
+                    case .spell: SpellCard(english: english)
+                    case .dict: DictionaryCard(english: english)
+                    }
                 }
             }
-            .contentShape(Slant())
+            .padding(.top, 20)
         }
-        .buttonStyle(.plain)
-        .help(mode.detail)
-        .accessibilityAddTraits(selected ? .isSelected : [])
+    }
+
+    /// 今天 12/20 · 连续 4 天
+    private var progress: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 4) {
+            Text("今天")
+                .foregroundStyle(Theme.textSoft)
+            Text("\(english.todayCount)")
+                .font(Theme.font(13, .bold).monospacedDigit())
+                .foregroundStyle(english.todayCount >= EnglishCoordinator.dailyGoal ? Theme.lime : Theme.white)
+            Text("/\(EnglishCoordinator.dailyGoal)")
+                .monospacedDigit()
+                .foregroundStyle(Theme.textSoft)
+            if english.streak > 0 {
+                Text("· 连续 \(english.streak) 天")
+                    .foregroundStyle(Theme.textSoft)
+            }
+        }
+        .font(Theme.font(13, .medium))
+        .fixedSize()
+        .help("每天目标 \(EnglishCoordinator.dailyGoal) 题")
     }
 }
 
-// MARK: - カードの共通部品
+// MARK: - 共通
 
-/// バトルカード:濃い灰の面、右上を斜めに落とし、すみれのインクを角に。正解・まちがいのスタンプを上に重ねる
-private struct BattleCard<Content: View>: View {
+/// カードの外枠:余白だけ。答えたときのスタンプを右上に重ねる
+private struct CardFrame<Content: View>: View {
     @ObservedObject var english: EnglishCoordinator
-    var ink: UInt64 = 5
     @ViewBuilder var content: () -> Content
 
     var body: some View {
         content()
-            .padding(18)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(alignment: .topTrailing) {
-                InkSplat(seed: ink, lobes: 9, drops: 2, drip: false, depth: 0.34)
-                    .fill(Theme.violet)
-                    .frame(width: 190, height: 170)
-                    .offset(x: 64, y: -60)
-                    .allowsHitTesting(false)
-            }
-            .background(Theme.surface)
-            .clipShape(CutRect(topTrailing: 22))
             .overlay(alignment: .topTrailing) {
                 if let flash = english.flash {
-                    Stamp(text: flash.good ? "NICE!" : "MISS", good: flash.good)
-                        .offset(x: -30, y: 44)
+                    Stamp(good: flash.good)
+                        .offset(x: -10, y: 20)
                         .transition(.scale(scale: 0.3).combined(with: .opacity))
                         .id(flash.id)
                 }
@@ -132,148 +94,161 @@ private struct BattleCard<Content: View>: View {
     }
 }
 
-/// 直前の答え(結果の一言)と「元に戻す ⌘Z」
+/// 上の小さな一行(「B1 · n. 新词」など)
+private struct Tagline: View {
+    let text: String
+    var highlight: String?
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 8) {
+            Text(text)
+                .foregroundStyle(Theme.textSoft)
+            if let highlight {
+                Text(highlight)
+                    .foregroundStyle(Theme.lime)
+            }
+        }
+        .font(Theme.font(13, .semibold))
+    }
+}
+
+/// 見出し語(大きく・まっすぐ)
+private struct HeadWord: View {
+    let text: String
+
+    var body: some View {
+        Text(text)
+            .font(Theme.font(62, .heavy))
+            .foregroundStyle(Theme.white)
+            .lineLimit(1)
+            .minimumScaleFactor(0.45)
+            .textSelection(.enabled)
+            .padding(.top, 6)
+            .padding(.trailing, 150)
+    }
+}
+
+/// 直前の答え(結果の一言)と「撤销 ⌘Z」
 private struct UndoLine: View {
     @ObservedObject var english: EnglishCoordinator
 
     var body: some View {
-        // 語料は次の語を打っているあいだは出さない(⌘Z を入力欄の取り消しに譲る)
+        // 语料は次の語を打っているあいだは出さない(⌘Z を入力欄の取り消しに譲る)
         if let action = english.lastAction, action.mode == english.mode,
            english.mode != .spell || english.spellResult != nil {
             HStack(spacing: 8) {
                 Text(action.message)
                     .lineLimit(1)
                 Spacer(minLength: 6)
-                Button {
-                    english.undoLast()
-                } label: {
-                    HStack(spacing: 6) {
-                        Text("元に戻す")
-                        Text("⌘Z").font(Theme.label(10))
-                    }
-                }
-                .buttonStyle(.command(.ghost, height: 24))
-                .keyboardShortcut("z", modifiers: .command)
+                Button("撤销 ⌘Z") { english.undoLast() }
+                    .buttonStyle(.command(.quiet, height: 20))
+                    .keyboardShortcut("z", modifiers: .command)
             }
-            .font(Theme.font(Theme.Size.caption, .bold))
+            .font(Theme.font(12, .medium))
             .foregroundStyle(Theme.textSoft)
             .padding(.top, 14)
         }
     }
 }
 
-/// 大きな見出し語(学ぶ綴りなのでまっすぐ・標準幅。インクと重ならないよう右をあける)
-private struct HeadWord: View {
-    let text: String
-
-    var body: some View {
-        Text(text)
-            .font(Theme.font(Theme.Size.word, .black))
-            .foregroundStyle(Theme.white)
-            .lineLimit(1)
-            .minimumScaleFactor(0.45)
-            .textSelection(.enabled)
-            .padding(.top, 12)
-            .padding(.trailing, 120)
+private func keyLabel(_ key: String, _ title: String) -> some View {
+    HStack(spacing: 8) {
+        KeyHint(key)
+        Text(title)
     }
 }
 
-// MARK: - 単語
+// MARK: - 单词
 
-private struct VocabBattle: View {
+private struct VocabView: View {
     @ObservedObject var english: EnglishCoordinator
 
     var body: some View {
         if let card = english.vocabCard {
-            BattleCard(english: english) {
+            CardFrame(english: english) {
                 VStack(alignment: .leading, spacing: 0) {
-                    HStack(spacing: 6) {
-                        Plate(text: card.level)
-                        if card.isNew { Plate(text: "New", fill: Theme.violet, textColor: Theme.white) }
-                        if card.known { Plate(text: "Known", fill: Theme.lime) }
-                    }
+                    Tagline(text: [card.level, card.pos].compactMap { $0 }.joined(separator: " · "),
+                            highlight: card.known ? "已掌握" : (card.isNew ? "新词" : nil))
                     HeadWord(text: card.word)
-                    HStack(spacing: 10) {
-                        Text([card.phonetic, card.pos].compactMap { $0 }.joined(separator: " · "))
-                            .font(Theme.font(Theme.Size.headline, .medium))
-                            .foregroundStyle(Theme.textSoft)
+                    HStack(spacing: 8) {
+                        if let phonetic = card.phonetic {
+                            Text(phonetic)
+                                .font(Theme.font(16, .regular))
+                                .foregroundStyle(Theme.textSoft)
+                        }
                         Button {
                             english.speakWord()
                         } label: {
                             Image(systemName: "speaker.wave.2.fill")
                         }
-                        .buttonStyle(.commandSquare(.ghost, size: 26))
-                        .help("発音を聞く")
+                        .buttonStyle(.command(.quiet, height: 20))
+                        .help("听发音")
                     }
                     if english.revealed || card.known {
                         Text(card.meaning)
-                            .font(Theme.font(24, .black))
+                            .font(Theme.font(24, .bold))
                             .foregroundStyle(Theme.lime)
                             .fixedSize(horizontal: false, vertical: true)
                             .textSelection(.enabled)
-                            .padding(.top, 16)
+                            .padding(.top, 18)
                         if let example = card.example {
                             HStack(alignment: .firstTextBaseline, spacing: 8) {
                                 Text(example)
-                                    .font(Theme.font(Theme.Size.body, .medium))
-                                    .foregroundStyle(Theme.white.opacity(0.9))
+                                    .font(Theme.font(15, .regular))
+                                    .foregroundStyle(Theme.body)
                                     .fixedSize(horizontal: false, vertical: true)
                                     .textSelection(.enabled)
                                 Button {
                                     english.speakExample()
                                 } label: {
                                     Image(systemName: "speaker.wave.2")
-                                        .foregroundStyle(Theme.textSoft)
                                 }
-                                .buttonStyle(.plain)
-                                .help("例文を聞く")
+                                .buttonStyle(.command(.quiet, height: 18))
+                                .help("听例句")
                             }
                             .padding(.top, 6)
                         }
                     }
                     actions(card)
-                        .padding(.top, 18)
+                        .padding(.top, 22)
                     UndoLine(english: english)
                 }
             }
         } else {
-            StageClear(english: english, message: "今日の単語はここまで")
+            StageClear(english: english, message: "今天的单词做完了")
         }
     }
 
     @ViewBuilder
     private func actions(_ card: EnglishCoordinator.VocabCard) -> some View {
         if card.known {
-            HStack(spacing: 10) {
-                Text("「知ってる」にしたので出題していません")
-                    .font(Theme.font(Theme.Size.caption, .bold))
+            HStack(spacing: 12) {
+                Text("你标记了「已经会了」，现在不会出题")
+                    .font(Theme.font(13, .medium))
                     .foregroundStyle(Theme.textSoft)
                 Spacer()
-                Button("出題に戻す") { english.restoreCurrent() }
+                Button("恢复出题") { english.restoreCurrent() }
                     .buttonStyle(.command(.primary))
             }
         } else if english.revealed {
             HStack(spacing: 10) {
-                rateButton("もう一回", key: "1", rating: .again, kind: .ghost)
-                rateButton("あいまい", key: "2", rating: .hard, kind: .ghost)
-                rateButton("覚えた", key: "3", rating: .good, kind: .primary)
-                rateButton("簡単", key: "4", rating: .easy, kind: .light)
+                rateButton("忘了", key: "1", rating: .again, kind: .ghost)
+                rateButton("模糊", key: "2", rating: .hard, kind: .ghost)
+                rateButton("记住了", key: "3", rating: .good, kind: .primary)
+                rateButton("太简单", key: "4", rating: .easy, kind: .ghost)
             }
         } else {
             HStack(spacing: 10) {
                 Button {
                     english.reveal()
                 } label: {
-                    HStack(spacing: 10) {
-                        KeyHint("SPACE")
-                        Text("意味を見る")
-                    }
+                    keyLabel("空格", "看释义")
                 }
                 .buttonStyle(.command(.primary, height: 44, wide: true))
                 .keyboardShortcut(.space, modifiers: [])
-                Button("知ってる") { english.markKnown() }
+                Button("已经会了") { english.markKnown() }
                     .buttonStyle(.command(.ghost, height: 44))
-                    .help("もう出さない(一覧の「知ってる」から戻せる)")
+                    .help("以后不再出这个词（可以在列表的「已掌握」里恢复）")
             }
         }
     }
@@ -283,10 +258,7 @@ private struct VocabBattle: View {
         Button {
             english.rate(rating)
         } label: {
-            HStack(spacing: 8) {
-                KeyHint(String(key.character))
-                Text(title)
-            }
+            keyLabel(String(key.character), title)
         }
         .buttonStyle(.command(kind, height: 42, wide: true))
         .keyboardShortcut(key, modifiers: [])
@@ -300,17 +272,13 @@ private struct ParaphraseCard: View {
 
     var body: some View {
         if let q = english.question {
-            BattleCard(english: english, ink: 9) {
+            CardFrame(english: english) {
                 VStack(alignment: .leading, spacing: 0) {
-                    HStack(spacing: 8) {
-                        Plate(text: q.entry.skill == "listening" ? "Listening" : "Reading")
-                        Text("真題での言い換えはどれ?")
-                            .font(Theme.font(Theme.Size.caption, .bold))
-                            .foregroundStyle(Theme.textSoft)
-                    }
+                    Tagline(text: (q.entry.skill == "listening" ? "听力考点词" : "阅读考点词")
+                                + " · 真题里它会被换成哪个词？")
                     HeadWord(text: q.entry.w)
                     Text([q.entry.pos, q.entry.zh].compactMap { $0 }.joined(separator: " · "))
-                        .font(Theme.font(Theme.Size.headline, .medium))
+                        .font(Theme.font(16, .regular))
                         .foregroundStyle(Theme.textSoft)
                     LazyVGrid(columns: [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)],
                               spacing: 10) {
@@ -318,16 +286,16 @@ private struct ParaphraseCard: View {
                             choiceButton(index, choice, question: q)
                         }
                     }
-                    .padding(.top, 18)
+                    .padding(.top, 20)
                     if let picked = english.picked {
                         HStack(alignment: .center, spacing: 12) {
                             VStack(alignment: .leading, spacing: 3) {
-                                Text(picked == q.answerIndex ? "正解" : "ざんねん。今日もう一度出ます")
-                                    .font(Theme.font(Theme.Size.headline, .black))
+                                Text(picked == q.answerIndex ? "正确" : "错了，今天还会再出")
+                                    .font(Theme.font(15, .bold))
                                     .foregroundStyle(picked == q.answerIndex ? Theme.lime : Theme.white)
-                                Text("言い換え:" + q.entry.syn.joined(separator: " · "))
-                                    .font(Theme.font(Theme.Size.body, .medium))
-                                    .foregroundStyle(Theme.white.opacity(0.9))
+                                Text("可替换为：" + q.entry.syn.joined(separator: " · "))
+                                    .font(Theme.font(14, .regular))
+                                    .foregroundStyle(Theme.body)
                                     .fixedSize(horizontal: false, vertical: true)
                                     .textSelection(.enabled)
                             }
@@ -335,58 +303,49 @@ private struct ParaphraseCard: View {
                             Button {
                                 english.nextParaphrase()
                             } label: {
-                                HStack(spacing: 8) {
-                                    Text("次へ")
-                                    KeyHint("⏎")
-                                }
+                                keyLabel("⏎", "下一题")
                             }
                             .buttonStyle(.command(.primary))
                             .keyboardShortcut(.defaultAction)
                         }
-                        .padding(.top, 16)
+                        .padding(.top, 18)
                     }
                     UndoLine(english: english)
                 }
             }
         } else {
-            StageClear(english: english, message: "今日の考点词はここまで")
+            StageClear(english: english, message: "今天的考点词做完了")
         }
     }
 
     private func choiceButton(_ index: Int, _ choice: String, question q: ParaphraseQuestion) -> some View {
         let picked = english.picked
-        let kind: CommandButtonStyle.Kind
-        if picked != nil && index == q.answerIndex {
-            kind = .primary
-        } else if picked == index {
-            kind = .violet
-        } else {
-            kind = .ghost
-        }
+        let isAnswer = picked != nil && index == q.answerIndex
         return Button {
             english.choose(index)
         } label: {
             HStack(spacing: 10) {
                 KeyHint("\(index + 1)")
                 Text(choice)
-                    .font(Theme.font(17, .black))
+                    .font(Theme.font(17, .bold))
                     .lineLimit(1)
                     .minimumScaleFactor(0.7)
+                    .strikethrough(picked == index && !isAnswer)
                 Spacer(minLength: 0)
-                if picked != nil && index == q.answerIndex {
+                if isAnswer {
                     Image(systemName: "checkmark")
                 } else if picked == index {
                     Image(systemName: "xmark")
                 }
             }
         }
-        .buttonStyle(.command(kind, height: 48, wide: true))
+        .buttonStyle(.command(isAnswer ? .primary : .ghost, height: 46, wide: true))
         .keyboardShortcut(KeyEquivalent(Character("\(index + 1)")), modifiers: [])
-        .opacity(picked != nil && index != q.answerIndex && index != picked ? 0.45 : 1)
+        .opacity(picked != nil && !isAnswer && index != picked ? 0.4 : 1)
     }
 }
 
-// MARK: - 語料(聴写)
+// MARK: - 语料(听写)
 
 private struct SpellCard: View {
     @ObservedObject var english: EnglishCoordinator
@@ -394,55 +353,44 @@ private struct SpellCard: View {
 
     var body: some View {
         if let item = english.spellItem {
-            BattleCard(english: english, ink: 13) {
+            CardFrame(english: english) {
                 VStack(alignment: .leading, spacing: 0) {
-                    HStack(spacing: 8) {
-                        Plate(text: "Wang Lu")
-                        Text(item.word.set)
-                            .font(Theme.font(Theme.Size.caption, .bold))
-                            .foregroundStyle(Theme.textSoft)
-                        if item.isNew { Plate(text: "New", fill: Theme.violet, textColor: Theme.white) }
-                    }
-                    Text("LISTEN & TYPE")
-                        .font(Theme.display(30))
+                    Tagline(text: "王陆语料 · \(item.word.set)", highlight: item.isNew ? "新词" : nil)
+                    Text("听音写词")
+                        .font(Theme.font(30, .heavy))
                         .foregroundStyle(Theme.white)
-                        .padding(.top, 12)
+                        .padding(.top, 6)
                     HStack(spacing: 10) {
                         Button {
                             english.play()
                             focused = true
                         } label: {
-                            HStack(spacing: 8) {
-                                Image(systemName: "play.fill")
-                                Text("聞く")
-                                Text("⌘R").font(Theme.label(10))
-                            }
+                            Label("播放", systemImage: "play.fill")
                         }
-                        .buttonStyle(.command(.primary, height: 40))
+                        .buttonStyle(.command(.primary))
                         .keyboardShortcut("r", modifiers: .command)
-                        Button {
+                        .help("播放(⌘R)")
+                        Button("慢速") {
                             english.play(slow: true)
                             focused = true
-                        } label: {
-                            Label("ゆっくり", systemImage: "tortoise.fill")
                         }
-                        .buttonStyle(.command(.ghost, height: 40))
+                        .buttonStyle(.command(.ghost))
                         Spacer()
-                        Text("英国英語の読み上げ・イヤホン推奨")
-                            .font(Theme.font(Theme.Size.caption, .bold))
+                        Text("英式发音 · 建议戴耳机")
+                            .font(Theme.font(12, .medium))
                             .foregroundStyle(Theme.textSoft)
                     }
-                    .padding(.top, 12)
+                    .padding(.top, 14)
                     TextField("", text: $english.spellInput,
-                              prompt: Text("聞こえた語を入力して Enter").foregroundStyle(Theme.textSoft))
+                              prompt: Text("输入听到的单词，按回车").foregroundStyle(Theme.textFaint))
                         .textFieldStyle(.plain)
-                        .font(Theme.font(26, .black))
+                        .font(Theme.font(26, .bold))
                         .foregroundStyle(Theme.white)
                         .autocorrectionDisabled(true)
                         .padding(.horizontal, 14)
                         .frame(height: 54)
-                        .background(Theme.black)
-                        .overlay(Rectangle().stroke(Theme.lime, lineWidth: 2))
+                        .background(Theme.tile)
+                        .overlay(alignment: .bottom) { Theme.lime.frame(height: 2) }
                         .focused($focused)
                         .onSubmit {
                             english.submitSpelling()
@@ -455,16 +403,13 @@ private struct SpellCard: View {
                     }
                     HStack(spacing: 10) {
                         if english.spellResult == nil {
-                            Button("わからない") { english.giveUpSpelling() }
+                            Button("不知道") { english.giveUpSpelling() }
                                 .buttonStyle(.command(.ghost))
                             Spacer()
                             Button {
                                 english.submitSpelling()
                             } label: {
-                                HStack(spacing: 8) {
-                                    Text("答え合わせ")
-                                    KeyHint("⏎")
-                                }
+                                keyLabel("⏎", "检查")
                             }
                             .buttonStyle(.command(.primary))
                         } else {
@@ -473,10 +418,7 @@ private struct SpellCard: View {
                                 english.submitSpelling()
                                 focused = true
                             } label: {
-                                HStack(spacing: 8) {
-                                    Text("次へ")
-                                    KeyHint("⏎")
-                                }
+                                keyLabel("⏎", "下一个")
                             }
                             .buttonStyle(.command(.primary))
                         }
@@ -487,144 +429,139 @@ private struct SpellCard: View {
             }
             .onAppear { focused = true }
         } else {
-            StageClear(english: english, message: "今日の語料はここまで")
+            StageClear(english: english, message: "今天的语料做完了")
         }
     }
 
-    /// 採点:正解は黄緑に墨、おしい・まちがいはすみれに白
+    /// 判定:正确 = 黄绿底黑字;差一点・错误 = 深灰底白字
     private func resultBox(_ result: SpellResult, _ word: DictationWord) -> some View {
-        let (title, fill, textColor): (String, Color, Color) = {
-            switch result {
-            case .correct: return ("正解", Theme.lime, Theme.black)
-            case .almost: return ("おしい(1 文字ちがい)· 明日もう一度", Theme.violet, Theme.white)
-            case .wrong: return ("正解はこちら · 今日もう一度", Theme.violet, Theme.white)
-            }
-        }()
+        let title: String
+        switch result {
+        case .correct: title = "正确"
+        case .almost: title = "差一点（错了 1 个字母）· 明天再来"
+        case .wrong: title = "正确答案 · 今天再来一次"
+        }
+        let good = result == .correct
         return VStack(alignment: .leading, spacing: 2) {
             Text(title)
-                .font(Theme.font(Theme.Size.caption, .black))
+                .font(Theme.font(13, .bold))
             Text(word.w)
-                .font(Theme.font(30, .black))
+                .font(Theme.font(30, .heavy))
                 .textSelection(.enabled)
             Text([word.ipa.map { "/\($0)/" }, word.zh].compactMap { $0 }.joined(separator: " · "))
-                .font(Theme.font(Theme.Size.body, .medium))
+                .font(Theme.font(14, .regular))
                 .fixedSize(horizontal: false, vertical: true)
         }
-        .foregroundStyle(textColor)
+        .foregroundStyle(good ? Theme.black : Theme.white)
         .padding(.horizontal, 16)
         .padding(.vertical, 12)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(CutRect(topTrailing: 12).fill(fill))
+        .background(good ? Theme.lime : Theme.tile)
     }
 }
 
-// MARK: - 辞書
+// MARK: - 词典
 
 private struct DictionaryCard: View {
     @ObservedObject var english: EnglishCoordinator
     @FocusState private var focused: Bool
 
     var body: some View {
-        BattleCard(english: english, ink: 17) {
-            VStack(alignment: .leading, spacing: 12) {
-                TextField("", text: $english.dictQuery,
-                          prompt: Text("英単語を入力(例:sustainable)").foregroundStyle(Theme.textSoft))
-                    .textFieldStyle(.plain)
-                    .font(Theme.font(22, .black))
-                    .foregroundStyle(Theme.white)
-                    .autocorrectionDisabled(true)
-                    .padding(.horizontal, 14)
-                    .frame(height: 50)
-                    .background(Theme.black)
-                    .overlay(Rectangle().stroke(Theme.lime, lineWidth: 2))
-                    .focused($focused)
-                    .padding(.trailing, 110)
-                if english.dictQuery.trimmingCharacters(in: .whitespaces).isEmpty {
-                    Text("仕事中に出てきた単語をその場で。引いた語は単語カードに足して、あとで復習できます")
-                        .font(Theme.font(Theme.Size.body, .medium))
-                        .foregroundStyle(Theme.textSoft)
-                        .fixedSize(horizontal: false, vertical: true)
-                } else if let hit = english.dictHit {
-                    VStack(alignment: .leading, spacing: 6) {
-                        HStack(alignment: .firstTextBaseline, spacing: 10) {
-                            Text(hit.word)
-                                .font(Theme.font(38, .black))
-                                .foregroundStyle(Theme.white)
-                                .textSelection(.enabled)
-                            Text("/\(hit.ipa)/")
-                                .font(Theme.font(Theme.Size.headline, .medium))
-                                .foregroundStyle(Theme.textSoft)
-                            Button {
-                                Speaker.shared.say(hit.word)
-                            } label: {
-                                Image(systemName: "speaker.wave.2.fill")
-                            }
-                            .buttonStyle(.commandSquare(.ghost, size: 26))
-                            .help("発音を聞く")
-                            Spacer()
-                        }
-                        Text(hit.zh.replacingOccurrences(of: ";", with: "\n"))
-                            .font(Theme.font(18, .black))
-                            .foregroundStyle(Theme.lime)
-                            .fixedSize(horizontal: false, vertical: true)
+        VStack(alignment: .leading, spacing: 14) {
+            TextField("", text: $english.dictQuery,
+                      prompt: Text("输入英文单词（例：sustainable）").foregroundStyle(Theme.textFaint))
+                .textFieldStyle(.plain)
+                .font(Theme.font(22, .bold))
+                .foregroundStyle(Theme.white)
+                .autocorrectionDisabled(true)
+                .padding(.horizontal, 14)
+                .frame(height: 50)
+                .background(Theme.tile)
+                .overlay(alignment: .bottom) { Theme.lime.frame(height: 2) }
+                .focused($focused)
+            if english.dictQuery.trimmingCharacters(in: .whitespaces).isEmpty {
+                Text("工作中遇到的生词，随手查。查到的词可以加进单词卡，之后复习")
+                    .font(Theme.font(14, .medium))
+                    .foregroundStyle(Theme.textSoft)
+                    .fixedSize(horizontal: false, vertical: true)
+            } else if let hit = english.dictHit {
+                VStack(alignment: .leading, spacing: 6) {
+                    HStack(alignment: .firstTextBaseline, spacing: 10) {
+                        Text(hit.word)
+                            .font(Theme.font(40, .heavy))
+                            .foregroundStyle(Theme.white)
                             .textSelection(.enabled)
-                        HStack {
-                            Spacer()
-                            if english.isInDeck(hit) {
-                                Plate(text: "In deck", fill: Theme.tile, textColor: Theme.textSoft)
-                            } else {
-                                Button {
-                                    english.addToDeck(hit)
-                                } label: {
-                                    Label("単語カードに追加", systemImage: "plus")
-                                }
-                                .buttonStyle(.command(.primary))
-                            }
+                        Text("/\(hit.ipa)/")
+                            .font(Theme.font(16, .regular))
+                            .foregroundStyle(Theme.textSoft)
+                        Button {
+                            Speaker.shared.say(hit.word)
+                        } label: {
+                            Image(systemName: "speaker.wave.2.fill")
                         }
-                        .padding(.top, 4)
+                        .buttonStyle(.command(.quiet, height: 20))
+                        .help("听发音")
+                        Spacer()
                     }
-                } else {
-                    Text("「\(english.dictQuery)」は見つかりませんでした")
-                        .font(Theme.font(Theme.Size.body, .bold))
-                        .foregroundStyle(Theme.textSoft)
+                    Text(hit.zh.replacingOccurrences(of: ";", with: "\n"))
+                        .font(Theme.font(18, .bold))
+                        .foregroundStyle(Theme.lime)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .textSelection(.enabled)
+                    HStack {
+                        Spacer()
+                        if english.isInDeck(hit) {
+                            Text("已在单词卡里")
+                                .font(Theme.font(13, .medium))
+                                .foregroundStyle(Theme.textSoft)
+                        } else {
+                            Button {
+                                english.addToDeck(hit)
+                            } label: {
+                                Label("加入单词卡", systemImage: "plus")
+                            }
+                            .buttonStyle(.command(.primary))
+                        }
+                    }
+                    .padding(.top, 6)
                 }
+            } else {
+                Text("没有找到「\(english.dictQuery)」")
+                    .font(Theme.font(14, .medium))
+                    .foregroundStyle(Theme.textSoft)
             }
         }
         .onAppear { focused = true }
     }
 }
 
-// MARK: - 一覧(まとまり)
+// MARK: - 列表
 
-/// 出たことのあるものの一覧。行を押すとカードで開く(期限前の復習・「知ってる」を戻すのもカードから)
-private struct CollectionCard: View {
+/// 出现过的单词/考点词/语料。点一行就用卡片打开(提前复习、恢复「已掌握」都在卡片上)
+private struct WordList: View {
     @ObservedObject var english: EnglishCoordinator
 
     var body: some View {
         let rows = english.listRows()
-        VStack(alignment: .leading, spacing: 10) {
-            HStack(spacing: 6) {
-                ForEach(EnglishCoordinator.ListFilter.allCases) { filter in
-                    if filter != .known || english.mode == .vocab {
-                        filterButton(filter)
-                    }
-                }
-                Spacer()
-            }
+        VStack(alignment: .leading, spacing: 8) {
+            UnderlineTabs(items: EnglishCoordinator.ListFilter.allCases
+                .filter { $0 != .known || english.mode == .vocab }
+                .map { TabItem(value: $0, title: $0.title, badge: english.listCount($0)) },
+                          selection: $english.listFilter, size: 13)
             if rows.isEmpty {
                 Text(emptyMessage)
-                    .font(Theme.font(Theme.Size.body, .medium))
-                    .foregroundStyle(Theme.textSoft)
+                    .font(Theme.font(14, .medium))
+                    .foregroundStyle(Theme.textFaint)
                     .padding(.vertical, 8)
             } else {
-                VStack(spacing: 2) {
+                VStack(spacing: 0) {
                     ForEach(rows) { row in
                         CollectionRow(row: row) { english.focus(row.id) }
                     }
                 }
                 if rows.count >= 200 {
-                    Text("先頭の 200 件を表示")
-                        .font(Theme.font(Theme.Size.caption, .bold))
+                    Text("只显示前 200 条")
+                        .font(Theme.font(12, .medium))
                         .foregroundStyle(Theme.textSoft)
                 }
             }
@@ -633,30 +570,10 @@ private struct CollectionCard: View {
 
     private var emptyMessage: String {
         switch english.listFilter {
-        case .today: return "今日の復習はありません"
-        case .learning: return "まだ出たものはありません。カードから始めましょう"
-        case .known: return "「知ってる」にしたものはありません"
+        case .today: return "今天没有要复习的"
+        case .learning: return "还没有出现过的词。先从卡片开始吧"
+        case .known: return "还没有标记「已经会了」的词"
         }
-    }
-
-    private func filterButton(_ filter: EnglishCoordinator.ListFilter) -> some View {
-        let selected = english.listFilter == filter
-        return Button {
-            english.listFilter = filter
-        } label: {
-            HStack(spacing: 6) {
-                Text(filter.title)
-                Text("\(english.listCount(filter))")
-                    .monospacedDigit()
-            }
-            .font(Theme.font(Theme.Size.caption, .black))
-            .foregroundStyle(selected ? Theme.black : Theme.white)
-            .padding(.horizontal, 12)
-            .frame(height: 26)
-            .background(Slant(skew: 6).fill(selected ? Theme.lime : Theme.tile))
-            .contentShape(Slant(skew: 6))
-        }
-        .buttonStyle(.plain)
     }
 }
 
@@ -668,90 +585,81 @@ private struct CollectionRow: View {
     var body: some View {
         Button(action: open) {
             HStack(spacing: 12) {
-                Text("▶")
-                    .font(.system(size: 9, weight: .black))
-                    .foregroundStyle(hovering ? Theme.lime : Color.clear)
                 Text(row.title)
-                    .font(Theme.font(Theme.Size.body, .black))
+                    .font(Theme.font(15, .bold))
                     .foregroundStyle(Theme.white)
                     .lineLimit(1)
-                    .frame(width: 170, alignment: .leading)
+                    .frame(width: 180, alignment: .leading)
                 Text(row.gloss)
-                    .font(Theme.font(Theme.Size.caption, .medium))
+                    .font(Theme.font(13, .regular))
                     .foregroundStyle(Theme.textSoft)
                     .lineLimit(1)
                 Spacer(minLength: 8)
                 Text(row.dueLabel)
-                    .font(Theme.font(12, .black))
-                    .foregroundStyle(row.dueLabel == "今日" ? Theme.lime : Theme.white)
+                    .font(Theme.font(12, .semibold))
+                    .foregroundStyle(row.dueLabel == "今天" ? Theme.lime : Theme.textSoft)
             }
-            .padding(.leading, 6)
-            .padding(.trailing, 14)
+            .padding(.horizontal, 8)
             .frame(height: 34)
-            .background { if hovering { Slant().fill(Theme.tile) } }
+            .background(hovering ? Theme.tile : Color.clear)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .onHover { hovering = $0 }
         .pointerStyle(.link)
-        .help("カードで開く")
+        .help("用卡片打开")
     }
 }
 
-// MARK: - 今日のぶんが終わった・素材が無い
+// MARK: - 做完了・没有素材
 
 private struct StageClear: View {
     @ObservedObject var english: EnglishCoordinator
     let message: String
 
     var body: some View {
-        BattleCard(english: english, ink: 21) {
+        CardFrame(english: english) {
             VStack(alignment: .leading, spacing: 10) {
-                Text("STAGE CLEAR!")
-                    .font(Theme.display(34))
+                Text("完成！")
+                    .font(Theme.font(40, .heavy))
                     .foregroundStyle(Theme.lime)
                 Text(message)
-                    .font(Theme.font(Theme.Size.title, .black))
+                    .font(Theme.font(18, .bold))
                     .foregroundStyle(Theme.white)
-                Text("復習の続きは明日また出ます。まだやるなら、新しいものを 10 問足せます")
-                    .font(Theme.font(Theme.Size.body, .medium))
+                Text("要复习的明天会再出现。还想继续的话，可以再加 10 个新的")
+                    .font(Theme.font(14, .medium))
                     .foregroundStyle(Theme.textSoft)
                     .fixedSize(horizontal: false, vertical: true)
                 HStack(spacing: 10) {
-                    Button("新しいのをもう 10 問") { english.addMoreNew() }
+                    Button("再来 10 个新的") { english.addMoreNew() }
                         .buttonStyle(.command(.primary))
-                    Button("一覧を見る") { english.presentation = .list }
+                    Button("查看列表") { english.presentation = .list }
                         .buttonStyle(.command(.ghost))
                 }
-                .padding(.top, 4)
+                .padding(.top, 6)
                 UndoLine(english: english)
             }
         }
     }
 }
 
-private struct MissingDataCard: View {
+private struct MissingData: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("NO DATA")
-                .font(Theme.display(34))
-                .foregroundStyle(Theme.violet)
-            Text("IELTS アプリの素材を取り込むと使えます")
-                .font(Theme.font(Theme.Size.title, .black))
+            Text("还没有英语素材")
+                .font(Theme.font(26, .bold))
                 .foregroundStyle(Theme.white)
-            Text("ターミナルで IELTS アプリのフォルダを指定してビルドし直してください")
-                .font(Theme.font(Theme.Size.body, .medium))
+            Text("导入 IELTS app 的素材后就能用。在终端里指定 IELTS app 的文件夹重新构建：")
+                .font(Theme.font(14, .medium))
                 .foregroundStyle(Theme.textSoft)
+                .fixedSize(horizontal: false, vertical: true)
             Text("IELTS_DIR=~/Downloads/ielts-dist-v71 ./build-app.sh")
                 .font(.system(size: 13, weight: .semibold, design: .monospaced))
                 .foregroundStyle(Theme.lime)
                 .textSelection(.enabled)
                 .padding(10)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .background(Theme.black)
+                .background(Theme.tile)
         }
-        .padding(18)
-        .background(Theme.surface)
-        .clipShape(CutRect(topTrailing: 22))
     }
 }

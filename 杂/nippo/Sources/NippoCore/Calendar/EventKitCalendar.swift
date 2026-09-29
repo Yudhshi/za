@@ -39,7 +39,7 @@ public final class EventKitCalendar: CalendarProviding {
                 // 開始時刻を混ぜてオカレンス単位の安定 id にする(ForEach とリマインド重複排除の両方が id に依存)
                 MeetingEvent(
                     id: "\(e.eventIdentifier ?? "no-id")-\(e.startDate.timeIntervalSince1970)",
-                    title: e.title ?? "(無題)",
+                    title: e.title ?? "（无标题）",
                     start: e.startDate,
                     end: e.endDate,
                     attendees: (e.attendees ?? []).compactMap(\.name),

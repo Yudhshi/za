@@ -28,7 +28,7 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
         let host = NSHostingController(
             rootView: SettingsView(coordinator: coordinator, settings: coordinator.settings))
         let window = NSWindow(contentViewController: host)
-        window.title = "Yudh の設定"
+        window.title = "Yudh 设置"
         window.styleMask = [.titled, .closable, .miniaturizable]
         window.isReleasedWhenClosed = false
         window.delegate = self
