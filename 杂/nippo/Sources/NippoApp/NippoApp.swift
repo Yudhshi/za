@@ -10,11 +10,11 @@ struct NippoApp: App {
         MenuBarExtra {
             MenuContentView(coordinator: coordinator)
         } label: {
-            // 次の会議のカウントダウン、なければ目覚まし時計
+            // 次の会議のカウントダウン。なければ目覚まし時計(立ち作業中は立っている人)
             if let title = coordinator.statusBarTitle {
                 Text(title)
             } else {
-                Image(systemName: "alarm")
+                Image(systemName: coordinator.posture == .standing ? "figure.stand" : "alarm")
             }
         }
         .menuBarExtraStyle(.window)

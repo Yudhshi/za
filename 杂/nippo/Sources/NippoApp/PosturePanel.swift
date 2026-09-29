@@ -61,11 +61,22 @@ private final class PromptPanel: NSPanel {
 
 // MARK: - 小窓の中身
 
-/// デスクトップの上に浮く小窓(v7):角丸の黒いカードに問いかけ(中国語)と、押すだけのボタン
+/// デスクトップの上に浮く小窓(v8):Liquid Glass の外枠の中に、不透明な関卡カード 1 枚。
+/// 三つの状態は三つの色:STAND UP 朱红(黒字)・STANDING 翠绿(黒字)・SIT DOWN 钴蓝(白字)。文字はガラスの上に置かない
 struct PosturePromptView: View {
     @ObservedObject var coordinator: AppCoordinator
 
+    private var level: Level {
+        switch coordinator.posturePrompt {
+        case .askStand: return .vermilion
+        case .standing: return .viridian
+        case .askSit: return .cobalt
+        case nil: return .chrome
+        }
+    }
+
     var body: some View {
+        let frame = RoundedRectangle(cornerRadius: 26, style: .continuous)
         Group {
             switch coordinator.posturePrompt {
             case .askStand: askStand
@@ -75,7 +86,11 @@ struct PosturePromptView: View {
             }
         }
         .frame(width: 360)
+        .environment(\.level, level)
         .padding(12)
+        .background(Color.black.opacity(0.45), in: frame)
+        .glassEffect(.regular, in: frame)
+        .padding(12)   // 影の分
         .environment(\.colorScheme, .dark)
         .environment(\.locale, Theme.locale)
         .typesettingLanguage(Theme.language)
@@ -85,30 +100,20 @@ struct PosturePromptView: View {
         max(0, Int(Date().timeIntervalSince(coordinator.postureSince) / 60))
     }
 
-    /// ラベル + 問いかけ + 補足
-    private func question(_ kicker: String, _ title: String, _ detail: String) -> some View {
-        VStack(alignment: .leading, spacing: 0) {
-            Eyebrow(lead: kicker)
-            Text(title)
-                .font(Theme.font(22, .semibold))
-                .foregroundStyle(Theme.white)
-                .padding(.top, 6)
-            Text(detail)
-                .font(Theme.font(13, .regular))
-                .foregroundStyle(Theme.textSoft)
-                .fixedSize(horizontal: false, vertical: true)
-                .padding(.top, 4)
-        }
-    }
-
     private var askStand: some View {
         VStack(alignment: .leading, spacing: 0) {
-            question("STAND UP", "站起来了吗？", "已经坐了 \(sittingMinutes) 分钟。把桌子升到手肘 90° 的高度")
-            Text("接下来做「\(coordinator.promptStretch.name)」，顺便去喝杯水")
-                .font(Theme.font(13, .regular))
-                .foregroundStyle(Theme.body)
+            Eyebrow(lead: "STAND UP")
+            Text("站起来了吗？")
+                .font(Theme.font(22, .semibold))
+                .padding(.top, 8)
+            Text("已经坐了 \(sittingMinutes) 分钟。把桌子升到手肘 90° 的高度")
+                .font(Theme.font(13, .medium))
                 .fixedSize(horizontal: false, vertical: true)
-                .padding(.top, 12)
+                .padding(.top, 6)
+            Text("接下来做「\(coordinator.promptStretch.name)」，顺便去喝杯水")
+                .font(Theme.font(13, .medium))
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.top, 4)
             HStack(spacing: 8) {
                 Button("站好了") { coordinator.confirmStood() }
                     .buttonStyle(.command(.primary, height: 40, wide: true))
@@ -117,13 +122,21 @@ struct PosturePromptView: View {
             }
             .padding(.top, 18)
         }
-        .promptCard()
+        .padding(20)
+        .hero(seam: false, bleed: false)
     }
 
     private var askSit: some View {
         let standing = max(0, Int(Date().timeIntervalSince(coordinator.postureSince) / 60))
         return VStack(alignment: .leading, spacing: 0) {
-            question("SIT DOWN", "坐下了吗？", "已经站了 \(standing) 分钟，辛苦了。坐深一点，双脚踩实地面")
+            Eyebrow(lead: "SIT DOWN")
+            Text("坐下了吗？")
+                .font(Theme.font(22, .semibold))
+                .padding(.top, 8)
+            Text("已经站了 \(standing) 分钟，辛苦了。坐深一点，双脚踩实地面")
+                .font(Theme.font(13, .medium))
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.top, 6)
             HStack(spacing: 8) {
                 Button("坐好了") { coordinator.confirmSat() }
                     .buttonStyle(.command(.primary, height: 40, wide: true))
@@ -132,40 +145,36 @@ struct PosturePromptView: View {
             }
             .padding(.top, 18)
         }
-        .promptCard()
+        .padding(20)
+        .hero(seam: false, bleed: false)
     }
 }
 
-private extension View {
-    /// 小窓の面(黒・角丸・細い縁で壁紙から離す)
-    func promptCard() -> some View {
-        self.padding(20)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(Theme.stage, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .strokeBorder(Color.white.opacity(0.1), lineWidth: 1))
-    }
-}
-
-/// 站立中:剩余时间 + 拉伸,一次一步
+/// 站立中:剩余时间(墨の大数字)+ 褶皺の計量条(15 褶 = 15 分)+ 拉伸,一次一步
 private struct StandingGuide: View {
     @ObservedObject var coordinator: AppCoordinator
+    @Environment(\.level) private var level
 
     var body: some View {
         TimelineView(.periodic(from: .now, by: 1)) { context in
+            let total = max(1, coordinator.settings.standMinutes)
             let remaining = max(0, coordinator.postureDueAt.timeIntervalSince(context.date))
+            let elapsedMinutes = max(0, min(total, Int((Double(total) * 60 - remaining) / 60)))
             VStack(alignment: .leading, spacing: 0) {
                 HStack(alignment: .top) {
                     VStack(alignment: .leading, spacing: 0) {
                         Eyebrow(lead: "STANDING")
                         Text("放松肩膀，手肘 90°")
-                            .font(Theme.font(13, .regular))
-                            .foregroundStyle(Theme.textSoft)
+                            .font(Theme.font(13, .medium))
+                            .opacity(0.8)
                             .padding(.top, 6)
                     }
                     Spacer()
-                    BigNumber(value: Self.clock(remaining), unit: "剩余", size: 48)
+                    BigNumber(value: Self.clock(remaining), unit: "剩余", size: 48,
+                              color: level.ink, unitColor: level.ink.opacity(0.7))
                 }
+                PleatGauge(states: (0..<total).map { $0 < elapsedMinutes ? .meeting : .empty })
+                    .padding(.top, 12)
                 stretch
                     .padding(.top, 14)
                 HStack {
@@ -176,7 +185,8 @@ private struct StandingGuide: View {
                 }
                 .padding(.top, 10)
             }
-            .promptCard()
+            .padding(20)
+            .hero(seam: false, bleed: false)
         }
     }
 
@@ -188,33 +198,31 @@ private struct StandingGuide: View {
             HStack(alignment: .firstTextBaseline) {
                 Text(s.name)
                     .font(Theme.font(12, .semibold))
-                    .foregroundStyle(Theme.textFaint)
+                    .opacity(0.75)
                 Spacer()
                 if !s.steps.isEmpty && !done {
                     Text("\(step + 1) / \(s.steps.count)")
                         .font(Theme.font(12, .semibold).monospacedDigit())
-                        .foregroundStyle(Theme.textSoft)
+                        .opacity(0.75)
                 }
             }
             if done {
                 Text("完成！接下来站着工作吧")
                     .font(Theme.font(15, .semibold))
-                    .foregroundStyle(Theme.lime)
                     .padding(.top, 8)
                 Text("喝杯水")
-                    .font(Theme.font(13, .regular))
-                    .foregroundStyle(Theme.body)
+                    .font(Theme.font(13, .medium))
+                    .opacity(0.8)
                     .padding(.top, 2)
             } else {
                 Text(s.steps[step])
                     .font(Theme.font(15, .semibold))
-                    .foregroundStyle(Theme.white)
                     .fixedSize(horizontal: false, vertical: true)
                     .frame(maxWidth: .infinity, minHeight: 44, alignment: .topLeading)
                     .padding(.top, 8)
                 Text("※ 如有麻木或疼痛请停止")
                     .font(Theme.font(12, .medium))
-                    .foregroundStyle(Theme.textFaint)
+                    .opacity(0.7)
             }
             HStack(spacing: 8) {
                 if step > 0 && !done {
@@ -232,7 +240,7 @@ private struct StandingGuide: View {
             .padding(.top, 12)
         }
         .padding(14)
-        .background(Theme.card, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .background(level.ink.opacity(0.12), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
     }
 
     /// 「12:34」

@@ -60,7 +60,7 @@ final class AppCoordinator: ObservableObject {
         guard let opened else { fatalError("DB 初期化失敗: \(dbNotes)") }
         db = opened
         AppLog.shared.configure(root: URL(fileURLWithPath: root))
-        AppLog.shared.log("app", "起動 Yudh v0.5")
+        AppLog.shared.log("app", "起動 Yudh v0.6")
         dbNotes.forEach { AppLog.shared.log("app", $0) }
         quietDays = QuietDayChecker(db: db)
 

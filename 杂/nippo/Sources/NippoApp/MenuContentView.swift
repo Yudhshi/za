@@ -7,10 +7,10 @@ enum PanelTab: String {
     case today, english
 }
 
-/// メニューパネル本体(2026-09 v7)。1 列で、上から「いま大事な順」:
-/// 日付と工作时间(小さく)→ 主役のカード(次の会議 / 単語)→ 今日日程 → 当前任务 → 下の 1 行(坐姿・シャチョケン・电源)。
-/// OOUI:会議・タスク・単語という「もの」を一覧から選び、そのものに付いた操作をする。
-/// 画面の文字は中国語(簡体字)。短いラベルと掛け声は英語(NEXT・NICE!)
+/// メニューパネル本体(2026-09 v8「Fauve Stage」)。1 列で、上から「いま大事な順」:
+/// 曜日と工作时间(小さく)→ 関卡カード(次の会議 / 単語)→ 褶皺の時間線 → 今日日程 → 当前任务 → 下の 1 行(坐姿・シャチョケン・电源)。
+/// 一画面に一枚の色面:今日は铬黄(選んだ会議が 5 分以内・進行中なら朱红)、英语は翠绿。
+/// OOUI:会議・タスク・単語という「もの」を一覧から選び、そのものに付いた操作をする。画面の文字は中国語、短いラベルと掛け声は英語
 struct MenuContentView: View {
     @ObservedObject var coordinator: AppCoordinator
     @AppStorage("panelTab") private var tab: PanelTab = .today
@@ -20,6 +20,16 @@ struct MenuContentView: View {
 
     private var maxHeight: CGFloat {
         (NSScreen.main?.visibleFrame.height ?? 900) - 200
+    }
+
+    /// 今日タブの関卡:選んだ会議(既定は次の会議)が開始 5 分以内か進行中なら朱红、それ以外は铬黄
+    private var todayLevel: Level {
+        let now = Date()
+        let events = coordinator.todayEvents
+        let next = NextEventPolicy.currentOrNext(events: events, now: now)
+        guard let selected = events.first(where: { $0.id == selectedMeetingID }) ?? next,
+              selected.end > now else { return .chrome }
+        return selected.start.timeIntervalSince(now) <= 5 * 60 ? .vermilion : .chrome
     }
 
     var body: some View {
@@ -60,6 +70,7 @@ struct MenuContentView: View {
         .background(Theme.stage)
         .environment(\.colorScheme, .dark)
         .environment(\.locale, Theme.locale)
+        .environment(\.level, tab == .today ? todayLevel : .viridian)
         .typesettingLanguage(Theme.language)
         .onAppear {
             selectedMeetingID = nil
@@ -78,8 +89,9 @@ private struct ContentHeightKey: PreferenceKey {
     static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = nextValue() }
 }
 
-// MARK: - 上の帯:日付・工作时间・タブ
+// MARK: - 上の帯:曜日・工作时间・タブ
 
+/// 曜日は英語の大文字だけ(TUESDAY)。月日はどこにも出さない
 private struct PanelHeader: View {
     @ObservedObject var coordinator: AppCoordinator
     @ObservedObject var english: EnglishCoordinator
@@ -89,17 +101,16 @@ private struct PanelHeader: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(alignment: .center, spacing: 14) {
-                HStack(alignment: .firstTextBaseline, spacing: 6) {
-                    Text(Date(), format: .dateTime.month().day())
-                        .font(Theme.font(15, .semibold))
+                HStack(alignment: .firstTextBaseline, spacing: 10) {
+                    Text(Date(), format: Date.FormatStyle(locale: Theme.weekdayLocale).weekday(.wide))
+                        .textCase(.uppercase)
+                        .font(Theme.label(13))
+                        .tracking(1.8)
                         .foregroundStyle(Theme.white)
-                    Text(Date(), format: .dateTime.weekday(.abbreviated))
-                        .font(Theme.font(15, .regular))
-                        .foregroundStyle(Theme.textSoft)
                     if let reason = coordinator.quietReasonToday {
                         Text("休息日 · \(reason)")
                             .font(Theme.font(12, .semibold))
-                            .foregroundStyle(Theme.textSoft)
+                            .foregroundStyle(Theme.textFaint)
                             .help("今天是\(reason)：会议提醒和站立提醒都已暂停")
                     }
                 }
@@ -113,12 +124,12 @@ private struct PanelHeader: View {
                     TabItem(value: PanelTab.today, title: "今日", shortcut: "1"),
                     TabItem(value: PanelTab.english, title: "英语",
                             badge: english.loaded ? english.remainingTotal : nil, shortcut: "2"),
-                ], selection: $tab)
+                ], selection: $tab, color: tab == .today ? Theme.chrome : Theme.viridian)
             }
             if let workError, tab == .today {
                 Text(workError)
                     .font(Theme.font(12, .semibold))
-                    .foregroundStyle(Theme.lime)
+                    .foregroundStyle(Theme.white)
             }
         }
     }
@@ -210,9 +221,13 @@ private struct TodayView: View {
     @Binding var selectedMeetingID: String?
 
     var body: some View {
+        let now = Date()
         let events = coordinator.todayEvents
-        let next = NextEventPolicy.currentOrNext(events: events, now: Date())
+        let next = NextEventPolicy.currentOrNext(events: events, now: now)
         let selected = events.first { $0.id == selectedMeetingID } ?? next
+        let settings = coordinator.settings
+        let start = settings.timeComponents(settings.workStartTime, fallback: (9, 0))
+        let end = settings.timeComponents(settings.workEndTime, fallback: (18, 0))
 
         VStack(alignment: .leading, spacing: 0) {
             // 主役:選んだ会議(既定は次の会議)
@@ -225,12 +240,32 @@ private struct TodayView: View {
                     VStack(alignment: .leading, spacing: 6) {
                         Text("今天没有会议")
                             .font(Theme.font(22, .semibold))
-                            .foregroundStyle(Theme.white)
-                        Text("工作日会在会议开始前 \(coordinator.settings.reminderLeadMinutes) 分钟提醒你")
+                        Text("工作日会在会议开始前 \(settings.reminderLeadMinutes) 分钟提醒你")
                             .font(Theme.font(13, .regular))
                             .foregroundStyle(Theme.textSoft)
                     }
                     .card()
+                }
+            }
+
+            // 褶皺の時間線:勤務時間を 15 分ごとに。灰は会議、関卡色は選んだ会議。文字は載せない
+            if coordinator.calendarAuthorized {
+                let slots = DayTimeline.slots(events: events, start: start, end: end, now: now,
+                                              selectedID: selected?.id)
+                if !slots.isEmpty {
+                    HStack(spacing: 10) {
+                        PleatGauge(states: slots.map { slot -> PleatState in
+                            if slot.selected { return .selected }
+                            if slot.meeting { return slot.past ? .pastMeeting : .meeting }
+                            return slot.past ? .past : .empty
+                        })
+                        Text(String(format: "%d:%02d – %d:%02d", start.hour, start.minute, end.hour, end.minute))
+                            .font(Theme.font(12, .semibold).monospacedDigit())
+                            .foregroundStyle(Theme.textFaint)
+                            .fixedSize()
+                    }
+                    .padding(.top, 10)
+                    .help("今天的工作时段，每格 15 分钟。灰格是会议，关卡色的格是选中的会议")
                 }
             }
 
@@ -248,10 +283,11 @@ private struct TodayView: View {
     }
 }
 
-/// 主役:会議 1 つ。左に件名と「加入会议」、右に黄緑の大きな残り時間
+/// 主役:会議 1 つ。色布に件名と「加入会议」、里布に関卡色の大きな残り時間。終わった会議は灰いカード
 private struct MeetingHero: View {
     let event: MeetingEvent
     let isNext: Bool
+    @Environment(\.level) private var level
     static let time = Date.FormatStyle(date: .omitted, time: .shortened, locale: Theme.locale)
 
     var body: some View {
@@ -263,16 +299,15 @@ private struct MeetingHero: View {
                 past ? ("—", "已结束") : NextEventPolicy.heroCountdown(for: event, now: now)
             let kicker: String = running ? "NOW" : (past ? "DONE" : (isNext ? "NEXT" : "LATER"))
             let span = "\(event.start.formatted(Self.time)) – \(event.end.formatted(Self.time))"
-            HStack(alignment: .top, spacing: 16) {
+            SeamLayout {
                 VStack(alignment: .leading, spacing: 0) {
                     Eyebrow(lead: kicker, text: span)
                     Text(event.title)
                         .font(Theme.font(22, .semibold))
-                        .foregroundStyle(Theme.white)
                         .lineLimit(2)
                         .fixedSize(horizontal: false, vertical: true)
                         .textSelection(.enabled)
-                        .padding(.top, 6)
+                        .padding(.top, 8)
                     if let url = event.joinURL, !past {
                         Button("加入会议") { NSWorkspace.shared.open(url) }
                             .buttonStyle(.command(.primary))
@@ -280,17 +315,17 @@ private struct MeetingHero: View {
                             .padding(.top, 16)
                     } else if event.joinURL == nil {
                         Text("这个会议没有线上链接")
-                            .font(Theme.font(12, .medium))
-                            .foregroundStyle(Theme.textFaint)
+                            .font(Theme.font(13, .medium))
+                            .opacity(0.75)
                             .padding(.top, 12)
                     }
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
+            } right: {
                 BigNumber(value: countdown.value, unit: countdown.unit,
-                          color: past ? Theme.textFaint : Theme.lime)
-                    .frame(maxWidth: 130, alignment: .trailing)
+                          color: past ? Theme.textFaint : level.color)
             }
-            .card()
+            .hero(seam: !past)
+            .environment(\.level, past ? .done : level)
         }
     }
 }
@@ -300,7 +335,6 @@ private struct CalendarAccessHero: View {
         VStack(alignment: .leading, spacing: 6) {
             Text("需要日历权限")
                 .font(Theme.font(22, .semibold))
-                .foregroundStyle(Theme.white)
             Text("用来显示会议、提前提醒，以及查找シャチョケン")
                 .font(Theme.font(13, .regular))
                 .foregroundStyle(Theme.textSoft)
@@ -347,11 +381,12 @@ private struct ScheduleList: View {
     }
 }
 
-/// 1 行:時刻・件名・「线上」。選んだ行は左に黄緑の短い線
+/// 1 行:時刻・件名・「线上」。選んだ行は左に関卡色の短い線
 private struct EventRow: View {
     let event: MeetingEvent
     let selected: Bool
     let action: () -> Void
+    @Environment(\.level) private var level
     @State private var hovering = false
 
     var body: some View {
@@ -384,7 +419,7 @@ private struct EventRow: View {
             .overlay(alignment: .leading) {
                 if selected {
                     Capsule()
-                        .fill(Theme.lime)
+                        .fill(level.color)
                         .frame(width: 3, height: 16)
                         .offset(x: -12)
                 }
@@ -405,6 +440,7 @@ private struct EventRow: View {
 /// 一覧ごとの操作は「编辑」(テキストで書き換え。書くそばから保存するので閉じても消えない)
 private struct TaskList: View {
     @ObservedObject var coordinator: AppCoordinator
+    @Environment(\.level) private var level
     @State private var editing = false
     @State private var draft = ""
 
@@ -433,7 +469,7 @@ private struct TaskList: View {
                     .scrollContentBackground(.hidden)
                     .padding(10)
                     .frame(minHeight: 150)
-                    .background(Theme.fill, in: RoundedRectangle(cornerRadius: Theme.buttonRadius, style: .continuous))
+                    .background(Theme.fill, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
                     .onChange(of: draft) { _, text in
                         coordinator.settings.taskMemo = text
                     }
@@ -462,7 +498,7 @@ private struct TaskList: View {
                     HStack(spacing: 8) {
                         Image(systemName: "checkmark")
                             .font(.system(size: 11, weight: .bold))
-                            .foregroundStyle(Theme.lime)
+                            .foregroundStyle(level.color)
                         Text("已完成「\(done.title)」")
                             .lineLimit(1)
                         Spacer(minLength: 6)
@@ -483,6 +519,7 @@ private struct TaskList: View {
 private struct TaskRow: View {
     let block: TaskOutline.Block
     let complete: () -> Void
+    @Environment(\.level) private var level
     @State private var hovering = false
 
     var body: some View {
@@ -492,14 +529,14 @@ private struct TaskRow: View {
         HStack(alignment: .top, spacing: 12) {
             Button(action: complete) {
                 RoundedRectangle(cornerRadius: 4, style: .continuous)
-                    .strokeBorder(hovering ? Theme.lime : Theme.rgb(0x5A5A5A), lineWidth: 1.5)
+                    .strokeBorder(hovering ? level.color : Theme.rgb(0x5A5A5A), lineWidth: 1.5)
                     .background(RoundedRectangle(cornerRadius: 4, style: .continuous)
-                        .fill(hovering ? Theme.lime : Color.clear))
+                        .fill(hovering ? level.color : Color.clear))
                     .overlay {
                         if hovering {
                             Image(systemName: "checkmark")
                                 .font(.system(size: 10, weight: .bold))
-                                .foregroundStyle(Theme.black)
+                                .foregroundStyle(Theme.ink)
                         }
                     }
                     .frame(width: 16, height: 16)
@@ -533,7 +570,7 @@ private struct TaskRow: View {
 
 // MARK: - 英語タブの上:近い会議
 
-/// 英語タブを開いていても、開始 30 分前から会議を見失わない(小さなカード 1 行)
+/// 英語タブを開いていても、開始 30 分前から会議を見失わない(灰いカード 1 行。色面は単語カードに譲る)
 private struct MeetingStrip: View {
     @ObservedObject var coordinator: AppCoordinator
 
@@ -545,6 +582,7 @@ private struct MeetingStrip: View {
                 let countdown = NextEventPolicy.heroCountdown(for: event, now: context.date)
                 HStack(spacing: 10) {
                     Eyebrow(lead: running ? "NOW" : "NEXT")
+                        .foregroundStyle(Theme.white)
                     Text(countdown.value + countdown.unit)
                         .font(Theme.font(13, .semibold).monospacedDigit())
                         .foregroundStyle(Theme.white)
@@ -601,7 +639,7 @@ private struct PanelFooter: View {
     }
 }
 
-/// 电源(退出)。按两下才退出(以免误点后会议提醒和站立提醒都停掉)
+/// 电源(退出)。按两下才退出(以免误点后会议提醒和站立提醒都停掉)。上膛した状態は関卡色
 private struct PowerButton: View {
     @State private var armed = false
 
@@ -626,9 +664,10 @@ private struct PowerButton: View {
     }
 }
 
-/// 坐姿:「已坐 23 分钟」。到点了加上「该站起来了」(黄緑)。点击打开屏幕上方的小窗
+/// 坐姿:「已坐 23 分钟」。到点了加上「该站起来了」(関卡色)。点击打开屏幕上方的小窗
 private struct PostureStatus: View {
     @ObservedObject var coordinator: AppCoordinator
+    @Environment(\.level) private var level
     static let time = Date.FormatStyle(date: .omitted, time: .shortened, locale: Theme.locale)
 
     var body: some View {
@@ -648,7 +687,7 @@ private struct PostureStatus: View {
                         .foregroundStyle(Theme.textSoft)
                     if due {
                         Text(standing ? "· 该坐下了" : "· 该站起来了")
-                            .foregroundStyle(Theme.lime)
+                            .foregroundStyle(level.color)
                     }
                 }
                 .font(Theme.font(12, .semibold))
@@ -661,11 +700,12 @@ private struct PostureStatus: View {
     }
 }
 
-/// 下一次シャチョケン(26卒_新卒社長研修,日历里 90 天内)。一个月只看两三次,所以小小的
+/// 下一次シャチョケン(26卒_新卒社長研修,日历里 90 天内)。一个月只看两三次,所以小小的。
+/// 具体的な日付はここにも出さない(何天后 + 曜日 + 時刻)
 private struct ShachokenStatus: View {
     let event: MeetingEvent?
     let keyword: String
-    static let date = Date.FormatStyle(locale: Theme.locale).month(.defaultDigits).day().weekday(.abbreviated)
+    static let weekday = Date.FormatStyle(locale: Theme.weekdayLocale).weekday(.wide)
     static let time = Date.FormatStyle(date: .omitted, time: .shortened, locale: Theme.locale)
 
     var body: some View {
@@ -690,7 +730,7 @@ private struct ShachokenStatus: View {
 
     private var tooltip: String {
         guard let event else { return "90 天内没有标题含「\(keyword)」的日程" }
-        return "\(event.title)\n\(event.start.formatted(Self.date)) "
+        return "\(event.title)\n\(event.start.formatted(Self.weekday).uppercased()) "
             + "\(event.start.formatted(Self.time)) – \(event.end.formatted(Self.time))"
     }
 }
