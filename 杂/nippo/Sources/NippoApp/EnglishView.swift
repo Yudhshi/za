@@ -77,13 +77,15 @@ struct EnglishView: View {
         }
     }
 
-    /// 今天 12/20 · 连续 4 天(達成したら数字が関卡色)
+    /// 今天 12/20 · 连续 4 天(達成したら ✓ が付いて白くなる。関卡色は主役の色面だけに使う)
     private var progress: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 0) {
-            Text("今天 ")
+        let reached = english.todayCount >= EnglishCoordinator.dailyGoal
+        return HStack(alignment: .firstTextBaseline, spacing: 0) {
+            Text(reached ? "✓ 今天 " : "今天 ")
+                .foregroundStyle(reached ? Theme.white : Theme.textFaint)
             Text("\(english.todayCount)")
                 .monospacedDigit()
-                .foregroundStyle(english.todayCount >= EnglishCoordinator.dailyGoal ? level.color : Theme.white)
+                .foregroundStyle(Theme.white)
             Text("/\(EnglishCoordinator.dailyGoal)")
                 .monospacedDigit()
             if english.streak > 0 {
@@ -104,6 +106,7 @@ private struct CardFrame<Content: View>: View {
     @ObservedObject var english: EnglishCoordinator
     var seam = true
     @ViewBuilder var content: () -> Content
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -119,7 +122,7 @@ private struct CardFrame<Content: View>: View {
                                 .id(flash.id)
                         }
                     }
-                    .animation(.spring(duration: 0.35, bounce: 0.5), value: english.flash)
+                    .animation(reduceMotion ? nil : .spring(duration: 0.35, bounce: 0.5), value: english.flash)
                 }
             UndoLine(english: english)
         }
@@ -365,7 +368,7 @@ private struct ParaphraseCard: View {
         }
         .buttonStyle(.command(isAnswer ? .primary : .secondary, height: 40, wide: true))
         .keyboardShortcut(KeyEquivalent(Character("\(index + 1)")), modifiers: [])
-        .opacity(picked != nil && !isAnswer && index != picked ? 0.4 : 1)
+        .opacity(picked != nil && !isAnswer && index != picked ? 0.65 : 1)
     }
 }
 
@@ -386,29 +389,12 @@ private struct SpellCard: View {
                         Text("听音写词")
                             .font(Theme.font(22, .semibold))
                             .padding(.top, 8)
-                        HStack(spacing: 8) {
-                            Button {
-                                english.play()
-                                focused = true
-                            } label: {
-                                Label("播放", systemImage: "play.fill")
-                            }
-                            .buttonStyle(.command(.secondary, height: 32))
-                            .keyboardShortcut("r", modifiers: .command)
-                            .help("播放（⌘R）")
-                            Button("慢速") {
-                                english.play(slow: true)
-                                focused = true
-                            }
-                            .buttonStyle(.command(.secondary, height: 32))
-                        }
-                        .padding(.top, 14)
                         Text("英式发音 · 建议戴耳机")
                             .font(Theme.font(12, .medium))
                             .opacity(0.75)
                             .padding(.top, 8)
                         TextField("", text: $english.spellInput,
-                                  prompt: Text("输入听到的单词，按回车").foregroundStyle(level.ink.opacity(0.5)))
+                                  prompt: Text("输入听到的单词，按回车").foregroundStyle(level.ink.opacity(0.7)))
                             .font(Theme.font(22, .semibold))
                             .autocorrectionDisabled(true)
                             .inputField(height: 48, focused: focused)
@@ -425,6 +411,21 @@ private struct SpellCard: View {
                     }
                 } right: {
                     VStack(spacing: 8) {
+                        // 動作は全部里布の列に(播放 → 慢速 → 不知道 → 检查)
+                        Button {
+                            english.play()
+                            focused = true
+                        } label: {
+                            keyLabel("⌘R", "播放")
+                        }
+                        .buttonStyle(.command(.secondary, height: 40, wide: true))
+                        .keyboardShortcut("r", modifiers: .command)
+                        .help("播放（⌘R）")
+                        Button("慢速") {
+                            english.play(slow: true)
+                            focused = true
+                        }
+                        .buttonStyle(.command(.secondary, height: 40, wide: true))
                         if english.spellResult == nil {
                             Button {
                                 english.giveUpSpelling()
@@ -503,7 +504,7 @@ private struct DictionaryCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             TextField("", text: $english.dictQuery,
-                      prompt: Text("输入英文单词（例：sustainable）").foregroundStyle(Theme.textFaint))
+                      prompt: Text("输入英文单词（例：sustainable）").foregroundStyle(Theme.textSoft))
                 .font(Theme.font(20, .semibold))
                 .autocorrectionDisabled(true)
                 .inputField(height: 46, focused: focused)
@@ -639,7 +640,7 @@ private struct WordRow: View {
                 Spacer(minLength: 8)
                 Text(row.dueLabel)
                     .font(Theme.font(12, .semibold))
-                    .foregroundStyle(row.dueLabel == "今天" ? level.color : Theme.textFaint)
+                    .foregroundStyle(row.dueLabel == "今天" ? Theme.white : Theme.textFaint)
             }
             .frame(height: 34)
             .background {

@@ -43,8 +43,16 @@ enum Theme {
     static let chrome = rgb(0xFFC72C)      // 今日 NEXT。黒文字 12.5:1
     static let vermilion = rgb(0xF24A2C)   // 緊急:NOW / 開始 5 分以内 / STAND UP。黒文字 5.4:1(灰文字・13pt 未満は禁止)
     static let viridian = rgb(0x22D37E)    // 英语 / STANDING。黒文字 9.9:1
-    static let cobalt = rgb(0x2451E0)      // SIT DOWN。唯一の白文字の面 6.3:1
+    static let cobalt = rgb(0x1E44C4)      // SIT DOWN。唯一の白文字の面 7.8:1
     static let rose = rgb(0xFF9CC7)        // CLEAR!。黒文字 10.1:1
+    /// 夜(19:00–07:00)は主役色を少し落とす(黒文字はなお 10.8:1 / 7.8:1)
+    static let chromeNight = rgb(0xF2B71E)
+    static let viridianNight = rgb(0x1FBB71)
+
+    static func isNight(_ date: Date = Date(), calendar: Calendar = .current) -> Bool {
+        let hour = calendar.component(.hour, from: date)
+        return hour < 7 || hour >= 19
+    }
 
     static let cardRadius: CGFloat = 22
     static let chamfer: CGFloat = 28
@@ -85,14 +93,30 @@ struct Level: Equatable {
     /// 色面の上の主ボタン(塗り・文字)
     let primaryFill: Color
     let primaryText: Color
+    /// 里布・舞台の上の主ボタンの塗り(文字は墨)。钴蓝だけ白(钴蓝に墨は 2.7:1 で読めない)
+    let liningPrimary: Color
 
-    static let chrome = Level(color: Theme.chrome, ink: Theme.ink, primaryFill: Theme.ink, primaryText: Theme.white)
-    static let vermilion = Level(color: Theme.vermilion, ink: Theme.ink, primaryFill: Theme.ink, primaryText: Theme.white)
-    static let viridian = Level(color: Theme.viridian, ink: Theme.ink, primaryFill: Theme.ink, primaryText: Theme.white)
-    static let rose = Level(color: Theme.rose, ink: Theme.ink, primaryFill: Theme.ink, primaryText: Theme.white)
-    static let cobalt = Level(color: Theme.cobalt, ink: Theme.white, primaryFill: Theme.white, primaryText: Theme.ink)
+    static let chrome = Level(color: Theme.chrome, ink: Theme.ink, primaryFill: Theme.ink,
+                              primaryText: Theme.white, liningPrimary: Theme.chrome)
+    static let chromeNight = Level(color: Theme.chromeNight, ink: Theme.ink, primaryFill: Theme.ink,
+                                   primaryText: Theme.white, liningPrimary: Theme.chromeNight)
+    static let vermilion = Level(color: Theme.vermilion, ink: Theme.ink, primaryFill: Theme.ink,
+                                 primaryText: Theme.white, liningPrimary: Theme.vermilion)
+    static let viridian = Level(color: Theme.viridian, ink: Theme.ink, primaryFill: Theme.ink,
+                                primaryText: Theme.white, liningPrimary: Theme.viridian)
+    static let viridianNight = Level(color: Theme.viridianNight, ink: Theme.ink, primaryFill: Theme.ink,
+                                     primaryText: Theme.white, liningPrimary: Theme.viridianNight)
+    static let rose = Level(color: Theme.rose, ink: Theme.ink, primaryFill: Theme.ink,
+                            primaryText: Theme.white, liningPrimary: Theme.rose)
+    static let cobalt = Level(color: Theme.cobalt, ink: Theme.white, primaryFill: Theme.white,
+                              primaryText: Theme.ink, liningPrimary: Theme.white)
     /// 主役が終わった/いない(灰いカード。文字は淡く)
-    static let done = Level(color: Theme.card, ink: Theme.textFaint, primaryFill: Theme.fill, primaryText: Theme.white)
+    static let done = Level(color: Theme.card, ink: Theme.textFaint, primaryFill: Theme.fill,
+                            primaryText: Theme.white, liningPrimary: Theme.fill)
+
+    /// 今日の関卡(夜は少し落とした铬黄)/ 英语の関卡(夜は少し落とした翠绿)
+    static func today(night: Bool) -> Level { night ? .chromeNight : .chrome }
+    static func english(night: Bool) -> Level { night ? .viridianNight : .viridian }
 }
 
 private struct LevelKey: EnvironmentKey {
@@ -131,17 +155,22 @@ struct HeroShape: Shape {
         p.addLine(to: CGPoint(x: r.maxX - chamfer, y: r.minY))
         p.addLine(to: CGPoint(x: r.maxX, y: r.minY + chamfer))
         p.addLine(to: CGPoint(x: r.maxX, y: r.maxY - radius))
-        p.addQuadCurve(to: CGPoint(x: r.maxX - radius, y: r.maxY), control: CGPoint(x: r.maxX, y: r.maxY))
+        // 角丸は接線円弧で(quadCurve より真円に近い)
+        p.addArc(tangent1End: CGPoint(x: r.maxX, y: r.maxY), tangent2End: CGPoint(x: r.maxX - radius, y: r.maxY),
+                 radius: radius)
         p.addLine(to: CGPoint(x: r.minX + radius, y: r.maxY))
-        p.addQuadCurve(to: CGPoint(x: r.minX, y: r.maxY - radius), control: CGPoint(x: r.minX, y: r.maxY))
+        p.addArc(tangent1End: CGPoint(x: r.minX, y: r.maxY), tangent2End: CGPoint(x: r.minX, y: r.maxY - radius),
+                 radius: radius)
         p.addLine(to: CGPoint(x: r.minX, y: r.minY + radius))
-        p.addQuadCurve(to: CGPoint(x: r.minX + radius, y: r.minY), control: CGPoint(x: r.minX, y: r.minY))
+        p.addArc(tangent1End: CGPoint(x: r.minX, y: r.minY), tangent2End: CGPoint(x: r.minX + radius, y: r.minY),
+                 radius: radius)
         p.closeSubpath()
         return p
     }
 }
 
-/// 拼縫の右側(里布)。縫い目は上端 62%・下端 56% の斜線。すべてのカードで同じ傾き。
+/// 拼縫の左側(色布)。縫い目は上端 62%・下端 56% の斜線。すべてのカードで同じ傾き。
+/// 里布はカード全面に敷き、その上に色布を重ねる(2 枚を突き合わせると縫い目に隙間が見える)。
 /// SeamLayout はこの 2 つの定数で左右の幅を決める(左の文字は縫い目の下端より左、右の指令列は上端より右)
 struct SeamShape: Shape {
     static let top: CGFloat = 0.62
@@ -151,10 +180,10 @@ struct SeamShape: Shape {
 
     func path(in r: CGRect) -> Path {
         var p = Path()
-        p.move(to: CGPoint(x: r.minX + r.width * top, y: r.minY))
-        p.addLine(to: CGPoint(x: r.maxX, y: r.minY))
-        p.addLine(to: CGPoint(x: r.maxX, y: r.maxY))
+        p.move(to: CGPoint(x: r.minX, y: r.minY))
+        p.addLine(to: CGPoint(x: r.minX + r.width * top, y: r.minY))
         p.addLine(to: CGPoint(x: r.minX + r.width * bottom, y: r.maxY))
+        p.addLine(to: CGPoint(x: r.minX, y: r.maxY))
         p.closeSubpath()
         return p
     }
@@ -164,6 +193,7 @@ struct SeamShape: Shape {
 /// 中の文字は既定で墨。里布側は SeamLayout が白に戻す
 private struct HeroSurface: ViewModifier {
     @Environment(\.level) private var level
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     var seam: Bool
     var bleed: Bool
 
@@ -174,11 +204,15 @@ private struct HeroSurface: ViewModifier {
             .environment(\.onLevel, true)
             .background {
                 ZStack {
-                    level.color
                     if seam {
-                        SeamShape().fill(Theme.lining)
+                        Theme.lining
+                        SeamShape().fill(level.color)
+                    } else {
+                        level.color
                     }
                 }
+                // 関卡色が変わるとき(NEXT → NOW、昼 → 夜)は交差で溶ける。形は動かない
+                .animation(reduceMotion ? nil : .easeInOut(duration: 0.35), value: level)
             }
             .clipShape(HeroShape())
             .padding(.trailing, bleed ? -Theme.padding : 0)
@@ -367,6 +401,7 @@ struct PillTabs<Value: Hashable>: View {
     @Binding var selection: Value
     var color: Color = Theme.chrome
     var size: CGFloat = 13
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Namespace private var pill
 
     var body: some View {
@@ -382,7 +417,7 @@ struct PillTabs<Value: Hashable>: View {
     private func tab(_ item: TabItem<Value>) -> some View {
         let selected = selection == item.value
         let button = Button {
-            withAnimation(.spring(duration: 0.25, bounce: 0.2)) { selection = item.value }
+            withAnimation(reduceMotion ? nil : .spring(duration: 0.25, bounce: 0.2)) { selection = item.value }
         } label: {
             HStack(alignment: .firstTextBaseline, spacing: 5) {
                 Text(item.title)
@@ -417,12 +452,12 @@ struct PillTabs<Value: Hashable>: View {
     }
 }
 
-/// 同じ面の中で「もの」を切り替えるタブ(单词 / 考点词…)。選んだものの下に関卡色の細い線
+/// 同じ面の中で「もの」を切り替えるタブ(单词 / 考点词…)。選んだものの下に白い細い線(色は関卡カードに譲る)
 struct UnderlineTabs<Value: Hashable>: View {
     let items: [TabItem<Value>]
     @Binding var selection: Value
     var size: CGFloat = 14
-    @Environment(\.level) private var level
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Namespace private var underline
 
     var body: some View {
@@ -437,7 +472,7 @@ struct UnderlineTabs<Value: Hashable>: View {
     private func tab(_ item: TabItem<Value>) -> some View {
         let selected = selection == item.value
         return Button {
-            withAnimation(.spring(duration: 0.25, bounce: 0.2)) { selection = item.value }
+            withAnimation(reduceMotion ? nil : .spring(duration: 0.25, bounce: 0.2)) { selection = item.value }
         } label: {
             HStack(alignment: .firstTextBaseline, spacing: 3) {
                 Text(item.title)
@@ -453,7 +488,7 @@ struct UnderlineTabs<Value: Hashable>: View {
             .overlay(alignment: .bottom) {
                 if selected {
                     Capsule()
-                        .fill(level.color)
+                        .fill(Theme.white)
                         .frame(height: 2)
                         .matchedGeometryEffect(id: "underline", in: underline)
                 }
@@ -484,7 +519,7 @@ struct Eyebrow: View {
                 Text(text)
                     .font(Theme.font(12, .semibold).monospacedDigit())
                     // 朱红の上では薄くしない(黒 5.4:1 しかないので、灰にすると 4.5:1 を割る)
-                    .opacity(level == .vermilion ? 0.9 : 0.72)
+                    .opacity(level == .vermilion ? 1 : 0.72)
             }
             if let trail {
                 Text(trail)
@@ -528,7 +563,7 @@ struct KeyHint: View {
     var body: some View {
         Text(key)
             .font(Theme.font(12, .bold))
-            .opacity(0.55)
+            .opacity(0.7)
             .accessibilityHidden(true)
     }
 }
@@ -584,7 +619,7 @@ struct CommandButtonBody: View {
     private var background: some View {
         switch kind {
         case .primary:
-            Capsule().fill((onLevel ? level.primaryFill : level.color).opacity(hovering ? 0.88 : 1))
+            Capsule().fill((onLevel ? level.primaryFill : level.liningPrimary).opacity(hovering ? 0.88 : 1))
         case .secondary:
             if onLevel {
                 Capsule().fill(level.ink.opacity(hovering ? 0.12 : 0))
@@ -593,7 +628,11 @@ struct CommandButtonBody: View {
                 Capsule().fill(hovering ? Theme.rgb(0x333339) : Theme.fill)
             }
         case .quiet:
-            EmptyView()
+            if onLevel {
+                Capsule().fill(level.ink.opacity(hovering ? 0.12 : 0))
+            } else {
+                EmptyView()
+            }
         }
     }
 
@@ -601,7 +640,7 @@ struct CommandButtonBody: View {
         switch kind {
         case .primary: return onLevel ? level.primaryText : Theme.ink
         case .secondary: return onLevel ? level.ink : Theme.white
-        case .quiet: return onLevel ? level.ink.opacity(hovering ? 1 : 0.75) : (hovering ? Theme.white : Theme.textSoft)
+        case .quiet: return onLevel ? level.ink : (hovering ? Theme.white : Theme.textSoft)
         }
     }
 }
@@ -650,13 +689,15 @@ struct Stamp: View {
     let good: Bool
 
     var body: some View {
+        let splat = InkSplat(seed: good ? 33 : 37, lobes: 10, depth: 0.22)
         Text(good ? "NICE!" : "MISS")
             .font(Theme.shout(26))
             .foregroundStyle(Theme.ink)
             .padding(.horizontal, 24)
             .padding(.vertical, 14)
-            .background(InkSplat(seed: good ? 33 : 37, lobes: 10, depth: 0.22)
-                .fill(good ? Theme.chrome : Theme.white))
+            .background(splat.fill(good ? Theme.chrome : Theme.white))
+            // 墨の縁取り(黄が緑の上に落ちても輪郭が残る)
+            .overlay(splat.stroke(Theme.ink, lineWidth: 2))
             .rotationEffect(.degrees(-8))
             .allowsHitTesting(false)
             .accessibilityLabel(good ? "答对了" : "答错了")

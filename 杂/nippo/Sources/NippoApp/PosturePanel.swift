@@ -65,8 +65,8 @@ private final class PromptPanel: NSPanel {
 
 // MARK: - 小窓の中身
 
-/// デスクトップの上に浮く小窓(v8):Liquid Glass の外枠の中に、不透明な関卡カード 1 枚。
-/// 三つの状態は三つの色:STAND UP 朱红(黒字)・STANDING 翠绿(黒字)・SIT DOWN 钴蓝(白字)。文字はガラスの上に置かない
+/// デスクトップの上に浮く小窓(v8):ガラスは使わない。上段は関卡色(問いと大数字)、下段は黒い里布(説明とボタン)。
+/// 三つの状態は三つの色:STAND UP 朱红(黒字)・STANDING 翠绿(黒字)・SIT DOWN 钴蓝(白字)
 struct PosturePromptView: View {
     @ObservedObject var coordinator: AppCoordinator
 
@@ -80,7 +80,6 @@ struct PosturePromptView: View {
     }
 
     var body: some View {
-        let frame = RoundedRectangle(cornerRadius: 26, style: .continuous)
         Group {
             switch coordinator.posturePrompt {
             case .askStand: askStand
@@ -91,8 +90,6 @@ struct PosturePromptView: View {
         }
         .frame(width: 360)
         .environment(\.level, level)
-        .padding(12)
-        .glassEffect(.regular.tint(Color.black.opacity(0.35)), in: frame)
         .padding(12)   // 影の分
         .environment(\.colorScheme, .dark)
         .environment(\.locale, Theme.locale)
@@ -104,56 +101,77 @@ struct PosturePromptView: View {
     }
 
     private var askStand: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            Eyebrow(lead: "STAND UP")
+        HemLayout {
+            Eyebrow(lead: "STAND UP", text: "已坐 \(sittingMinutes) 分钟")
             Text("站起来了吗？")
                 .font(Theme.font(22, .semibold))
                 .padding(.top, 8)
-            Text("已经坐了 \(sittingMinutes) 分钟。把桌子升到手肘 90° 的高度")
+        } bottom: {
+            Text("把桌子升到手肘 90° 的高度。接下来做「\(coordinator.promptStretch.name)」，顺便去喝杯水")
                 .font(Theme.font(13, .medium))
                 .fixedSize(horizontal: false, vertical: true)
-                .padding(.top, 6)
-            Text("接下来做「\(coordinator.promptStretch.name)」，顺便去喝杯水")
-                .font(Theme.font(13, .medium))
-                .fixedSize(horizontal: false, vertical: true)
-                .padding(.top, 4)
             HStack(spacing: 8) {
                 Button("站起来了") { coordinator.confirmStood() }
                     .buttonStyle(.command(.primary, height: 40, wide: true))
                 Button("15 分钟后") { coordinator.snoozePosture(minutes: 15) }
                     .buttonStyle(.command(.secondary, height: 40))
             }
-            .padding(.top, 18)
+            .padding(.top, 14)
         }
-        .padding(20)
-        .hero(seam: false, bleed: false)
     }
 
     private var askSit: some View {
         let standing = max(0, Int(Date().timeIntervalSince(coordinator.postureSince) / 60))
-        return VStack(alignment: .leading, spacing: 0) {
-            Eyebrow(lead: "SIT DOWN")
+        return HemLayout {
+            Eyebrow(lead: "SIT DOWN", text: "已站 \(standing) 分钟")
             Text("坐下了吗？")
                 .font(Theme.font(22, .semibold))
                 .padding(.top, 8)
-            Text("已经站了 \(standing) 分钟，辛苦了。坐深一点，双脚踩实地面")
+        } bottom: {
+            Text("辛苦了。坐深一点，双脚踩实地面")
                 .font(Theme.font(13, .medium))
                 .fixedSize(horizontal: false, vertical: true)
-                .padding(.top, 6)
             HStack(spacing: 8) {
                 Button("坐下了") { coordinator.confirmSat() }
                     .buttonStyle(.command(.primary, height: 40, wide: true))
                 Button("再站 5 分钟") { coordinator.snoozePosture(minutes: 5) }
                     .buttonStyle(.command(.secondary, height: 40))
             }
-            .padding(.top, 18)
+            .padding(.top, 14)
         }
-        .padding(20)
-        .hero(seam: false, bleed: false)
     }
 }
 
-/// 站立中:剩余时间(墨の大数字)+ 褶皺の計量条(15 褶 = 15 分)+ 拉伸,一次一步
+/// 上下二段の裾:上段は関卡色(看)、下段は里布(做)。まとめて関卡の形に裁つ
+private struct HemLayout<Top: View, Bottom: View>: View {
+    @Environment(\.level) private var level
+    @ViewBuilder var top: () -> Top
+    @ViewBuilder var bottom: () -> Bottom
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            VStack(alignment: .leading, spacing: 0) { top() }
+                .padding(.horizontal, 20)
+                .padding(.top, 18)
+                .padding(.bottom, 16)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .foregroundStyle(level.ink)
+                .background(level.color)
+                .environment(\.onLevel, true)
+            VStack(alignment: .leading, spacing: 0) { bottom() }
+                .padding(.horizontal, 20)
+                .padding(.top, 14)
+                .padding(.bottom, 16)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .foregroundStyle(Theme.white)
+                .background(Theme.lining)
+                .environment(\.onLevel, false)
+        }
+        .clipShape(HeroShape())
+    }
+}
+
+/// 站立中:上段に剩余时间(墨の大数字)+ 褶皺の計量条(1 褶 = 1 分)、下段に拉伸,一次一步
 private struct StandingGuide: View {
     @ObservedObject var coordinator: AppCoordinator
     @Environment(\.level) private var level
@@ -165,7 +183,7 @@ private struct StandingGuide: View {
             let due = coordinator.postureDueAt
             let remaining = max(0, due.timeIntervalSince(context.date))
             let elapsedMinutes = max(0, min(total, Int((Double(total) * 60 - remaining) / 60)))
-            VStack(alignment: .leading, spacing: 0) {
+            HemLayout {
                 HStack(alignment: .top) {
                     VStack(alignment: .leading, spacing: 0) {
                         Eyebrow(lead: "STANDING")
@@ -188,18 +206,16 @@ private struct StandingGuide: View {
                 }
                 PleatGauge(states: (0..<total).map { $0 < elapsedMinutes ? .meeting : .empty })
                     .padding(.top, 12)
+            } bottom: {
                 stretch
-                    .padding(.top, 14)
                 HStack {
                     Spacer()
                     Button("关闭") { coordinator.closePosturePrompt() }
                         .buttonStyle(.command(.quiet, height: 22))
                         .help("关掉后也会继续计时，到点了再提醒你")
                 }
-                .padding(.top, 10)
+                .padding(.top, 8)
             }
-            .padding(20)
-            .hero(seam: false, bleed: false)
         }
     }
 
@@ -211,12 +227,12 @@ private struct StandingGuide: View {
             HStack(alignment: .firstTextBaseline) {
                 Text(s.name)
                     .font(Theme.font(12, .semibold))
-                    .opacity(0.75)
+                    .foregroundStyle(Theme.textSoft)
                 Spacer()
                 if !s.steps.isEmpty && !done {
                     Text("\(step + 1) / \(s.steps.count)")
                         .font(Theme.font(12, .semibold).monospacedDigit())
-                        .opacity(0.75)
+                        .foregroundStyle(Theme.textSoft)
                 }
             }
             if done {
@@ -225,7 +241,7 @@ private struct StandingGuide: View {
                     .padding(.top, 8)
                 Text("喝杯水")
                     .font(Theme.font(13, .medium))
-                    .opacity(0.8)
+                    .foregroundStyle(Theme.body)
                     .padding(.top, 2)
             } else {
                 Text(s.steps[step])
@@ -235,7 +251,7 @@ private struct StandingGuide: View {
                     .padding(.top, 8)
                 Text(BreakReminder.caution)
                     .font(Theme.font(12, .medium))
-                    .opacity(0.7)
+                    .foregroundStyle(Theme.textSoft)
             }
             HStack(spacing: 8) {
                 if step > 0 && !done {
@@ -253,12 +269,6 @@ private struct StandingGuide: View {
             .padding(.top, 12)
         }
         .padding(14)
-        .background(level.ink.opacity(0.12), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-    }
-
-    /// 「12:34」
-    static func clock(_ seconds: TimeInterval) -> String {
-        let s = Int(seconds.rounded(.up))
-        return String(format: "%d:%02d", s / 60, s % 60)
+        .background(Theme.card, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
     }
 }

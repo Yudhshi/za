@@ -22,14 +22,15 @@ struct MenuContentView: View {
         (NSScreen.main?.visibleFrame.height ?? 900) - 200
     }
 
-    /// 今日タブの関卡:選んだ会議(既定は次の会議)が開始 5 分以内か進行中なら朱红、それ以外は铬黄
+    /// 今日タブの関卡:選んだ会議(既定は次の会議)が開始 5 分以内か進行中なら朱红、それ以外は铬黄(夜は少し落とした铬黄)
     private var todayLevel: Level {
         let now = Date()
+        let calm = Level.today(night: Theme.isNight(now))
         let events = coordinator.todayEvents
         let next = NextEventPolicy.currentOrNext(events: events, now: now)
         guard let selected = events.first(where: { $0.id == selectedMeetingID && $0.end > now }) ?? next,
-              selected.end > now else { return .chrome }
-        return selected.start.timeIntervalSince(now) <= 5 * 60 ? .vermilion : .chrome
+              selected.end > now else { return calm }
+        return selected.start.timeIntervalSince(now) <= 5 * 60 ? .vermilion : calm
     }
 
     var body: some View {
@@ -70,7 +71,7 @@ struct MenuContentView: View {
         .background(Theme.stage)
         .environment(\.colorScheme, .dark)
         .environment(\.locale, Theme.locale)
-        .environment(\.level, tab == .today ? todayLevel : .viridian)
+        .environment(\.level, tab == .today ? todayLevel : .english(night: Theme.isNight()))
         .typesettingLanguage(Theme.language)
         .onAppear {
             selectedMeetingID = nil
@@ -184,7 +185,7 @@ private struct WorkTime: View {
                 Text("上班")
                     .font(Theme.font(12, .semibold))
                     .foregroundStyle(Theme.textFaint)
-                TextField("", text: $input, prompt: Text("853").foregroundStyle(Theme.textFaint))
+                TextField("", text: $input, prompt: Text("853").foregroundStyle(Theme.textSoft))
                     .font(Theme.font(13, .semibold).monospacedDigit())
                     .multilineTextAlignment(.center)
                     .frame(width: 52, height: 24)
@@ -286,7 +287,7 @@ private struct TodayView: View {
     }
 }
 
-/// 主役:会議 1 つ。色布に件名と「加入会议」、里布に関卡色の大きな残り時間。終わった会議は灰いカード
+/// 主役:会議 1 つ。色布(看)に件名、里布(做)に関卡色の大きな残り時間と「加入会议」。終わった会議は灰いカード
 private struct MeetingHero: View {
     let event: MeetingEvent
     let isNext: Bool
@@ -307,26 +308,27 @@ private struct MeetingHero: View {
                     Eyebrow(lead: kicker, text: span)
                     Text(event.title)
                         .font(Theme.font(22, .semibold))
-                        .lineLimit(2)
+                        .lineLimit(3)
+                        .minimumScaleFactor(0.9)
                         .fixedSize(horizontal: false, vertical: true)
                         .textSelection(.enabled)
                         .padding(.top, 8)
-                    if let url = event.joinURL, !past {
-                        Button("加入会议") { NSWorkspace.shared.open(url) }
-                            .buttonStyle(.command(.primary))
-                            .keyboardShortcut(.defaultAction)
-                            .help("\(url.host ?? "加入会议")（⏎）")
-                            .padding(.top, 16)
-                    } else if event.joinURL == nil {
-                        Text("这个会议没有线上链接")
-                            .font(Theme.font(13, .semibold))
-                            .opacity(0.9)
-                            .padding(.top, 12)
-                    }
                 }
             } right: {
-                BigNumber(value: countdown.value, unit: countdown.unit,
-                          color: past ? Theme.textFaint : level.color)
+                VStack(alignment: .trailing, spacing: 12) {
+                    BigNumber(value: countdown.value, unit: countdown.unit,
+                              color: past ? Theme.textFaint : level.color)
+                    if let url = event.joinURL, !past {
+                        Button("加入会议") { NSWorkspace.shared.open(url) }
+                            .buttonStyle(.command(.primary, wide: true))
+                            .keyboardShortcut(.defaultAction)
+                            .help("\(url.host ?? "加入会议")（⏎）")
+                    } else if event.joinURL == nil, !past {
+                        Text("没有线上链接")
+                            .font(Theme.font(12, .semibold))
+                            .foregroundStyle(Theme.textSoft)
+                    }
+                }
             }
             .hero(seam: !past)
             .environment(\.level, past ? .done : level)
@@ -533,7 +535,7 @@ private struct TaskRow: View {
         HStack(alignment: .top, spacing: 12) {
             Button(action: complete) {
                 RoundedRectangle(cornerRadius: 4, style: .continuous)
-                    .strokeBorder(hovering ? level.color : Theme.rgb(0x5A5A5A), lineWidth: 1.5)
+                    .strokeBorder(hovering ? level.color : Theme.rgb(0x707078), lineWidth: 1.5)
                     .background(RoundedRectangle(cornerRadius: 4, style: .continuous)
                         .fill(hovering ? level.color : Color.clear))
                     .overlay {
@@ -598,7 +600,7 @@ private struct MeetingStrip: View {
                     Spacer(minLength: 8)
                     if let url = event.joinURL {
                         Button("加入会议") { NSWorkspace.shared.open(url) }
-                            .buttonStyle(.command(.primary, height: 28))
+                            .buttonStyle(.command(.secondary, height: 28))
                     }
                 }
                 .padding(.horizontal, 14)
@@ -655,8 +657,9 @@ private struct PowerButton: View {
                 withAnimation(.spring(duration: 0.25, bounce: 0.3)) { armed = true }
             }
         } label: {
-            Image(systemName: "power")
+            Image(systemName: armed ? "power.circle.fill" : "power")
                 .font(.system(size: 12, weight: .semibold))
+                .contentTransition(.symbolEffect(.replace))
         }
         .buttonStyle(.commandSquare(armed ? .primary : .quiet, size: 24))
         // 3 秒で解除。視図が消えたり状態が変わったりすれば自動で取り消される
