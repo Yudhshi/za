@@ -99,4 +99,22 @@ const lookupZh = (w) => dict[w.toLowerCase()]?.[1];
 // 辞書:ECDICT(MIT License, github.com/skywind3000/ECDICT)の抜粋 { word: [音標, 釈義] }
 if (Object.keys(dict).length) write("dict.json", dict, Object.keys(dict).length);
 
+// 許可表示:ECDICT は MIT(著作権表示と許可文の同梱が条件)。教材由来の語表は個人学習用で再配布しない
+writeFileSync(
+  join(out, "LICENSES.txt"),
+  `dict.json — ECDICT (https://github.com/skywind3000/ECDICT), MIT License
+Copyright (c) 2017 skywind3000
+
+Permission is hereby granted, free of charge, to any person obtaining a copy of this software and
+associated documentation files (the "Software"), to deal in the Software without restriction,
+including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense,
+and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so,
+subject to the following conditions: The above copyright notice and this permission notice shall be
+included in all copies or substantial portions of the Software. THE SOFTWARE IS PROVIDED "AS IS",
+WITHOUT WARRANTY OF ANY KIND.
+
+paraphrase.json / dictation.json / vocab.json — 摘自刘洪波《雅思考点词真经》、王陆《雅思王听力真题语料库》与 IELTS app 的分级词池。
+仅供个人学习使用，不得再分发（Resources/English/ 与 dist/ 均不进入仓库、不分享）。
+`
+);
 console.log(`→ ${out}`);

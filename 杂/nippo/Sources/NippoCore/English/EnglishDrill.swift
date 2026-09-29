@@ -30,13 +30,14 @@ public struct SRSState: Equatable, Sendable {
             s.reps = 0
             s.lapses += 1
         case .hard:
-            s.interval = max(1, Int((Double(max(interval, 1)) * 1.2).rounded()))
+            // 「模糊」でも間隔は必ず伸びる(1 → 1 に固まらない)
+            s.interval = max(interval + 1, Int((Double(max(interval, 1)) * 1.2).rounded()))
             s.ease = max(1.3, ease - 0.15)
             s.reps += 1
         case .good:
             switch reps {
             case 0: s.interval = 1
-            case 1: s.interval = 3
+            case 1: s.interval = max(3, Int((Double(interval) * ease).rounded()))   // 「太简单」の後に縮まない
             default: s.interval = max(1, Int((Double(interval) * ease).rounded()))
             }
             s.reps += 1

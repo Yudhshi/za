@@ -29,7 +29,8 @@ struct EnglishView: View {
                             .font(.system(size: 12, weight: .semibold))
                     }
                     .buttonStyle(.commandSquare(.quiet, size: 22))
-                    .help(showingList ? "回到卡片" : "查看列表")
+                    .keyboardShortcut("l", modifiers: .command)
+                    .help(showingList ? "回到卡片（⌘L）" : "查看列表（⌘L）")
                     .accessibilityLabel(showingList ? "回到卡片" : "查看列表")
                 }
             }
@@ -109,14 +110,17 @@ private struct CardFrame<Content: View>: View {
             content()
                 .hero(seam: seam)
                 .overlay(alignment: .topTrailing) {
-                    if let flash = english.flash {
-                        Stamp(good: flash.good)
-                            .offset(x: -36, y: 14)
-                            .transition(.scale(scale: 0.3).combined(with: .opacity))
-                            .id(flash.id)
+                    // 弾むのは章だけ(カード全体には animation を掛けない)
+                    ZStack(alignment: .topTrailing) {
+                        if let flash = english.flash {
+                            Stamp(good: flash.good)
+                                .offset(x: -36, y: 14)
+                                .transition(.scale(scale: 0.3).combined(with: .opacity))
+                                .id(flash.id)
+                        }
                     }
+                    .animation(.spring(duration: 0.35, bounce: 0.5), value: english.flash)
                 }
-                .animation(.spring(duration: 0.35, bounce: 0.5), value: english.flash)
             UndoLine(english: english)
         }
     }
@@ -144,7 +148,7 @@ private struct UndoLine: View {
     var body: some View {
         // 语料は次の語を打っているあいだは出さない(⌘Z を入力欄の取り消しに譲る)
         if let action = english.lastAction, action.mode == english.mode,
-           english.mode != .spell || english.spellResult != nil {
+           english.mode != .spell || english.spellResult != nil || english.spellInput.isEmpty {
             HStack(spacing: 8) {
                 Text(action.message)
                     .lineLimit(1)
@@ -175,7 +179,7 @@ private struct VocabView: View {
     var body: some View {
         if let card = english.vocabCard {
             CardFrame(english: english) {
-                SeamLayout(leftFraction: 0.6) {
+                SeamLayout {
                     VStack(alignment: .leading, spacing: 0) {
                         Eyebrow(text: [card.level, card.pos].compactMap { $0 }.joined(separator: " · "),
                                 trail: card.isNew && !card.known ? "NEW" : nil)
@@ -192,7 +196,8 @@ private struct VocabView: View {
                                 Image(systemName: "speaker.wave.2.fill")
                             }
                             .buttonStyle(.commandSquare(.quiet, size: 22))
-                            .help("听发音")
+                            .keyboardShortcut("r", modifiers: .command)
+                            .help("听发音（⌘R）")
                         }
                         .padding(.top, 6)
                         if english.revealed || card.known {
@@ -214,7 +219,8 @@ private struct VocabView: View {
                                         Image(systemName: "speaker.wave.2")
                                     }
                                     .buttonStyle(.commandSquare(.quiet, size: 20))
-                                    .help("听例句")
+                                    .keyboardShortcut("r", modifiers: [.command, .shift])
+                                    .help("听例句（⇧⌘R）")
                                 }
                                 .padding(.top, 6)
                             }
@@ -248,6 +254,12 @@ private struct VocabView: View {
                 rateButton("模糊", key: "2", rating: .hard, kind: .secondary)
                 rateButton("记住了", key: "3", rating: .good, kind: .primary)
                 rateButton("太简单", key: "4", rating: .easy, kind: .secondary)
+                // 空格 = 记住了(1 問 1 キー:空格で見て、空格で次へ)
+                Button("") { english.rate(.good) }
+                    .keyboardShortcut(.space, modifiers: [])
+                    .frame(width: 0, height: 0)
+                    .opacity(0)
+                    .accessibilityHidden(true)
             } else {
                 Button {
                     english.reveal()
@@ -283,7 +295,7 @@ private struct ParaphraseCard: View {
     var body: some View {
         if let q = english.question {
             CardFrame(english: english) {
-                SeamLayout(leftFraction: 0.58) {
+                SeamLayout {
                     VStack(alignment: .leading, spacing: 0) {
                         Eyebrow(lead: q.entry.skill == "listening" ? "LISTENING" : "READING", text: "考点词")
                         HeadWord(text: q.entry.w)
@@ -367,7 +379,7 @@ private struct SpellCard: View {
     var body: some View {
         if let item = english.spellItem {
             CardFrame(english: english) {
-                SeamLayout(leftFraction: 0.6) {
+                SeamLayout {
                     VStack(alignment: .leading, spacing: 0) {
                         Eyebrow(lead: "DICTATION", text: "王陆语料 · \(item.word.set)",
                                 trail: item.isNew ? "NEW" : nil)
@@ -399,7 +411,7 @@ private struct SpellCard: View {
                                   prompt: Text("输入听到的单词，按回车").foregroundStyle(level.ink.opacity(0.5)))
                             .font(Theme.font(22, .semibold))
                             .autocorrectionDisabled(true)
-                            .inputField(height: 48)
+                            .inputField(height: 48, focused: focused)
                             .focused($focused)
                             .onSubmit {
                                 english.submitSpelling()
@@ -414,8 +426,13 @@ private struct SpellCard: View {
                 } right: {
                     VStack(spacing: 8) {
                         if english.spellResult == nil {
-                            Button("不知道") { english.giveUpSpelling() }
-                                .buttonStyle(.command(.secondary, height: 40, wide: true))
+                            Button {
+                                english.giveUpSpelling()
+                            } label: {
+                                keyLabel("⌘⌫", "不知道")
+                            }
+                            .buttonStyle(.command(.secondary, height: 40, wide: true))
+                            .keyboardShortcut(.delete, modifiers: .command)
                             Button {
                                 english.submitSpelling()
                             } label: {
@@ -434,7 +451,14 @@ private struct SpellCard: View {
                     }
                 }
             }
-            .onAppear { focused = true }
+            // onAppear の時点では入力欄がまだ窓に入っていないことがあるので、少し待ってから焦点を当てる
+            .onAppear {
+                Task { @MainActor in
+                    try? await Task.sleep(for: .milliseconds(80))
+                    focused = true
+                }
+            }
+            .onChange(of: english.spellItem) { _, _ in focused = true }
         } else {
             StageClear(english: english, message: "今天的语料做完了")
         }
@@ -445,7 +469,7 @@ private struct SpellCard: View {
         let title: String
         switch result {
         case .correct: title = "正确"
-        case .almost: title = "差一点（错了 1 个字母）· 明天再来"
+        case .almost: title = "差一点（错了 1 个字母）"
         case .wrong: title = "正确答案 · 今天再来一次"
         }
         let good = result == .correct
@@ -482,7 +506,7 @@ private struct DictionaryCard: View {
                       prompt: Text("输入英文单词（例：sustainable）").foregroundStyle(Theme.textFaint))
                 .font(Theme.font(20, .semibold))
                 .autocorrectionDisabled(true)
-                .inputField(height: 46)
+                .inputField(height: 46, focused: focused)
                 .focused($focused)
             if english.dictQuery.trimmingCharacters(in: .whitespaces).isEmpty {
                 Text("工作中遇到的生词，随手查。查到的词可以加进单词卡，之后复习")
@@ -526,6 +550,8 @@ private struct DictionaryCard: View {
                                 Label("加入单词卡", systemImage: "plus")
                             }
                             .buttonStyle(.command(.primary))
+                            .keyboardShortcut(.return, modifiers: .command)
+                            .help("加入单词卡（⌘⏎）")
                         }
                     }
                     .padding(.top, 14)
@@ -539,7 +565,13 @@ private struct DictionaryCard: View {
                     .foregroundStyle(Theme.textSoft)
             }
         }
-        .onAppear { focused = true }
+        // onAppear の時点では入力欄がまだ窓に入っていないことがあるので、少し待ってから焦点を当てる
+        .onAppear {
+            Task { @MainActor in
+                try? await Task.sleep(for: .milliseconds(80))
+                focused = true
+            }
+        }
     }
 }
 
@@ -647,8 +679,13 @@ private struct StageClear: View {
                     .fixedSize(horizontal: false, vertical: true)
                     .padding(.top, 4)
                 HStack(spacing: 8) {
-                    Button("再来 10 个新的") { english.addMoreNew() }
-                        .buttonStyle(.command(.primary))
+                    Button {
+                        english.addMoreNew()
+                    } label: {
+                        keyLabel("⌘N", "再来 10 个新的")
+                    }
+                    .buttonStyle(.command(.primary))
+                    .keyboardShortcut("n", modifiers: .command)
                     Button("查看列表") { english.presentation = .list }
                         .buttonStyle(.command(.secondary))
                 }

@@ -141,10 +141,13 @@ struct HeroShape: Shape {
     }
 }
 
-/// 拼縫の右側(里布)。縫い目は上端 64%・下端 56% の斜線(≈ 14°)。すべてのカードで同じ傾き
+/// 拼縫の右側(里布)。縫い目は上端 62%・下端 56% の斜線。すべてのカードで同じ傾き。
+/// SeamLayout はこの 2 つの定数で左右の幅を決める(左の文字は縫い目の下端より左、右の指令列は上端より右)
 struct SeamShape: Shape {
-    var top: CGFloat = 0.64
-    var bottom: CGFloat = 0.56
+    static let top: CGFloat = 0.62
+    static let bottom: CGFloat = 0.56
+    var top: CGFloat = SeamShape.top
+    var bottom: CGFloat = SeamShape.bottom
 
     func path(in r: CGRect) -> Path {
         var p = Path()
@@ -187,6 +190,7 @@ private struct InputSurface: ViewModifier {
     @Environment(\.level) private var level
     @Environment(\.onLevel) private var onLevel
     var height: CGFloat
+    var focused: Bool
 
     func body(content: Content) -> some View {
         content
@@ -196,6 +200,16 @@ private struct InputSurface: ViewModifier {
             .frame(height: height)
             .background(onLevel ? level.ink.opacity(0.12) : Theme.fill,
                         in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+            // フォーカスは下辺の 2pt の線(墨 / 関卡色)。.plain の入力欄は自分で描かないと分からない
+            .overlay(alignment: .bottom) {
+                if focused {
+                    Capsule()
+                        .fill(onLevel ? level.ink : level.color)
+                        .frame(height: 2)
+                        .padding(.horizontal, 10)
+                        .padding(.bottom, 1)
+                }
+            }
     }
 }
 
@@ -213,27 +227,31 @@ extension View {
             .background(Theme.card, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
     }
 
-    func inputField(height: CGFloat) -> some View {
-        modifier(InputSurface(height: height))
+    func inputField(height: CGFloat, focused: Bool = false) -> some View {
+        modifier(InputSurface(height: height, focused: focused))
     }
 }
 
 /// 関卡カードの中身:左 = 色布(見る:題・件名)、右 = 里布(する:数字・指令列)。
-/// 左の幅はカード幅(面板幅 − 左余白)の leftFraction。右は下寄せ・右寄せで、出血分 + 内側の余白を右に空ける
+/// 左の列は縫い目の下端(56%)より左に収め、右の列は縫い目の上端(62%)より右から始める。
+/// カード幅 = 面板幅 − 左余白(右端は出血)。右は下寄せ・右寄せで、出血分 + 内側の余白を右に空ける
 struct SeamLayout<Left: View, Right: View>: View {
-    var leftFraction: CGFloat = 0.56
     @ViewBuilder var left: () -> Left
     @ViewBuilder var right: () -> Right
 
     var body: some View {
+        let width = Theme.panelWidth - Theme.padding
+        let leftWidth = width * SeamShape.bottom
+        let rightInset = width * (SeamShape.top - SeamShape.bottom)
         HStack(alignment: .top, spacing: 0) {
             left()
                 .padding(.vertical, 20)
                 .padding(.leading, 22)
                 .padding(.trailing, 10)
-                .frame(width: (Theme.panelWidth - Theme.padding) * leftFraction, alignment: .topLeading)
+                .frame(width: leftWidth, alignment: .topLeading)
             right()
                 .padding(.vertical, 20)
+                .padding(.leading, rightInset)
                 .padding(.trailing, Theme.padding + 20)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
                 .foregroundStyle(Theme.white)
@@ -273,8 +291,8 @@ struct PleatGauge: View {
             }
         }
         switch state {
-        case .empty: return odd ? Theme.rgb(0x202026) : Theme.card
-        case .past: return (odd ? Theme.rgb(0x202026) : Theme.card).opacity(0.55)
+        case .empty: return odd ? Theme.rgb(0x2A2A30) : Theme.rgb(0x1E1E23)
+        case .past: return (odd ? Theme.rgb(0x2A2A30) : Theme.rgb(0x1E1E23)).opacity(0.7)
         case .meeting: return Theme.textSoft
         case .pastMeeting: return Theme.textSoft.opacity(0.55)
         case .selected: return level.color
@@ -452,6 +470,7 @@ struct Eyebrow: View {
     var lead: String?
     var text: String = ""
     var trail: String?
+    @Environment(\.level) private var level
 
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: 8) {
@@ -464,7 +483,8 @@ struct Eyebrow: View {
             if !text.isEmpty {
                 Text(text)
                     .font(Theme.font(12, .semibold).monospacedDigit())
-                    .opacity(0.72)
+                    // 朱红の上では薄くしない(黒 5.4:1 しかないので、灰にすると 4.5:1 を割る)
+                    .opacity(level == .vermilion ? 0.9 : 0.72)
             }
             if let trail {
                 Text(trail)

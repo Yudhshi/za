@@ -62,7 +62,10 @@ public final class AppSettings: ObservableObject {
         let end = timeComponents(workEndTime, fallback: (18, 0))
         let c = calendar.dateComponents([.hour, .minute], from: date)
         let now = c.hour! * 60 + c.minute!
-        return now >= start.hour * 60 + start.minute && now < end.hour * 60 + end.minute
+        let s = start.hour * 60 + start.minute, e = end.hour * 60 + end.minute
+        if s == e { return false }
+        // 終了が開始より早ければ深夜をまたぐ時間帯(22:00–06:00)
+        return s < e ? (now >= s && now < e) : (now >= s || now < e)
     }
 
     /// 「いまのタスク」メモ(字下げで階層。TaskOutline で解釈)

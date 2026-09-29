@@ -100,12 +100,13 @@ public struct EnglishLibrary: Sendable {
     public func lookup(_ query: String) -> DictHit? {
         let word = query.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         guard !word.isEmpty else { return nil }
-        for candidate in [word] + Self.baseForms(of: word) {
-            if let entry = dictionary[candidate], entry.count >= 2 {
-                return DictHit(word: candidate, ipa: entry[0], zh: entry[1])
-            }
+        if let entry = dictionary[word], entry.count >= 2 {
+            return DictHit(word: word, ipa: entry[0], zh: entry[1])
         }
-        return nil
+        // 語形変化を外した候補のうち、辞書にある最も長いもの(cares → care であって car ではない)
+        let hits = Self.baseForms(of: word).filter { (dictionary[$0]?.count ?? 0) >= 2 }
+        guard let best = hits.max(by: { $0.count < $1.count }), let entry = dictionary[best] else { return nil }
+        return DictHit(word: best, ipa: entry[0], zh: entry[1])
     }
 
     /// 語形変化を外した候補(辞書に無い形も含む。引けた最初のものを使う)

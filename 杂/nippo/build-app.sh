@@ -9,10 +9,11 @@ if [ -n "${IELTS_DIR:-}" ]; then
     node scripts/import-english.mjs "$IELTS_DIR"
 fi
 
-swift build -c release
+swift build -c release --product NippoApp
 
 APP="dist/Yudh.app"
 # 旧名で動いているものを終了し、旧名のアプリも片付ける(同じバンドル ID が 2 つ並ばないように)
+pkill -x Yudh 2>/dev/null || true
 pkill -x Nippo 2>/dev/null || true
 rm -rf "$APP" "dist/Nippo.app"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
@@ -34,3 +35,5 @@ codesign --force -s - "$APP"
 touch "$APP"
 
 echo "Built: $APP"
+# そのまま起動(NO_OPEN=1 で抑止)
+[ -n "${NO_OPEN:-}" ] || open "$APP"

@@ -24,7 +24,10 @@ public enum NextEventPolicy {
             max(1, Int(ceil(interval / 60)))
         }
         guard event.start > now else {
-            return ("\(ceilMinutes(event.end.timeIntervalSince(now)))", "分钟后结束")
+            let left = ceilMinutes(event.end.timeIntervalSince(now))
+            if left < 60 { return ("\(left)", "分钟后结束") }
+            let c = calendar.dateComponents([.hour, .minute], from: event.end)
+            return (String(format: "%d:%02d", c.hour!, c.minute!), "结束")
         }
         let minutes = ceilMinutes(event.start.timeIntervalSince(now))
         if minutes < 60 { return ("\(minutes)", "分钟后") }

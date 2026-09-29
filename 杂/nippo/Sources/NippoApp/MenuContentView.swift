@@ -27,7 +27,7 @@ struct MenuContentView: View {
         let now = Date()
         let events = coordinator.todayEvents
         let next = NextEventPolicy.currentOrNext(events: events, now: now)
-        guard let selected = events.first(where: { $0.id == selectedMeetingID }) ?? next,
+        guard let selected = events.first(where: { $0.id == selectedMeetingID && $0.end > now }) ?? next,
               selected.end > now else { return .chrome }
         return selected.start.timeIntervalSince(now) <= 5 * 60 ? .vermilion : .chrome
     }
@@ -81,6 +81,7 @@ struct MenuContentView: View {
         .onChange(of: tab) { _, newTab in
             if newTab == .english { coordinator.english.loadIfNeeded() }
         }
+        .onDisappear { coordinator.english.panelClosed() }
     }
 }
 
@@ -96,6 +97,7 @@ private struct PanelHeader: View {
     @ObservedObject var coordinator: AppCoordinator
     @ObservedObject var english: EnglishCoordinator
     @Binding var tab: PanelTab
+    @Environment(\.level) private var level
     @State private var workError: String?
 
     var body: some View {
@@ -124,7 +126,7 @@ private struct PanelHeader: View {
                     TabItem(value: PanelTab.today, title: "今日", shortcut: "1"),
                     TabItem(value: PanelTab.english, title: "英语",
                             badge: english.loaded ? english.remainingTotal : nil, shortcut: "2"),
-                ], selection: $tab, color: tab == .today ? Theme.chrome : Theme.viridian)
+                ], selection: $tab, color: level.color)   // 選んだ瓦片は今の関卡色(朱红なら朱红)
             }
             if let workError, tab == .today {
                 Text(workError)
@@ -224,7 +226,8 @@ private struct TodayView: View {
         let now = Date()
         let events = coordinator.todayEvents
         let next = NextEventPolicy.currentOrNext(events: events, now: now)
-        let selected = events.first { $0.id == selectedMeetingID } ?? next
+        // 選んだ会議が終わったら既定(次の会議)に戻す
+        let selected = events.first { $0.id == selectedMeetingID && $0.end > now } ?? next
         let settings = coordinator.settings
         let start = settings.timeComponents(settings.workStartTime, fallback: (9, 0))
         let end = settings.timeComponents(settings.workEndTime, fallback: (18, 0))
@@ -311,12 +314,13 @@ private struct MeetingHero: View {
                     if let url = event.joinURL, !past {
                         Button("加入会议") { NSWorkspace.shared.open(url) }
                             .buttonStyle(.command(.primary))
-                            .help(url.host ?? "加入会议")
+                            .keyboardShortcut(.defaultAction)
+                            .help("\(url.host ?? "加入会议")（⏎）")
                             .padding(.top, 16)
                     } else if event.joinURL == nil {
                         Text("这个会议没有线上链接")
-                            .font(Theme.font(13, .medium))
-                            .opacity(0.75)
+                            .font(Theme.font(13, .semibold))
+                            .opacity(0.9)
                             .padding(.top, 12)
                     }
                 }
@@ -649,16 +653,18 @@ private struct PowerButton: View {
                 NSApp.terminate(nil)
             } else {
                 withAnimation(.spring(duration: 0.25, bounce: 0.3)) { armed = true }
-                Task {
-                    try? await Task.sleep(for: .seconds(3))
-                    withAnimation { armed = false }
-                }
             }
         } label: {
             Image(systemName: "power")
                 .font(.system(size: 12, weight: .semibold))
         }
         .buttonStyle(.commandSquare(armed ? .primary : .quiet, size: 24))
+        // 3 秒で解除。視図が消えたり状態が変わったりすれば自動で取り消される
+        .task(id: armed) {
+            guard armed else { return }
+            try? await Task.sleep(for: .seconds(3))
+            withAnimation { armed = false }
+        }
         .help(armed ? "再按一次退出" : "退出 Yudh（按两下，或 ⌘Q）。设置：⌘,")
         .accessibilityLabel(armed ? "再按一次退出" : "退出 Yudh")
     }

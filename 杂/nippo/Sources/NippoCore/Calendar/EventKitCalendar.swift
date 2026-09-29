@@ -31,6 +31,8 @@ public final class EventKitCalendar: CalendarProviding {
             .filter { e in
                 // 終日の予定は見ない(「休み」と書いてあっても休みとは扱わない)
                 if e.isAllDay { return false }
+                // 時刻つきの多日程(出張・研修 9:00–翌々日 18:00)も終日と同じ扱い:24 時間以上は会議ではない
+                if e.endDate.timeIntervalSince(e.startDate) >= 24 * 3600 { return false }
                 // キャンセル済み・自分が欠席回答した会議は一覧/リマインドから除外
                 if e.status == .canceled { return false }
                 if let me = e.attendees?.first(where: { $0.isCurrentUser }),

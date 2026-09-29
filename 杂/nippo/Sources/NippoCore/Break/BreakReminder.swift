@@ -60,7 +60,7 @@ public enum BreakReminder {
     看窗外等远处 20 秒
     """
 
-    static let caution = "※ 如有麻木或疼痛请停止"
+    public static let caution = "※ 如有麻木或疼痛请停止"
 
     /// 会議とみなす予定:Google Meet のリンクがあるものだけ(ユーザー指定。
     /// Meet の無い予定は、参加者がいても Zoom 等でも会議扱いしない)
@@ -87,15 +87,12 @@ public enum BreakReminder {
     /// Meet の会議中・直前は何も出さない。切り替え時刻を過ぎたら姿勢に応じて尋ね、
     /// 「立った」後の手順表示は立ち作業の終わりまで続ける
     public static func desiredPrompt(posture: Posture, current: Prompt?, now: Date,
-                                     dueAt: Date, inMeeting: Bool) -> Prompt? {
+                                     dueAt: Date, inMeeting: Bool, guideDismissed: Bool = false) -> Prompt? {
         if inMeeting { return nil }
         if now >= dueAt { return posture == .sitting ? .askStand : .askSit }
-        return current == .standing ? .standing : nil
-    }
-
-    /// 今の姿勢になってから interval 分以上たったか
-    public static func isDue(now: Date, since: Date, intervalMinutes: Int) -> Bool {
-        now.timeIntervalSince(since) >= TimeInterval(intervalMinutes * 60)
+        // 立ち作業中は(自分で閉じていなければ)手順の小窓を出し続ける。会議で隠れても終われば戻る
+        if posture == .standing { return guideDismissed ? nil : .standing }
+        return nil
     }
 
     /// 空行区切りのブロックを 1 つずつ読む(1 行目が名前、続く行が手順)。前後の空白は捨てる
@@ -124,12 +121,4 @@ public enum BreakReminder {
         return list[((index % list.count) + list.count) % list.count]
     }
 
-    /// 手順に ①②… を付け、最後に(あれば一言と)中止の目安を添える(メニューのホバー表示用)
-    public static func body(for stretch: Stretch, extra: String? = nil) -> String {
-        let marks = ["①", "②", "③", "④", "⑤", "⑥", "⑦", "⑧", "⑨"]
-        let steps = stretch.steps.enumerated().map { i, step in
-            (i < marks.count ? marks[i] : "\(i + 1).") + " " + step
-        }
-        return (steps + [extra, caution].compactMap { $0 }).joined(separator: "\n")
-    }
 }

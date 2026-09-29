@@ -22,7 +22,9 @@ final class PosturePanelController {
         let panel = self.panel ?? makePanel()
         self.panel = panel
         // SwiftUI の再レイアウト後に測る
-        DispatchQueue.main.async {
+        DispatchQueue.main.async { [weak self] in
+            // 出すと決めたあとに閉じられていたら、空の窓を出し直さない
+            guard let self, self.coordinator.posturePrompt != nil else { return }
             // マウスのある画面に出す(外部ディスプレイで作業中に内蔵画面へ出さない)。無ければ主画面
             let mouse = NSEvent.mouseLocation
             let target = NSScreen.screens.first { $0.frame.contains(mouse) } ?? NSScreen.main
@@ -42,6 +44,8 @@ final class PosturePanelController {
                                 styleMask: [.borderless, .nonactivatingPanel],
                                 backing: .buffered, defer: false)
         panel.isFloatingPanel = true
+        // 押したのがボタンなら key にならない(打鍵中のアプリからキーボードを奪わない)
+        panel.becomesKeyOnlyIfNeeded = true
         panel.level = .floating
         panel.backgroundColor = .clear
         panel.isOpaque = false
@@ -88,8 +92,7 @@ struct PosturePromptView: View {
         .frame(width: 360)
         .environment(\.level, level)
         .padding(12)
-        .background(Color.black.opacity(0.45), in: frame)
-        .glassEffect(.regular, in: frame)
+        .glassEffect(.regular.tint(Color.black.opacity(0.35)), in: frame)
         .padding(12)   // 影の分
         .environment(\.colorScheme, .dark)
         .environment(\.locale, Theme.locale)
@@ -115,7 +118,7 @@ struct PosturePromptView: View {
                 .fixedSize(horizontal: false, vertical: true)
                 .padding(.top, 4)
             HStack(spacing: 8) {
-                Button("站好了") { coordinator.confirmStood() }
+                Button("站起来了") { coordinator.confirmStood() }
                     .buttonStyle(.command(.primary, height: 40, wide: true))
                 Button("15 分钟后") { coordinator.snoozePosture(minutes: 15) }
                     .buttonStyle(.command(.secondary, height: 40))
@@ -138,7 +141,7 @@ struct PosturePromptView: View {
                 .fixedSize(horizontal: false, vertical: true)
                 .padding(.top, 6)
             HStack(spacing: 8) {
-                Button("坐好了") { coordinator.confirmSat() }
+                Button("坐下了") { coordinator.confirmSat() }
                     .buttonStyle(.command(.primary, height: 40, wide: true))
                 Button("再站 5 分钟") { coordinator.snoozePosture(minutes: 5) }
                     .buttonStyle(.command(.secondary, height: 40))
@@ -156,9 +159,11 @@ private struct StandingGuide: View {
     @Environment(\.level) private var level
 
     var body: some View {
-        TimelineView(.periodic(from: .now, by: 1)) { context in
+        // 秒の数字はシステムの Text(timerInterval:) に任せる(毎秒 body を評価しない)。褶と分は 30 秒ごと
+        TimelineView(.periodic(from: .now, by: 30)) { context in
             let total = max(1, coordinator.settings.standMinutes)
-            let remaining = max(0, coordinator.postureDueAt.timeIntervalSince(context.date))
+            let due = coordinator.postureDueAt
+            let remaining = max(0, due.timeIntervalSince(context.date))
             let elapsedMinutes = max(0, min(total, Int((Double(total) * 60 - remaining) / 60)))
             VStack(alignment: .leading, spacing: 0) {
                 HStack(alignment: .top) {
@@ -170,8 +175,16 @@ private struct StandingGuide: View {
                             .padding(.top, 6)
                     }
                     Spacer()
-                    BigNumber(value: Self.clock(remaining), unit: "剩余", size: 48,
-                              color: level.ink, unitColor: level.ink.opacity(0.7))
+                    VStack(alignment: .trailing, spacing: 6) {
+                        Text(timerInterval: min(context.date, due)...due, countsDown: true, showsHours: false)
+                            .font(Theme.numeral(48))
+                            .foregroundStyle(level.ink)
+                            .lineLimit(1)
+                        Text("剩余")
+                            .font(Theme.font(12, .semibold))
+                            .foregroundStyle(level.ink.opacity(0.7))
+                    }
+                    .accessibilityElement(children: .combine)
                 }
                 PleatGauge(states: (0..<total).map { $0 < elapsedMinutes ? .meeting : .empty })
                     .padding(.top, 12)
@@ -220,7 +233,7 @@ private struct StandingGuide: View {
                     .fixedSize(horizontal: false, vertical: true)
                     .frame(maxWidth: .infinity, minHeight: 44, alignment: .topLeading)
                     .padding(.top, 8)
-                Text("※ 如有麻木或疼痛请停止")
+                Text(BreakReminder.caution)
                     .font(Theme.font(12, .medium))
                     .opacity(0.7)
             }

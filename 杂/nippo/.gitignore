@@ -1,2 +1,8 @@
 # 英語タブの素材(教材由来の語表を含むので公開リポジトリには載せない。scripts/import-english.mjs で生成)
 Resources/English/
+
+# 構建産物(dist/Yudh.app には Resources/English の語表が同梱されるので、公開リポジトリには絶対に載せない)
+.build/
+.swiftpm/
+dist/
+.DS_Store

@@ -32,14 +32,6 @@ func runBreakReminderTests() {
                  "solo block")
     }
 
-    T.run("due after interval since last break") {
-        let last = tokyoDate(2026, 10, 1, 10, 0)
-        T.expect(!BreakReminder.isDue(now: tokyoDate(2026, 10, 1, 10, 44), since: last,
-                                      intervalMinutes: 45), "44 min")
-        T.expect(BreakReminder.isDue(now: tokyoDate(2026, 10, 1, 10, 45), since: last,
-                                     intervalMinutes: 45), "45 min")
-    }
-
     T.run("stretch blocks: name + steps, blank-line separated, rotation") {
         let list = BreakReminder.stretches(from: """
 
@@ -66,13 +58,6 @@ func runBreakReminderTests() {
                  && !BreakReminder.defaultStretches.contains("举起双手"), "no overhead moves")
     }
 
-    T.run("body: numbered steps, optional extra line, caution last") {
-        let s = BreakReminder.Stretch(name: "肩甲骨寄せ(約 1 分)", steps: ["腕を下ろす", "肩甲骨を寄せる"])
-        T.expectEqual(BreakReminder.body(for: s), "① 腕を下ろす\n② 肩甲骨を寄せる\n※ 如有麻木或疼痛请停止")
-        T.expectEqual(BreakReminder.body(for: s, extra: "水を一杯"),
-                      "① 腕を下ろす\n② 肩甲骨を寄せる\n水を一杯\n※ 如有麻木或疼痛请停止")
-    }
-
     T.run("desiredPrompt: ask when due, keep the standing guide, hide in Meet") {
         let now = tokyoDate(2026, 10, 1, 10, 0)
         let past = now.addingTimeInterval(-60), later = now.addingTimeInterval(600)
@@ -86,5 +71,9 @@ func runBreakReminderTests() {
         T.expectEqual(d(.sitting, .askStand, due: later), nil, "snoozed / away → close")
         T.expectEqual(d(.sitting, nil, due: past, meeting: true), nil, "never during Meet")
         T.expectEqual(d(.standing, .standing, due: later, meeting: true), nil, "guide hides in Meet")
+        T.expectEqual(d(.standing, nil, due: later), .standing, "guide comes back after a meeting")
+        T.expectEqual(BreakReminder.desiredPrompt(posture: .standing, current: nil, now: now, dueAt: later,
+                                                  inMeeting: false, guideDismissed: true),
+                      nil, "closed by hand stays closed")
     }
 }

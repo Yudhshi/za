@@ -30,16 +30,20 @@ extension AppCoordinator {
             if posturePrompt != nil { posturePrompt = nil }
             return
         }
-        // 座りっぱなしの計測だけ離席でリセット(立ち作業の残り時間は巻き戻さない)
-        if posture == .sitting, Self.idleSeconds() >= 180 {
+        let inMeeting = BreakReminder.isInMeeting(events: todayEvents, now: now)
+        // 座りっぱなしの計測だけ離席でリセット(立ち作業の残り時間は巻き戻さない)。
+        // 会議中の無操作は「座って会議中」、小窓を出しているあいだは判定しない
+        if posture == .sitting, posturePrompt == nil, !inMeeting, Self.idleSeconds() >= 180 {
             resetPostureTimer(now: now)
         }
         let desired = BreakReminder.desiredPrompt(
             posture: posture, current: posturePrompt, now: now, dueAt: postureDueAt,
-            inMeeting: BreakReminder.isInMeeting(events: todayEvents, now: now))
+            inMeeting: inMeeting, guideDismissed: standingGuideDismissed)
+        // メニューから自分で開いた「站起来了吗?」は、時間前でも会議に入らない限り閉じない
+        if desired == nil, posturePromptPinned, posturePrompt == .askStand, !inMeeting { return }
         guard desired != posturePrompt else { return }
-        // 「15 分後」のあとに出し直すときは同じストレッチのまま(押すたびに次のストレッチへ飛ばない)
-        if desired == .askStand && postureRemindAt == nil { pickStretch() }
+        posturePromptPinned = false
+        if desired == .askStand { pickStretch() }
         posturePrompt = desired
         AppLog.shared.log("posture", "prompt \(String(describing: desired))")
     }
@@ -47,8 +51,13 @@ extension AppCoordinator {
     /// 「立った」(小窓・メニュー):立ち作業の残り時間とストレッチの手順を出す
     func confirmStood() {
         if posturePrompt != .askStand { pickStretch() }
+        // 実際に立ったときに初めて「このストレッチはやった」と数える(推迟しても飛ばない)
+        let count = BreakReminder.stretches(from: settings.stretches).count
+        settings.lastStretchIndex = (settings.lastStretchIndex + 1) % max(1, count)
         posture = .standing
         resetPostureTimer(now: Date())
+        standingGuideDismissed = false
+        posturePromptPinned = false
         posturePrompt = .standing
         AppLog.shared.log("posture", "stood")
     }
@@ -57,6 +66,8 @@ extension AppCoordinator {
     func confirmSat() {
         posture = .sitting
         resetPostureTimer(now: Date())
+        standingGuideDismissed = false
+        posturePromptPinned = false
         posturePrompt = nil
         AppLog.shared.log("posture", "sat")
     }
@@ -64,6 +75,7 @@ extension AppCoordinator {
     /// 「15分後」「あと5分」:小窓を閉じて、その分だけ後にもう一度尋ねる
     func snoozePosture(minutes: Int) {
         postureRemindAt = Date().addingTimeInterval(TimeInterval(minutes * 60))
+        posturePromptPinned = false
         posturePrompt = nil
     }
 
@@ -72,15 +84,19 @@ extension AppCoordinator {
     func openPosturePrompt() {
         switch posture {
         case .standing:
+            standingGuideDismissed = false
             posturePrompt = .standing
         case .sitting:
-            postureRemindAt = Date()
+            // 切り替え時刻は変えない(見るだけ)。次の判定で閉じられないように pin する
+            posturePromptPinned = true
             if posturePrompt != .askStand { pickStretch() }
             posturePrompt = .askStand
         }
     }
 
     func closePosturePrompt() {
+        standingGuideDismissed = posture == .standing
+        posturePromptPinned = false
         posturePrompt = nil
     }
 
@@ -96,7 +112,6 @@ extension AppCoordinator {
     /// 今回のストレッチを決めて手順を最初から(次回は次のストレッチ)
     private func pickStretch() {
         promptStretch = nextStretch
-        settings.lastStretchIndex += 1
         stretchStep = 0
     }
 }

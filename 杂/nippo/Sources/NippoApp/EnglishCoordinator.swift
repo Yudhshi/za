@@ -122,6 +122,8 @@ final class EnglishCoordinator: ObservableObject {
             UserDefaults.standard.set(mode.rawValue, forKey: "englishMode")
             if oldValue != mode {
                 lastAction = nil
+                // 「已掌握」は単語だけの絞り込み。ほかの種類へ移ったら「今天」に戻す
+                if mode != .vocab, listFilter == .known { listFilter = .today }
                 prepare()
             }
         }
@@ -154,6 +156,8 @@ final class EnglishCoordinator: ObservableObject {
     private var questionID: String?
     /// 語料で一度でも自分で再生したら、以後は「次へ」で自動再生する(職場でいきなり音を出さない)
     private var listened = false
+    /// いま Meet の会議中か(AppCoordinator が注入)。会議中は語料を自動再生しない
+    var isInMeeting: () -> Bool = { false }
     /// いま答えたカード(「もう一回」がすぐ戻ってこないように)
     private var lastAnswered: [Mode: String] = [:]
     /// 「もう 10 問」で今日だけ増やした新規枠
@@ -181,6 +185,11 @@ final class EnglishCoordinator: ObservableObject {
             .deletingLastPathComponent()   // Sources
             .deletingLastPathComponent()
             .appendingPathComponent("Resources/English")
+    }
+
+    /// パネルを閉じた:次に開いたときの最初の 1 問は、また自分で「播放」を押す(職場でいきなり音を出さない)
+    func panelClosed() {
+        listened = false
     }
 
     /// 初回だけ素材を読む(辞書が 2MB あるので裏で)
@@ -309,8 +318,9 @@ final class EnglishCoordinator: ObservableObject {
         switch days {
         case ..<1: return "今天"
         case 1: return "明天"
-        case 2...30: return "\(days)天后"
+        case 2...30: return "\(days) 天后"
         default:
+            if days > 365 { return "\(days) 天后" }
             let c = Calendar(identifier: .gregorian).dateComponents([.month, .day], from: d)
             return "\(c.month ?? 0)/\(c.day ?? 0)"
         }
@@ -446,14 +456,20 @@ final class EnglishCoordinator: ObservableObject {
         let result = SpellCheck.check(spellInput, answer: item.word.w)
         spellResult = result
         let rating: SRSRating
-        let message: String
         switch result {
-        case .correct: rating = .good; message = "正确"
-        case .almost: rating = .hard; message = "差一点 · 明天再来"
-        case .wrong: rating = .again; message = "今天再来一次"
+        case .correct: rating = .good
+        case .almost: rating = .hard
+        case .wrong: rating = .again
         }
         let point = try? store.undoPoint(for: item.id)
-        record(item.id, kind: .spell, rating: rating)
+        let saved = record(item.id, kind: .spell, rating: rating)
+        // 「差一点」は復習カードなら数日〜数十日後になる。実際の間隔で言う
+        let message: String
+        switch result {
+        case .correct: message = "正确"
+        case .almost: message = "差一点 · " + (saved.map { Self.intervalLabel($0.state.interval) } ?? "明天再来")
+        case .wrong: message = "今天再来一次"
+        }
         remember(.spell, point, "\(item.word.w) → \(message)")
         if result != .almost { celebrate(result == .correct) }
         lastAnswered[.spell] = item.id
@@ -480,7 +496,7 @@ final class EnglishCoordinator: ObservableObject {
             return
         }
         spellItem = SpellItem(id: next.id, word: word, isNew: next.isNew)
-        if autoplay && listened { Speaker.shared.say(word.w) }
+        if autoplay && listened && !isInMeeting() { Speaker.shared.say(word.w) }
     }
 
     // MARK: - 辞書

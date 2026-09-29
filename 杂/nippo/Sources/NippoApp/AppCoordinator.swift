@@ -21,6 +21,12 @@ final class AppCoordinator: ObservableObject {
     @Published var postureSince = Date()
     var postureRemindAt: Date?
     private var wasWorking = false
+    /// 「关闭」で自分が閉じた立ち作業の手順(会議で隠れたのとは区別して、会議後に戻す)
+    var standingGuideDismissed = false
+    /// メニューから自分で開いた「站起来了吗?」(時間前でも判定で閉じない)
+    var posturePromptPinned = false
+    /// 前回の tick。スリープや日付をまたいだら姿勢を計り直す
+    private var lastTickAt: Date?
     /// 画面上部の小窓(nil で閉じる)。変わるたびに小窓を出し入れ・サイズ調整する
     @Published var posturePrompt: BreakReminder.Prompt? {
         didSet { posturePanel.update() }
@@ -33,7 +39,15 @@ final class AppCoordinator: ObservableObject {
     lazy var posturePanel = PosturePanelController(coordinator: self)
     private lazy var settingsWindow = SettingsWindowController(coordinator: self)
     /// 英語タブ(すきま時間の英語)
-    lazy var english = EnglishCoordinator(db: db)
+    lazy var english: EnglishCoordinator = {
+        let english = EnglishCoordinator(db: db)
+        // Meet の会議中は語料を自動再生しない(通話にマイクで拾われないように)
+        english.isInMeeting = { [weak self] in
+            guard let self else { return false }
+            return BreakReminder.isInMeeting(events: self.todayEvents, now: Date())
+        }
+        return english
+    }()
 
     let calendarProvider: CalendarProviding = EventKitCalendar()
     private var timer: Timer?
@@ -60,7 +74,9 @@ final class AppCoordinator: ObservableObject {
         guard let opened else { fatalError("DB 初期化失敗: \(dbNotes)") }
         db = opened
         AppLog.shared.configure(root: URL(fileURLWithPath: root))
-        AppLog.shared.log("app", "起動 Yudh v0.6")
+        let info = Bundle.main.infoDictionary
+        AppLog.shared.log("app", "起動 Yudh \(info?["CFBundleShortVersionString"] as? String ?? "dev") "
+                          + "(\(info?["CFBundleVersion"] as? String ?? "-"))")
         dbNotes.forEach { AppLog.shared.log("app", $0) }
         quietDays = QuietDayChecker(db: db)
 
@@ -102,6 +118,18 @@ final class AppCoordinator: ObservableObject {
     func tick() {
         let now = Date()
 
+        // スリープや日付をまたいだら(10 分以上 tick が止まっていたら)姿勢は計り直す。
+        // 昨日の夕方に立ったまま合盖 → 今朝「已站 900 分钟」と聞かれないように
+        if let last = lastTickAt,
+           now.timeIntervalSince(last) > 600 || DayKey.key(for: last) != DayKey.key(for: now) {
+            posture = .sitting
+            resetPostureTimer(now: now)
+            standingGuideDismissed = false
+            posturePromptPinned = false
+            if posturePrompt != nil { posturePrompt = nil }
+        }
+        lastTickAt = now
+
         // 起動後にシステム設定でカレンダーを許可された場合に追従する(再起動しなくてよい)
         if !calendarAuthorized, calendarProvider.isAuthorized {
             calendarAuthorized = true
@@ -121,6 +149,8 @@ final class AppCoordinator: ObservableObject {
         // 会議リマインドは OS 予約制(scheduleMeetingReminders):スリープで時刻を跨いでも届く
         refreshTodayEvents()
         refreshShachoken()
+        // メニューバーの残り時間は毎 tick 計算し直す(fetch の完了を待たない・権限が消えたら消す)
+        statusBarTitle = calendarAuthorized ? NextEventPolicy.statusTitle(events: todayEvents, now: now) : nil
 
         // 座り/立ちの切り替え(勤務日の勤務時間のみ・会議中は後回し)
         checkPosture(now: now)
@@ -152,7 +182,9 @@ final class AppCoordinator: ObservableObject {
     /// 次のシャチョケンを 90 日先まで探す。範囲が広いので 10 分に 1 回まで(メニューを開いたときは即時)
     func refreshShachoken(force: Bool = false) {
         guard calendarAuthorized, !shachokenInFlight else { return }
-        if !force, let at = shachokenFetchedAt, Date().timeIntervalSince(at) < 600 { return }
+        // 10 分以内は再取得しない。ただし表示中の予定が終わったらすぐ次を探す
+        if !force, let at = shachokenFetchedAt, Date().timeIntervalSince(at) < 600,
+           !(nextShachoken.map { $0.end <= Date() } ?? false) { return }
         shachokenInFlight = true
         let provider = calendarProvider
         let keywords = settings.shachokenKeywords
