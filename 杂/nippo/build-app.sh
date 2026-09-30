@@ -21,6 +21,9 @@ cp .build/release/NippoApp "$APP/Contents/MacOS/Yudh"
 cp Resources/Info.plist "$APP/Contents/Info.plist"
 # アイコンの元絵は Resources/AppIcon/AppIcon.svg(描き直したら node scripts/make-icon.mjs で icns を作り直す)
 cp Resources/AppIcon/AppIcon.icns "$APP/Contents/Resources/AppIcon.icns"
+# 小窓の説明の絵(scripts/make-illustrations.py で描く。PNG は 2 倍)
+mkdir -p "$APP/Contents/Resources/Stretches"
+cp Resources/Stretches/*.png "$APP/Contents/Resources/Stretches/"
 # 英語タブの素材(scripts/import-english.mjs で作る。教材由来なのでリポジトリには入れていない)
 if [ -d Resources/English ]; then
     cp -R Resources/English "$APP/Contents/Resources/English"

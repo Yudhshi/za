@@ -69,8 +69,8 @@ struct MenuContentView: View {
                 .padding(.bottom, 12)
         }
         .frame(width: Theme.panelWidth)
-        // 窓そのものが Liquid Glass(机が透ける)。文字は札の上に置く
-        .glassEffect(.regular.tint(Theme.stage.opacity(0.62)), in: RoundedRectangle(cornerRadius: 28, style: .continuous))
+        // 窓は机が透ける半透明の黒。角は札と同じくひと口かじる。文字は札の上に置く
+        .inkStage()
         .environment(\.colorScheme, .dark)
         .environment(\.locale, Theme.locale)
         .environment(\.level, tab == .today ? todayLevel : .english(night: Theme.isNight()))
@@ -115,6 +115,7 @@ private struct PanelHeader: View {
                         .padding(.horizontal, 14)
                         .frame(height: 32)
                         .background(PhantomPlate().fill(Theme.paper))
+                        .background(PhantomPlate().fill(level.color).offset(x: 3, y: 3))   // 版ずれ
                         .rotationEffect(.degrees(-4))
                     if let reason = coordinator.quietReasonToday {
                         Text("休息日 · \(reason)")
@@ -663,7 +664,7 @@ private struct PanelFooter: View {
             .accessibilityHidden(true)
             PowerButton()
         }
-        .glassBar()
+        .footerBar()
         .padding(.top, 14)
     }
 }

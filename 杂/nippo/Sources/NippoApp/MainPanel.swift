@@ -171,7 +171,6 @@ private struct PanelRoot: View {
 
     var body: some View {
         MenuContentView(coordinator: coordinator)
-            .clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
             .background(GeometryReader { geo in
                 Color.clear.preference(key: PanelSizeKey.self, value: geo.size)
             })

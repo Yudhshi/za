@@ -89,22 +89,23 @@ public enum BreakReminder {
         }
     }
 
-    /// ストレッチの図(SF Symbols)。名前と手順のキーワードで選ぶので、設定で書き換えたものにも図が付く
-    public static func symbol(for stretch: Stretch) -> String {
+    /// ストレッチの絵(Resources/Stretches/<name>@2x.png の名前)。名前と手順のキーワードで選ぶので、設定で書き換えたものにも絵が付く。
+    /// 絵は scripts/make-illustrations.py で描いている
+    public static func illustration(for stretch: Stretch) -> String {
         let text = ([stretch.name] + stretch.steps).joined()
-        let table: [(keys: [String], symbol: String)] = [
-            (["走", "歩", "walk"], "figure.walk"),
-            (["呼吸", "息", "breath"], "lungs.fill"),
-            (["肩胛", "肩甲", "blade"], "figure.strengthtraining.functional"),
-            (["转肩", "肩回", "转动肩", "roll"], "figure.cooldown"),
-            (["颈", "首", "脖", "neck"], "figure.flexibility"),
-            (["胸", "chest"], "figure.arms.open"),
-            (["下巴", "顎", "あご", "chin"], "figure.stand"),
+        let table: [(keys: [String], name: String)] = [
+            (["走", "歩", "walk"], "walk"),
+            (["呼吸", "息", "breath"], "belly-breathing"),
+            (["肩胛", "肩甲", "blade"], "shoulder-blades"),
+            (["转肩", "肩回", "转动肩", "roll"], "shoulder-rolls"),
+            (["颈", "首", "脖", "neck"], "neck-side"),
+            (["胸", "chest"], "chest-doorway"),
+            (["下巴", "顎", "あご", "chin"], "chin-tuck"),
         ]
         for entry in table where entry.keys.contains(where: { text.localizedCaseInsensitiveContains($0) }) {
-            return entry.symbol
+            return entry.name
         }
-        return "figure.cooldown"
+        return "stretch"
     }
 
     /// 会議とみなす予定:Google Meet のリンクがあるものだけ(ユーザー指定。

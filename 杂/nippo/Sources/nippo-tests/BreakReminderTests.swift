@@ -44,13 +44,17 @@ func runBreakReminderTests() {
         T.expectEqual(BreakReminder.StepMeta.parse("放松肩膀"), BreakReminder.StepMeta(), "nothing")
     }
 
-    T.run("stretch symbol picked by keyword, with a fallback") {
+    T.run("stretch illustration picked by keyword, with a fallback") {
         let list = BreakReminder.stretches(from: BreakReminder.defaultStretches)
-        T.expectEqual(BreakReminder.symbol(for: list[0]), "figure.strengthtraining.functional", "肩胛")
-        T.expectEqual(BreakReminder.symbol(for: list[5]), "lungs.fill", "呼吸")
-        T.expectEqual(BreakReminder.symbol(for: list[6]), "figure.walk", "走")
-        T.expectEqual(BreakReminder.symbol(for: BreakReminder.Stretch(name: "自定义", steps: ["随便动一动"])),
-                      "figure.cooldown", "fallback")
+        T.expectEqual(BreakReminder.illustration(for: list[0]), "shoulder-blades", "肩胛")
+        T.expectEqual(BreakReminder.illustration(for: list[1]), "chin-tuck", "下巴")
+        T.expectEqual(BreakReminder.illustration(for: list[2]), "neck-side", "颈")
+        T.expectEqual(BreakReminder.illustration(for: list[3]), "chest-doorway", "胸")
+        T.expectEqual(BreakReminder.illustration(for: list[4]), "shoulder-rolls", "转肩")
+        T.expectEqual(BreakReminder.illustration(for: list[5]), "belly-breathing", "呼吸")
+        T.expectEqual(BreakReminder.illustration(for: list[6]), "walk", "走")
+        T.expectEqual(BreakReminder.illustration(for: BreakReminder.Stretch(name: "自定义", steps: ["随便动一动"])),
+                      "stretch", "fallback")
     }
 
     T.run("stretch blocks: name + steps, blank-line separated, rotation") {

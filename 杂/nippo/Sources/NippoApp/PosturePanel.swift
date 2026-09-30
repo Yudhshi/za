@@ -88,9 +88,9 @@ private final class PromptPanel: NSPanel {
 
 // MARK: - 小窓の中身
 
-/// デスクトップの上に浮く小窓(v10):ガラスの枠の中に切り紙の札が 2 枚。
-/// 上の札は関卡色:人の図 + 英語の喊声 + 一句の問い(STAND UP / SIT DOWN は橙、STANDING は青)。
-/// 下の札は黒:ストレッチの姿勢の図 + 秒・回の数字の札 + 一行の動作 + 手順の点 + 指令。文字は減らして図で語る。上の札を掴んで動かせる
+/// デスクトップの上に浮く小窓(v11):半透明の黒い地(机が透ける)に切り紙の札が 2 枚。
+/// 上の札は関卡色:姿勢の絵 + 英語の喊声 + 一句の問い(STAND UP / SIT DOWN は橙、STANDING は青)。
+/// 下の札は黒:ストレッチの絵 + 秒・回の数字の札 + 一行の動作 + 手順の点 + 指令。文字は減らして絵で語る。上の札を掴んで動かせる
 struct PosturePromptView: View {
     @ObservedObject var coordinator: AppCoordinator
 
@@ -115,8 +115,7 @@ struct PosturePromptView: View {
         .frame(width: 348)
         .environment(\.level, level)
         .padding(12)
-        // iOS 27:枠だけガラス。文字はガラスの上に置かない
-        .glassEffect(.regular.tint(Color.black.opacity(0.45)), in: RoundedRectangle(cornerRadius: 26, style: .continuous))
+        .inkStage()
         .padding(12)   // 影の分
         .environment(\.colorScheme, .dark)
         .environment(\.locale, Theme.locale)
@@ -130,14 +129,14 @@ struct PosturePromptView: View {
     private var askStand: some View {
         let stretch = coordinator.promptStretch
         return HemLayout {
-            Pictogram("figure.stand", size: 56)
+            Illustration(name: "stand-up", size: 88, fallback: "figure.stand")
             VStack(alignment: .leading, spacing: 8) {
                 PlateLabel(text: "STAND UP", dark: true)
                 Text("站起来了吗？")
                     .font(Theme.font(22, .semibold))
             }
         } bottom: {
-            StepPanel(symbol: BreakReminder.symbol(for: stretch)) {
+            StepPanel(illustration: BreakReminder.illustration(for: stretch)) {
                 HStack(spacing: 6) {
                     MetaPlate(symbol: "table.furniture", text: "90°")
                         .help("把桌子升到手肘 90° 的高度")
@@ -179,14 +178,14 @@ struct PosturePromptView: View {
     private var askSit: some View {
         let standing = max(0, Int(Date().timeIntervalSince(coordinator.postureSince) / 60))
         return HemLayout {
-            Pictogram("figure.seated.side", size: 56)
+            Illustration(name: "sit-down", size: 88, fallback: "figure.seated.side")
             VStack(alignment: .leading, spacing: 8) {
                 PlateLabel(text: "SIT DOWN", dark: true)
                 Text("坐下了吗？")
                     .font(Theme.font(22, .semibold))
             }
         } bottom: {
-            StepPanel(symbol: "figure.seated.side") {
+            StepPanel(illustration: "sit-down") {
                 MetaPlate(symbol: "clock", text: "站了 \(standing) 分钟")
                 Text("坐深，双脚踩实")
                     .font(Theme.font(15, .semibold))
@@ -240,37 +239,17 @@ private struct HemLayout<Top: View, Bottom: View>: View {
     }
 }
 
-/// 人の図(SF Symbols)。文字の代わり
-private struct Pictogram: View {
-    let symbol: String
-    var size: CGFloat = 56
-
-    init(_ symbol: String, size: CGFloat = 56) {
-        self.symbol = symbol
-        self.size = size
-    }
-
-    var body: some View {
-        Image(systemName: symbol)
-            .font(.system(size: size, weight: .medium))
-            .frame(width: size + 8, height: size + 8)
-            .accessibilityHidden(true)
-    }
-}
-
-/// やり方の段:左に姿勢の図(96 の札)、右に数字の札と一行
+/// やり方の段:左に姿勢の絵(青い札に載せる)、右に数字の札と一行
 private struct StepPanel<Content: View>: View {
-    let symbol: String
+    let illustration: String
     @ViewBuilder var content: () -> Content
+    @Environment(\.level) private var level
 
     var body: some View {
         HStack(alignment: .center, spacing: 14) {
-            Image(systemName: symbol)
-                .font(.system(size: 60, weight: .regular))
-                .foregroundStyle(Theme.paper)
-                .frame(width: 92, height: 92)
-                .background(PhantomPlate(skew: 6).fill(Color.white.opacity(0.07)))
-                .accessibilityHidden(true)
+            Illustration(name: illustration, size: 104, fallback: "figure.cooldown")
+                .padding(4)
+                .background(PhantomPlate(skew: 6).fill(level.color))
             VStack(alignment: .leading, spacing: 0) { content() }
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
@@ -330,7 +309,7 @@ private struct StandingGuide: View {
             HemLayout {
                 VStack(alignment: .leading, spacing: 10) {
                     HStack(alignment: .center, spacing: 14) {
-                        Pictogram("figure.stand", size: 44)
+                        Illustration(name: "standing", size: 64, fallback: "figure.stand")
                         PlateLabel(text: "STANDING", dark: true)
                         Spacer(minLength: 8)
                         SplatNumber(unit: "剩余", size: 34) {
@@ -358,7 +337,7 @@ private struct StandingGuide: View {
         let done = step >= s.steps.count
         let meta = done ? BreakReminder.StepMeta() : BreakReminder.StepMeta.parse(s.steps[step])
         return VStack(alignment: .leading, spacing: 0) {
-            StepPanel(symbol: done ? "checkmark" : BreakReminder.symbol(for: s)) {
+            StepPanel(illustration: done ? "walk" : BreakReminder.illustration(for: s)) {
                 if done {
                     Text("完成！接下来站着工作吧")
                         .font(Theme.font(15, .semibold))

@@ -1,10 +1,11 @@
 import AppKit
 import SwiftUI
 
-/// デザイントークン(2026-09 v10「Phantom Glass」:ペルソナ5 の切り紙 × iOS 27 の Liquid Glass)。
+/// デザイントークン(2026-09 v11「Ink & Paper」:ペルソナ5 の切り紙 × スプラトゥーンの墨。iOS 27 からは透明感だけ)。
 /// 形はペルソナ5:文字を載せる面はすべて「切り紙の札」(黒紙に白、白紙に墨、青/橙の紙に墨)。辺は斜め、右上をひと口かじる。
 /// 一覧はメニュー:行が 1 枚ずつ札で、選んだ行は関卡色になって ▶ が付く。英語の喊声は斜体・横広・大文字、小さな札は 3〜4° 傾く。中文は直立。
-/// 材質は iOS 27:窓そのものが Liquid Glass(机が透ける)、上の帯・下の帯・切り替えはガラスの胶囊、選んだ透镜は滑って変形する。
+/// 材質:窓は机が透ける半透明の黒(ぼかし + 墨 72%)で、角は札と同じくひと口かじる。ガラスの胶囊・大きな角丸は使わない。
+/// スプラトゥーン:NICE! は墨の塊、黒い札には半調の網点、白い札の後ろに関卡色の版ずれ。
 /// 色は青と橙の二色だけ:色面が青なら墨迹(大数字・章)は橙、色面が橙(緊急・立て・座れ)なら墨迹は青。色面の上の文字はつねに黒。
 /// 重ねない:章は指令列の上の自分の枠に出る、数字は自分の格に居る。文字は減らして図で語る(小窓の図・下の帯の絵文字)。
 /// 文字サイズは 12/13/15/22 + 大数字/見出し語/喊声。日付は英語の曜日(TUESDAY)だけ。月日はどこにも出さない
@@ -251,6 +252,7 @@ private struct HeroSurface: ViewModifier {
                 ZStack {
                     if seam {
                         Theme.plate
+                        Halftone()   // 黒い札の網点(スプラトゥーン)。色布の下は隠れる
                         SeamShape().fill(level.color)
                     } else {
                         level.color
@@ -306,11 +308,23 @@ extension View {
             .background(Theme.plate, in: BiteShape())
     }
 
-    /// iOS 27 の浮いたガラスの帯(上の帯・下の帯)。文字は 13pt 以上の太字か絵文字だけ
-    func glassBar() -> some View {
-        self.padding(.horizontal, 14)
+    /// 下の帯:上に薄い線を引くだけ(ガラスは使わない)。文字は 13pt 以上の太字か絵文字だけ
+    func footerBar() -> some View {
+        self.padding(.horizontal, 4)
             .frame(height: 40)
-            .glassEffect(.regular.tint(Color.white.opacity(0.05)), in: Capsule())
+            .overlay(alignment: .top) { Color.white.opacity(0.14).frame(height: 1) }
+    }
+
+    /// 窓の地:机が透ける半透明の黒(ぼかし)を、ひと口かじった札の形に切り、白い縁を引く
+    func inkStage() -> some View {
+        self.background {
+                ZStack {
+                    BlurBehindWindow()
+                    Theme.stage.opacity(0.72)
+                }
+            }
+            .clipShape(PanelShape())
+            .overlay(PanelShape().stroke(Theme.paper.opacity(0.85), lineWidth: 2))
     }
 
     func inputField(height: CGFloat, focused: Bool = false) -> some View {
@@ -447,7 +461,7 @@ struct TabItem<Value: Hashable>: Identifiable {
     var id: Value { value }
 }
 
-/// 面を切り替えるガラスの胶囊(今日 / 英语)。選んだものは関卡色の透镜(滑って変形する)、ほかは灰の文字
+/// 面を切り替える札(今日 / 英语)。選んだものは関卡色の札に墨(滑って移る)、ほかは黒い札に白
 struct PillTabs<Value: Hashable>: View {
     let items: [TabItem<Value>]
     @Binding var selection: Value
@@ -457,13 +471,11 @@ struct PillTabs<Value: Hashable>: View {
     @Namespace private var pill
 
     var body: some View {
-        HStack(spacing: 2) {
+        HStack(spacing: 6) {
             ForEach(items) { item in
                 tab(item)
             }
         }
-        .padding(3)
-        .glassEffect(.regular.tint(Color.white.opacity(0.06)), in: Capsule())
         .fixedSize()
     }
 
@@ -482,17 +494,19 @@ struct PillTabs<Value: Hashable>: View {
                         .opacity(0.85)
                 }
             }
-            .foregroundStyle(selected ? Theme.ink : Theme.textSoft)
+            .foregroundStyle(selected ? Theme.ink : Theme.white)
             .padding(.horizontal, 12)
             .frame(height: size + 13)
             .background {
                 if selected {
-                    Capsule()
+                    PhantomPlate()
                         .fill(color)
                         .matchedGeometryEffect(id: "pill", in: pill)
+                } else {
+                    PhantomPlate().fill(Theme.plate)
                 }
             }
-            .contentShape(Capsule())
+            .contentShape(PhantomPlate())
         }
         .buttonStyle(.plain)
         .accessibilityAddTraits(selected ? .isSelected : [])
@@ -552,7 +566,7 @@ struct PlateLabel: View {
     let text: String
     var tint: Color?
     var dark: Bool?
-    var tilt: Double = -3
+    var tilt: Double = -4
     @Environment(\.onLevel) private var onLevel
 
     var body: some View {
@@ -601,6 +615,7 @@ struct SectionHeader<Trailing: View>: View {
     let title: String
     var symbol: String?
     @ViewBuilder var trailing: () -> Trailing
+    @Environment(\.level) private var level
 
     var body: some View {
         HStack(alignment: .center, spacing: 10) {
@@ -618,6 +633,8 @@ struct SectionHeader<Trailing: View>: View {
             .padding(.horizontal, 10)
             .frame(height: 24)
             .background(PhantomPlate().fill(Theme.paper))
+            .background(PhantomPlate().fill(level.color).offset(x: 3, y: 3))   // 版ずれ
+            .rotationEffect(.degrees(-2))
             Spacer(minLength: 8)
             trailing()
         }
@@ -646,7 +663,7 @@ struct KeyHint: View {
 
 /// 切り紙の札のボタン(ペルソナ5 の指令)。押すと横に伸びて縦に潰れ、弾んで戻る。
 /// primary:舞台の上では関卡色の札 + 墨の文字、色面の上では黒い札 + 白の文字(裏返し)。
-/// secondary:舞台の上ではガラス(半透明の白 + 1pt の縁)、色面の上では 2pt の描線。quiet:文字だけ
+/// secondary:2pt の描線(舞台では白、色面では墨)。quiet:文字だけ
 struct CommandButtonStyle: ButtonStyle {
     enum Kind { case primary, secondary, quiet }
 
@@ -703,8 +720,8 @@ struct CommandButtonBody: View {
                 shape.fill(level.ink.opacity(hovering ? 0.12 : 0))
                     .overlay(shape.stroke(level.ink, lineWidth: 2))
             } else {
-                shape.fill(Color.white.opacity(hovering ? 0.16 : 0.10))
-                    .overlay(shape.stroke(Color.white.opacity(0.18), lineWidth: 1))
+                shape.fill(Color.white.opacity(hovering ? 0.12 : 0))
+                    .overlay(shape.stroke(Theme.paper, lineWidth: 2))
             }
         case .quiet:
             if onLevel {
@@ -793,7 +810,7 @@ struct SplatNumber<Number: View>: View {
     }
 }
 
-/// 答えたときの章(NICE! / MISS):爆ぜた形。NICE! は橙に墨、MISS は白い紙に墨。指令列の上の枠(StampSlot)に出る
+/// 答えたときの章:NICE! は橙の墨の塊(スプラトゥーン)、MISS は白い紙の爆ぜた形(ペルソナ5)。指令列の上の枠(StampSlot)に出る
 struct Stamp: View {
     let good: Bool
 
@@ -804,7 +821,13 @@ struct Stamp: View {
             .foregroundStyle(Theme.ink)
             .padding(.horizontal, 26)
             .frame(height: 48)
-            .background(Burst().fill(good ? Theme.orange : Theme.paper))
+            .background {
+                if good {
+                    InkSplat(seed: 33, lobes: 9, depth: 0.2).fill(Theme.orange)
+                } else {
+                    Burst().fill(Theme.paper)
+                }
+            }
             .rotationEffect(.degrees(-6))
             .allowsHitTesting(false)
             .accessibilityLabel(good ? "答对了" : "答错了")
@@ -824,5 +847,100 @@ struct WindowDragArea: NSViewRepresentable {
         override func mouseDown(with event: NSEvent) {
             window?.performDrag(with: event)
         }
+    }
+}
+
+// MARK: - 窓の形・網点・ぼかし・絵
+
+/// 窓の外形:右上と左下をひと口かじった長方形(札と同じ言葉)
+struct PanelShape: Shape {
+    var topRight: CGFloat = 36
+    var bottomLeft: CGFloat = 24
+
+    func path(in r: CGRect) -> Path {
+        let a = min(topRight, min(r.width, r.height) / 3)
+        let b = min(bottomLeft, min(r.width, r.height) / 3)
+        var p = Path()
+        p.move(to: CGPoint(x: r.minX, y: r.minY))
+        p.addLine(to: CGPoint(x: r.maxX - a, y: r.minY))
+        p.addLine(to: CGPoint(x: r.maxX, y: r.minY + a))
+        p.addLine(to: CGPoint(x: r.maxX, y: r.maxY))
+        p.addLine(to: CGPoint(x: r.minX + b, y: r.maxY))
+        p.addLine(to: CGPoint(x: r.minX, y: r.maxY - b))
+        p.closeSubpath()
+        return p
+    }
+}
+
+/// 半調の網点(黒い札の質感)。9pt の格子に白 7% の点
+struct Halftone: View {
+    var pitch: CGFloat = 9
+    var radius: CGFloat = 1.6
+    var opacity: Double = 0.07
+
+    var body: some View {
+        Canvas { context, size in
+            var y: CGFloat = pitch / 2
+            var row = 0
+            while y < size.height {
+                var x: CGFloat = (row % 2 == 0) ? pitch / 2 : pitch
+                while x < size.width {
+                    context.fill(Path(ellipseIn: CGRect(x: x - radius, y: y - radius, width: radius * 2, height: radius * 2)),
+                                 with: .color(Color.white.opacity(opacity)))
+                    x += pitch
+                }
+                y += pitch * 0.87
+                row += 1
+            }
+        }
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
+    }
+}
+
+/// 窓の後ろをぼかす(机が透ける)。色味は上に重ねる墨で決める
+struct BlurBehindWindow: NSViewRepresentable {
+    func makeNSView(context: Context) -> NSVisualEffectView {
+        let view = NSVisualEffectView()
+        view.material = .hudWindow
+        view.blendingMode = .behindWindow
+        view.state = .active
+        return view
+    }
+
+    func updateNSView(_ nsView: NSVisualEffectView, context: Context) {}
+}
+
+/// 説明の絵(Resources/Stretches/<name>@2x.png、scripts/make-illustrations.py で描く)。無ければ SF Symbols で代用
+struct Illustration: View {
+    let name: String
+    var size: CGFloat = 96
+    var fallback: String = "figure.stand"
+
+    var body: some View {
+        if let image = Self.image(named: name) {
+            Image(nsImage: image)
+                .resizable()
+                .interpolation(.high)
+                .aspectRatio(contentMode: .fit)
+                .frame(width: size, height: size)
+                .accessibilityHidden(true)
+        } else {
+            Image(systemName: fallback)
+                .font(.system(size: size * 0.55, weight: .regular))
+                .frame(width: size, height: size)
+                .accessibilityHidden(true)
+        }
+    }
+
+    @MainActor private static var cache: [String: NSImage] = [:]
+
+    @MainActor
+    static func image(named name: String) -> NSImage? {
+        if let cached = cache[name] { return cached }
+        guard let url = Bundle.main.resourceURL?.appendingPathComponent("Stretches/\(name)@2x.png"),
+              let image = NSImage(contentsOf: url) else { return nil }
+        cache[name] = image
+        return image
     }
 }
