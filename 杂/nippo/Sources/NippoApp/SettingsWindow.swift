@@ -26,7 +26,8 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
 
     private func makeWindow() -> NSWindow {
         let host = NSHostingController(
-            rootView: SettingsView(coordinator: coordinator, settings: coordinator.settings))
+            rootView: SettingsView(coordinator: coordinator, settings: coordinator.settings,
+                                   english: coordinator.english))
         let window = NSWindow(contentViewController: host)
         window.title = "Yudh 设置"
         window.styleMask = [.titled, .closable, .miniaturizable]

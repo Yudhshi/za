@@ -88,6 +88,21 @@ public struct AppDatabase {
                 t.column("at", .datetime).notNull()
             }
         }
+        m.registerMigration("v6") { db in
+            // 英語の進捗の同期(2026-09-30):出来事の記録。各端末は自分の出来事(local = 1)だけをファイルに書き出す
+            try db.create(table: "sync_event") { t in
+                t.autoIncrementedPrimaryKey("seq")
+                t.column("id", .text).notNull().unique()
+                t.column("device", .text).notNull()
+                t.column("at", .datetime).notNull().indexed()
+                t.column("op", .text).notNull()
+                t.column("card", .text).indexed()
+                t.column("json", .text).notNull()
+                t.column("local", .boolean).notNull().defaults(to: true)
+            }
+            // 同期より前からあったカードと記録を、出来事として写しておく(再生で同じ状態になるように)
+            try EnglishStore.backfillHistory(db)
+        }
         return m
     }
 }

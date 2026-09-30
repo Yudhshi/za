@@ -116,6 +116,28 @@ public final class AppSettings: ObservableObject {
         set { d.set(newValue, forKey: "lastStretchIndex") }
     }
 
+    /// 英語の進捗を共有するフォルダ(OneDrive / iCloud Drive の中など)。nil = 同期しない
+    public var syncRoot: String? {
+        get {
+            guard let path = d.string(forKey: "syncRoot"), !path.isEmpty else { return nil }
+            return path
+        }
+        set { d.set(newValue ?? "", forKey: "syncRoot"); objectWillChange.send() }
+    }
+
+    /// 出来事に付ける、この端末の名前(同期フォルダのファイル名にもなる)
+    public var deviceName: String {
+        get {
+            if let name = d.string(forKey: "deviceName"), !name.isEmpty { return name }
+            return Self.defaultDeviceName
+        }
+        set { d.set(newValue, forKey: "deviceName"); objectWillChange.send() }
+    }
+
+    public static var defaultDeviceName: String {
+        Host.current().localizedName ?? "Mac"
+    }
+
     public func timeComponents(_ value: String,
                                fallback: (hour: Int, minute: Int)) -> (hour: Int, minute: Int) {
         let parts = value.split(separator: ":")

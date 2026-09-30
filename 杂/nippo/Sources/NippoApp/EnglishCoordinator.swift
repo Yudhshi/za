@@ -151,8 +151,17 @@ final class EnglishCoordinator: ObservableObject {
     @Published private(set) var streak = 0
     @Published private(set) var remaining: [Mode: Int] = [:]
 
-    private let store: EnglishStore
+    private var store: EnglishStore
     private var loading = false
+    /// 同期フォルダ(AppCoordinator が設定から注入)。nil なら同期しない
+    var syncRoot: () -> String? = { nil }
+    /// 出来事に付ける端末名
+    var deviceName = "Mac" {
+        didSet { store.device = deviceName }
+    }
+    @Published private(set) var syncStatus: String?
+    private var syncing = false
+    private var exportTask: Task<Void, Never>?
     private var questionID: String?
     /// 語料で一度でも自分で再生したら、以後は「次へ」で自動再生する(職場でいきなり音を出さない)
     private var listened = false
@@ -192,10 +201,11 @@ final class EnglishCoordinator: ObservableObject {
         listened = false
     }
 
-    /// 初回だけ素材を読む(辞書が 2MB あるので裏で)
+    /// 初回だけ素材を読む(辞書が 2MB あるので裏で)。開くたびに同期も走らせる
     func loadIfNeeded() {
         guard !loaded else {
             prepare()
+            syncNow()
             return
         }
         guard !loading else { return }
@@ -222,6 +232,65 @@ final class EnglishCoordinator: ObservableObject {
         AppLog.shared.log("english", "loaded vocab \(vocabPool.count) para \(paraPool.count) "
                           + "spell \(spellPool.count) dict \(library.dictionary.count)")
         prepare()
+        syncNow()
+    }
+
+    // MARK: - 同期(Mac と Windows で進捗を共有)
+
+    /// 同期フォルダがあれば:ほかの端末の出来事を取り込み(あれば出題を組み直す)、自分の出来事を書き出す。裏で動く
+    func syncNow() {
+        guard let root = syncRoot(), !syncing else { return }
+        syncing = true
+        let sync = EnglishSync(root: URL(fileURLWithPath: root), device: deviceName, store: store)
+        Task.detached(priority: .utility) { [weak self] in
+            var imported = 0
+            var failure: String?
+            do {
+                imported = try sync.pull()
+                try sync.push()
+            } catch {
+                failure = "\(error)"
+            }
+            await MainActor.run {
+                guard let self else { return }
+                self.syncing = false
+                if let failure {
+                    self.syncStatus = "同步失败：\(failure)"
+                    AppLog.shared.log("english", "sync failed: \(failure)")
+                } else {
+                    self.syncStatus = imported > 0 ? "已同步（合并了 \(imported) 条记录）" : "已同步"
+                    if imported > 0 {
+                        AppLog.shared.log("english", "sync merged \(imported) events")
+                        self.afterImport()
+                    }
+                }
+            }
+        }
+    }
+
+    /// ほかの端末の答えを取り込んだ:控えは無効、出ている問題も組み直す
+    private func afterImport() {
+        lastAction = nil
+        vocabCard = nil
+        revealed = false
+        question = nil
+        questionID = nil
+        picked = nil
+        spellItem = nil
+        spellResult = nil
+        spellInput = ""
+        prepare()
+    }
+
+    /// 答えたあと少し待ってから書き出す(連打しても 1 回)
+    private func scheduleExport() {
+        guard syncRoot() != nil else { return }
+        exportTask?.cancel()
+        exportTask = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(2))
+            guard !Task.isCancelled else { return }
+            self?.syncNow()
+        }
     }
 
     /// いまの種類の 1 問を用意する(出ている問題はそのまま)
@@ -618,8 +687,9 @@ final class EnglishCoordinator: ObservableObject {
         }
     }
 
-    /// 今日の数・連続日数・各種類の残り
+    /// 今日の数・連続日数・各種類の残り(変更のあとに呼ばれるので、同期の書き出しもここで予約する)
     func refreshStats() {
+        scheduleExport()
         let now = Date()
         let today = DayKey.key(for: now)
         todayCount = (try? store.answeredCount(day: today)) ?? 0

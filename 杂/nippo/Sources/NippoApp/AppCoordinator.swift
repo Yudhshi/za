@@ -27,6 +27,8 @@ final class AppCoordinator: ObservableObject {
     var posturePromptPinned = false
     /// 前回の tick。スリープや日付をまたいだら姿勢を計り直す
     private var lastTickAt: Date?
+    /// 英語の同期を最後に走らせた時刻(5 分ごと)
+    private var lastSyncAt: Date?
     /// 画面上部の小窓(nil で閉じる)。変わるたびに小窓を出し入れ・サイズ調整する
     @Published var posturePrompt: BreakReminder.Prompt? {
         didSet { posturePanel.update() }
@@ -46,6 +48,9 @@ final class AppCoordinator: ObservableObject {
             guard let self else { return false }
             return BreakReminder.isInMeeting(events: self.todayEvents, now: Date())
         }
+        // 同期(設定でフォルダを選んだときだけ)
+        english.deviceName = settings.deviceName
+        english.syncRoot = { [weak self] in self?.settings.syncRoot }
         return english
     }()
 
@@ -154,6 +159,12 @@ final class AppCoordinator: ObservableObject {
 
         // 座り/立ちの切り替え(勤務日の勤務時間のみ・会議中は後回し)
         checkPosture(now: now)
+
+        // 英語の進捗の同期(フォルダを設定しているときだけ、5 分ごと。パネルを開いたときにも走る)
+        if settings.syncRoot != nil, lastSyncAt.map({ now.timeIntervalSince($0) >= 300 }) ?? true {
+            lastSyncAt = now
+            english.syncNow()
+        }
     }
 
     private var eventsRefreshInFlight = false

@@ -1,9 +1,11 @@
+import AppKit
 import SwiftUI
 import NippoCore
 
 struct SettingsView: View {
     @ObservedObject var coordinator: AppCoordinator
     @ObservedObject var settings: AppSettings
+    @ObservedObject var english: EnglishCoordinator
     @State private var newVacation = Date()
     @State private var vacations: [String] = []
 
@@ -80,6 +82,21 @@ struct SettingsView: View {
                 }
             }
 
+            Section("同步（和 Windows 共享单词进度）") {
+                HStack {
+                    TextField("同步文件夹（OneDrive / iCloud Drive 里的一个文件夹）", text: syncRootBinding)
+                    Button("选择…") { chooseSyncFolder() }
+                }
+                TextField("这台设备的名字", text: binding(\.deviceName))
+                HStack {
+                    Button("立即同步") { english.syncNow() }
+                        .disabled(settings.syncRoot == nil)
+                    Text(english.syncStatus ?? "每台设备只写自己的文件；打开面板时和每 5 分钟合并一次")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+
             Section("通用") {
                 TextField("保存位置", text: binding(\.reportsRoot))
                 Text("数据库和日志的保存位置。修改后需重启 app 才能完全生效")
@@ -117,5 +134,23 @@ struct SettingsView: View {
     private func binding<V>(_ keyPath: ReferenceWritableKeyPath<AppSettings, V>) -> Binding<V> {
         Binding(get: { settings[keyPath: keyPath] },
                 set: { settings[keyPath: keyPath] = $0 })
+    }
+
+    private var syncRootBinding: Binding<String> {
+        Binding(get: { settings.syncRoot ?? "" },
+                set: { settings.syncRoot = $0.isEmpty ? nil : $0 })
+    }
+
+    private func chooseSyncFolder() {
+        let panel = NSOpenPanel()
+        panel.canChooseDirectories = true
+        panel.canChooseFiles = false
+        panel.canCreateDirectories = true
+        panel.prompt = "选择"
+        panel.message = "选一个 OneDrive / iCloud Drive 里的文件夹，Windows 也指到同一个文件夹"
+        if panel.runModal() == .OK, let url = panel.url {
+            settings.syncRoot = url.path
+            english.syncNow()
+        }
     }
 }
