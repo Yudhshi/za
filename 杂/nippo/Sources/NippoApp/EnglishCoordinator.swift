@@ -155,9 +155,9 @@ final class EnglishCoordinator: ObservableObject {
     private var loading = false
     /// 同期フォルダ(AppCoordinator が設定から注入)。nil なら同期しない
     var syncRoot: () -> String? = { nil }
-    /// 出来事に付ける端末名
-    var deviceName = "Mac" {
-        didSet { store.device = deviceName }
+    /// 出来事に付ける端末名(設定で変えたら次の同期から使う)
+    var deviceName: () -> String = { "Mac" } {
+        didSet { store.device = deviceName() }
     }
     @Published private(set) var syncStatus: String?
     private var syncing = false
@@ -241,14 +241,17 @@ final class EnglishCoordinator: ObservableObject {
     func syncNow() {
         guard let root = syncRoot(), !syncing else { return }
         syncing = true
-        let sync = EnglishSync(root: URL(fileURLWithPath: root), device: deviceName, store: store)
+        store.device = deviceName()
+        let sync = EnglishSync(root: URL(fileURLWithPath: root), device: store.device, store: store)
         Task.detached(priority: .utility) { [weak self] in
-            var imported = 0
-            var failure: String?
+            let imported: Int
+            let failure: String?
             do {
                 imported = try sync.pull()
                 try sync.push()
+                failure = nil
             } catch {
+                imported = 0
                 failure = "\(error)"
             }
             await MainActor.run {

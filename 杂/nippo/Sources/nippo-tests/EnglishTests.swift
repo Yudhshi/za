@@ -136,7 +136,7 @@ func runEnglishTests() {
         // 初めてのカードの答えを取り消すと、カードも記録も消える
         let first = try store.undoPoint(for: "vocab:a")
         try store.record(id: "vocab:a", kind: .vocab, rating: .good, now: now, calendar: tokyoCalendar)
-        try store.undo(first, now: now)
+        try store.undo(first, now: now, calendar: tokyoCalendar)
         T.expectEqual(try store.card("vocab:a"), nil)
         T.expectEqual(try store.answeredCount(day: today), 0)
 
@@ -144,7 +144,7 @@ func runEnglishTests() {
         try store.record(id: "vocab:a", kind: .vocab, rating: .good, now: now, calendar: tokyoCalendar)
         let second = try store.undoPoint(for: "vocab:a")
         try store.record(id: "vocab:a", kind: .vocab, rating: .again, now: now, calendar: tokyoCalendar)
-        try store.undo(second, now: now)
+        try store.undo(second, now: now, calendar: tokyoCalendar)
         T.expectEqual(try store.card("vocab:a")?.due, "2026-10-02")
         T.expectEqual(try store.card("vocab:a")?.state.reps, 1)
         T.expectEqual(try store.answeredCount(day: today), 1)

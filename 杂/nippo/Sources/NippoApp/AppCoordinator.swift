@@ -49,7 +49,7 @@ final class AppCoordinator: ObservableObject {
             return BreakReminder.isInMeeting(events: self.todayEvents, now: Date())
         }
         // 同期(設定でフォルダを選んだときだけ)
-        english.deviceName = settings.deviceName
+        english.deviceName = { [weak self] in self?.settings.deviceName ?? "Mac" }
         english.syncRoot = { [weak self] in self?.settings.syncRoot }
         return english
     }()

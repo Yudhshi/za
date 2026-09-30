@@ -24,11 +24,9 @@ public struct EnglishCard: Equatable, Sendable {
     public var firstSeen: String
 }
 
-/// 「元に戻す」ための控え(答える直前のカードと、記録・出来事の最後の番号)
+/// 「元に戻す」ための控え(カードと、答える直前の出来事の最後の番号)
 public struct EnglishUndo: Equatable, Sendable {
     public let id: String
-    let previous: EnglishCard?
-    let lastLogID: Int64
     let lastSeq: Int64
 }
 
@@ -121,28 +119,25 @@ public struct EnglishStore {
     /// 答える直前の状態(「元に戻す」用)
     public func undoPoint(for id: String) throws -> EnglishUndo {
         try db.dbQueue.read { db in
-            EnglishUndo(id: id, previous: try Self.fetchCard(db, id: id),
-                        lastLogID: try Int64.fetchOne(db, sql: "SELECT MAX(id) FROM english_log") ?? 0,
+            EnglishUndo(id: id,
                         lastSeq: try Int64.fetchOne(db, sql: "SELECT MAX(seq) FROM sync_event") ?? 0)
         }
     }
 
-    /// 元に戻す:カードを答える前の状態に戻し(初めてのカードなら消し)、その後の記録を消す。
-    /// 同期には「取り消した」出来事を残す(ほかの端末は再生でその出来事を飛ばす)
-    public func undo(_ point: EnglishUndo, now: Date = Date()) throws {
+    /// 元に戻す:そのカードについてこの端末が控えの後に残した出来事を「取り消した」ことにして、状態を作り直す。
+    /// ほかの端末も同じ出来事を飛ばして再生するので、どちらでも答える前の状態になる
+    /// (途中で同期の取り込みがあって記録が並べ直されていても崩れない)
+    public func undo(_ point: EnglishUndo, now: Date = Date(), calendar: Calendar = .current) throws {
         try db.dbQueue.write { db in
-            if let previous = point.previous {
-                try Self.save(db, previous, now: now)
-            } else {
-                try db.execute(sql: "DELETE FROM english_card WHERE id = ?", arguments: [point.id])
-            }
-            try db.execute(sql: "DELETE FROM english_log WHERE id > ?", arguments: [point.lastLogID])
             let undone = try String.fetchAll(db, sql: """
-                SELECT id FROM sync_event WHERE seq > ? AND local = 1 AND op != 'undo' ORDER BY seq
-                """, arguments: [point.lastSeq])
+                SELECT id FROM sync_event
+                WHERE seq > ? AND card = ? AND local = 1 AND op != 'undo' ORDER BY seq
+                """, arguments: [point.lastSeq, point.id])
+            guard !undone.isEmpty else { return }
             for id in undone {
                 try Self.append(db, SyncEvent(device: device, at: now, op: .undo, card: point.id, target: id))
             }
+            try Self.replay(db, calendar: calendar)
         }
     }
 
@@ -296,17 +291,23 @@ public struct EnglishStore {
 
     /// 出来事を時刻順(同時刻なら id 順)に再生して、カードと記録を作り直す。取り消された出来事は飛ばす
     public func rebuild(calendar: Calendar = .current) throws {
-        let events = try allEvents()
+        try db.dbQueue.write { db in
+            try Self.replay(db, calendar: calendar)
+        }
+    }
+
+    /// 読むのも書くのも同じトランザクションの中で(読んだ後に割り込んだ出来事を取りこぼさない)
+    private static func replay(_ db: Database, calendar: Calendar) throws {
+        let events = try String.fetchAll(db, sql: "SELECT json FROM sync_event ORDER BY seq")
+            .compactMap { SyncEvent.parse(line: $0) }
         let undone = Set(events.filter { $0.op == .undo }.compactMap(\.target))
         let ordered = events
             .filter { $0.op != .undo && !undone.contains($0.id) }
             .sorted { ($0.at, $0.id) < ($1.at, $1.id) }
-        try db.dbQueue.write { db in
-            try db.execute(sql: "DELETE FROM english_card")
-            try db.execute(sql: "DELETE FROM english_log")
-            for event in ordered {
-                try Self.apply(event, db, calendar: calendar)
-            }
+        try db.execute(sql: "DELETE FROM english_card")
+        try db.execute(sql: "DELETE FROM english_log")
+        for event in ordered {
+            try apply(event, db, calendar: calendar)
         }
     }
 

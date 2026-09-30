@@ -62,12 +62,31 @@ func runEnglishSyncTests() {
         let day1 = tokyoDate(2026, 10, 1, 10, 0)
         let point = try a.undoPoint(for: "vocab:y")
         try a.record(id: "vocab:y", kind: .vocab, rating: .easy, now: day1, calendar: cal)
-        try a.undo(point, now: day1.addingTimeInterval(5))
+        try a.undo(point, now: day1.addingTimeInterval(5), calendar: cal)
         T.expect(try a.card("vocab:y") == nil, "undone locally")
         try EnglishSync(root: dir, device: "A", store: a).push()
         T.expectEqual(try EnglishSync(root: dir, device: "B", store: b).pull(calendar: cal), 2, "rate + undo")
         T.expect(try b.card("vocab:y") == nil, "the undone rating never existed on B")
         T.expectEqual(try b.answeredCount(day: "2026-10-01"), 0, "no log row either")
+    }
+
+    T.run("undo only cancels its own card, even after a pull reshuffled the log") {
+        let dir = tempDir()
+        let a = EnglishStore(db: try AppDatabase.inMemory(), device: "A")
+        let b = EnglishStore(db: try AppDatabase.inMemory(), device: "B")
+        let day1 = tokyoDate(2026, 10, 1, 10, 0)
+        try b.record(id: "vocab:from-b", kind: .vocab, rating: .good, now: day1, calendar: cal)
+        try EnglishSync(root: dir, device: "B", store: b).push()
+
+        let point = try a.undoPoint(for: "vocab:p")
+        try a.record(id: "vocab:p", kind: .vocab, rating: .good, now: day1.addingTimeInterval(10), calendar: cal)
+        try a.markKnown(id: "vocab:q", kind: .vocab, now: day1.addingTimeInterval(20), calendar: cal)
+        T.expectEqual(try EnglishSync(root: dir, device: "A", store: a).pull(calendar: cal), 1, "B's answer arrives")
+        try a.undo(point, now: day1.addingTimeInterval(30), calendar: cal)
+        T.expect(try a.card("vocab:p") == nil, "the answer is undone")
+        T.expectEqual(try a.card("vocab:q")?.known, true, "the other card is untouched")
+        T.expect(try a.card("vocab:from-b") != nil, "the imported answer stays")
+        T.expectEqual(try a.answeredCount(day: "2026-10-01"), 2, "B's answer + known")
     }
 
     T.run("rebuild is deterministic and idempotent") {
