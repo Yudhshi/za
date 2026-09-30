@@ -98,9 +98,10 @@ public enum BreakReminder {
             (["呼吸", "息", "breath"], "belly-breathing"),
             (["肩胛", "肩甲", "blade"], "shoulder-blades"),
             (["转肩", "肩回", "转动肩", "roll"], "shoulder-rolls"),
+            // 下巴は首より先に(収下巴の手順に「脖子」が出てくる)
+            (["下巴", "顎", "あご", "chin"], "chin-tuck"),
             (["颈", "首", "脖", "neck"], "neck-side"),
             (["胸", "chest"], "chest-doorway"),
-            (["下巴", "顎", "あご", "chin"], "chin-tuck"),
         ]
         for entry in table where entry.keys.contains(where: { text.localizedCaseInsensitiveContains($0) }) {
             return entry.name
