@@ -2,12 +2,16 @@ import AppKit
 import SwiftUI
 import NippoCore
 
-/// 画面上部中央に出す、座り/立ちの小窓。
+/// 画面上部中央に出す、座り/立ちの小窓。掴んで動かせる(動かした位置は次からも使う)。
 /// フォーカスを奪わない(打鍵中のアプリはそのまま)・全スペースとフルスクリーンの上にも出る
 @MainActor
 final class PosturePanelController {
     private var panel: NSPanel?
     private unowned let coordinator: AppCoordinator
+    /// 自分で動かした位置(左上)。nil なら画面上部の中央
+    private var movedTopLeft: CGPoint?
+    private var programmaticMove = false
+    private var moveObserver: NSObjectProtocol?
 
     init(coordinator: AppCoordinator) {
         self.coordinator = coordinator
@@ -25,16 +29,26 @@ final class PosturePanelController {
         DispatchQueue.main.async { [weak self] in
             // 出すと決めたあとに閉じられていたら、空の窓を出し直さない
             guard let self, self.coordinator.posturePrompt != nil else { return }
-            // マウスのある画面に出す(外部ディスプレイで作業中に内蔵画面へ出さない)。無ければ主画面
-            let mouse = NSEvent.mouseLocation
-            let target = NSScreen.screens.first { $0.frame.contains(mouse) } ?? NSScreen.main
-            guard let host = panel.contentView,
-                  let screen = target?.visibleFrame else { return }
+            guard let host = panel.contentView else { return }
             let size = host.fittingSize
-            panel.setFrame(NSRect(x: screen.midX - size.width / 2,
-                                  y: screen.maxY - size.height - 12,
-                                  width: size.width, height: size.height),
-                           display: true)
+            let frame: NSRect
+            if let topLeft = self.movedTopLeft,
+               let screen = NSScreen.screens.first(where: { $0.visibleFrame.contains(topLeft) })?.visibleFrame {
+                // 動かした所に。画面からはみ出さないように寄せる
+                let x = max(screen.minX, min(topLeft.x, screen.maxX - size.width))
+                let y = max(screen.minY, min(topLeft.y - size.height, screen.maxY - size.height))
+                frame = NSRect(x: x, y: y, width: size.width, height: size.height)
+            } else {
+                // マウスのある画面の上部中央(外部ディスプレイで作業中に内蔵画面へ出さない)。無ければ主画面
+                let mouse = NSEvent.mouseLocation
+                let target = NSScreen.screens.first { $0.frame.contains(mouse) } ?? NSScreen.main
+                guard let screen = target?.visibleFrame else { return }
+                frame = NSRect(x: screen.midX - size.width / 2, y: screen.maxY - size.height - 12,
+                               width: size.width, height: size.height)
+            }
+            self.programmaticMove = true
+            panel.setFrame(frame, display: true)
+            self.programmaticMove = false
             panel.orderFrontRegardless()
         }
     }
@@ -53,6 +67,15 @@ final class PosturePanelController {
         panel.hidesOnDeactivate = false    // 常駐アプリは普段非アクティブなので必須
         panel.isReleasedWhenClosed = false
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
+        // 上段(色面)を掴んで動かせる。動かした位置を覚える
+        panel.isMovableByWindowBackground = true
+        moveObserver = NotificationCenter.default.addObserver(forName: NSWindow.didMoveNotification,
+                                                              object: panel, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated {
+                guard let self, !self.programmaticMove, let frame = self.panel?.frame else { return }
+                self.movedTopLeft = CGPoint(x: frame.minX, y: frame.maxY)
+            }
+        }
         panel.contentView = NSHostingView(rootView: PosturePromptView(coordinator: coordinator))
         return panel
     }
@@ -65,17 +88,17 @@ private final class PromptPanel: NSPanel {
 
 // MARK: - 小窓の中身
 
-/// デスクトップの上に浮く小窓(v8):ガラスは使わない。上段は関卡色(問いと大数字)、下段は黒い里布(説明とボタン)。
-/// 三つの状態は三つの色:STAND UP 朱红(黒字)・STANDING 翠绿(黒字)・SIT DOWN 钴蓝(白字)
+/// デスクトップの上に浮く小窓(v9):ガラスは使わない。上段は関卡色(問いと大数字)、下段は黒い里布(説明とボタン)。
+/// STAND UP と SIT DOWN は橙(いま動け)、STANDING は青(順調)。文字はつねに黒。上段を掴んで動かせる
 struct PosturePromptView: View {
     @ObservedObject var coordinator: AppCoordinator
 
     private var level: Level {
         switch coordinator.posturePrompt {
-        case .askStand: return .vermilion
-        case .standing: return .viridian
-        case .askSit: return .cobalt
-        case nil: return .chrome
+        case .askStand: return Level.urgent(night: Theme.isNight())
+        case .standing: return Level.today(night: Theme.isNight())
+        case .askSit: return Level.urgent(night: Theme.isNight())
+        case nil: return .teal
         }
     }
 
@@ -156,6 +179,7 @@ private struct HemLayout<Top: View, Bottom: View>: View {
                 .padding(.bottom, 16)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .foregroundStyle(level.ink)
+                .background(WindowDragArea())   // 上段を掴むと窓が動く
                 .background(level.color)
                 .environment(\.onLevel, true)
             VStack(alignment: .leading, spacing: 0) { bottom() }
@@ -193,16 +217,9 @@ private struct StandingGuide: View {
                             .padding(.top, 6)
                     }
                     Spacer()
-                    VStack(alignment: .trailing, spacing: 6) {
+                    SplatNumber(unit: "剩余", size: 40) {
                         Text(timerInterval: min(context.date, due)...due, countsDown: true, showsHours: false)
-                            .font(Theme.numeral(48))
-                            .foregroundStyle(level.ink)
-                            .lineLimit(1)
-                        Text("剩余")
-                            .font(Theme.font(12, .semibold))
-                            .foregroundStyle(level.ink.opacity(0.7))
                     }
-                    .accessibilityElement(children: .combine)
                 }
                 PleatGauge(states: (0..<total).map { $0 < elapsedMinutes ? .meeting : .empty })
                     .padding(.top, 12)
@@ -269,6 +286,6 @@ private struct StandingGuide: View {
             .padding(.top, 12)
         }
         .padding(14)
-        .background(Theme.card, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .background(Theme.card, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
     }
 }

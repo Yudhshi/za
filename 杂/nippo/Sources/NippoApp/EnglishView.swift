@@ -490,7 +490,7 @@ private struct SpellCard: View {
         .padding(.vertical, 10)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(good ? level.primaryFill : level.ink.opacity(0.12),
-                    in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                    in: RoundedRectangle(cornerRadius: Theme.blockRadius, style: .continuous))
     }
 }
 
@@ -645,7 +645,7 @@ private struct WordRow: View {
             .frame(height: 34)
             .background {
                 if hovering {
-                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    RoundedRectangle(cornerRadius: 4, style: .continuous)
                         .fill(Theme.card)
                         .padding(.horizontal, -8)
                 }
@@ -695,7 +695,7 @@ private struct StageClear: View {
             .padding(20)
             .padding(.trailing, Theme.padding)
         }
-        .environment(\.level, .rose)
+        .environment(\.level, .clear)
     }
 }
 
@@ -716,7 +716,7 @@ private struct MissingData: View {
                 .textSelection(.enabled)
                 .padding(10)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .background(Theme.fill, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                .background(Theme.fill, in: RoundedRectangle(cornerRadius: Theme.blockRadius, style: .continuous))
                 .padding(.top, 4)
         }
         .card()

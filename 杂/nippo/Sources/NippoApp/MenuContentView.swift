@@ -7,9 +7,10 @@ enum PanelTab: String {
     case today, english
 }
 
-/// メニューパネル本体(2026-09 v8「Fauve Stage」)。1 列で、上から「いま大事な順」:
+/// メニューパネル本体(2026-09 v9「青橙の関卡」)。1 列で、上から「いま大事な順」:
 /// 曜日と工作时间(小さく)→ 関卡カード(次の会議 / 単語)→ 褶皺の時間線 → 今日日程 → 当前任务 → 下の 1 行(坐姿・シャチョケン・电源)。
-/// 一画面に一枚の色面:今日は铬黄(選んだ会議が 5 分以内・進行中なら朱红)、英语は翠绿。
+/// 一画面に一枚の色面:今日も英语も青(選んだ会議が 5 分以内・進行中なら橙)。数字の墨迹は反対の色。
+/// 窓は画面の中央に浮き、曜日の行を掴んで動かせる(MainPanelController)。
 /// OOUI:会議・タスク・単語という「もの」を一覧から選び、そのものに付いた操作をする。画面の文字は中国語、短いラベルと掛け声は英語
 struct MenuContentView: View {
     @ObservedObject var coordinator: AppCoordinator
@@ -22,7 +23,7 @@ struct MenuContentView: View {
         (NSScreen.main?.visibleFrame.height ?? 900) - 200
     }
 
-    /// 今日タブの関卡:選んだ会議(既定は次の会議)が開始 5 分以内か進行中なら朱红、それ以外は铬黄(夜は少し落とした铬黄)
+    /// 今日タブの関卡:選んだ会議(既定は次の会議)が開始 5 分以内か進行中なら橙、それ以外は青(夜は少し落とす)
     private var todayLevel: Level {
         let now = Date()
         let calm = Level.today(night: Theme.isNight(now))
@@ -30,7 +31,7 @@ struct MenuContentView: View {
         let next = NextEventPolicy.currentOrNext(events: events, now: now)
         guard let selected = events.first(where: { $0.id == selectedMeetingID && $0.end > now }) ?? next,
               selected.end > now else { return calm }
-        return selected.start.timeIntervalSince(now) <= 5 * 60 ? .vermilion : calm
+        return selected.start.timeIntervalSince(now) <= 5 * 60 ? Level.urgent(night: Theme.isNight(now)) : calm
     }
 
     var body: some View {
@@ -118,6 +119,10 @@ private struct PanelHeader: View {
                     }
                 }
                 .fixedSize()
+                .padding(.vertical, 6)
+                // ここを掴むと窓が動く
+                .background(WindowDragArea())
+                .help("拖动这里可以移动窗口")
                 // 英語タブでは入力欄を出さない(数字キーの操作と取り合わないように)
                 WorkTime(coordinator: coordinator, allowsInput: tab == .today, error: $workError) {
                     tab = .today
@@ -287,7 +292,7 @@ private struct TodayView: View {
     }
 }
 
-/// 主役:会議 1 つ。色布(看)に件名、里布(做)に関卡色の大きな残り時間と「加入会议」。終わった会議は灰いカード
+/// 主役:会議 1 つ。色布(看)に件名、里布(做)に墨迹に載った残り時間と「加入会议」。終わった会議は灰いカード
 private struct MeetingHero: View {
     let event: MeetingEvent
     let isNext: Bool
@@ -316,8 +321,14 @@ private struct MeetingHero: View {
                 }
             } right: {
                 VStack(alignment: .trailing, spacing: 12) {
-                    BigNumber(value: countdown.value, unit: countdown.unit,
-                              color: past ? Theme.textFaint : level.color)
+                    if past {
+                        BigNumber(value: countdown.value, unit: countdown.unit, color: Theme.textFaint)
+                    } else {
+                        SplatNumber(unit: countdown.unit) {
+                            Text(countdown.value)
+                                .contentTransition(.numericText())
+                        }
+                    }
                     if let url = event.joinURL, !past {
                         Button("加入会议") { NSWorkspace.shared.open(url) }
                             .buttonStyle(.command(.primary, wide: true))
@@ -417,14 +428,14 @@ private struct EventRow: View {
             .frame(height: 34)
             .background {
                 if hovering && !selected {
-                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    RoundedRectangle(cornerRadius: 4, style: .continuous)
                         .fill(Theme.card)
                         .padding(.horizontal, -8)
                 }
             }
             .overlay(alignment: .leading) {
                 if selected {
-                    Capsule()
+                    Rectangle()
                         .fill(level.color)
                         .frame(width: 3, height: 16)
                         .offset(x: -12)
@@ -475,7 +486,7 @@ private struct TaskList: View {
                     .scrollContentBackground(.hidden)
                     .padding(10)
                     .frame(minHeight: 150)
-                    .background(Theme.fill, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                    .background(Theme.fill, in: RoundedRectangle(cornerRadius: Theme.blockRadius, style: .continuous))
                     .onChange(of: draft) { _, text in
                         coordinator.settings.taskMemo = text
                     }
@@ -605,7 +616,7 @@ private struct MeetingStrip: View {
                 }
                 .padding(.horizontal, 14)
                 .padding(.vertical, 8)
-                .background(Theme.card, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                .background(Theme.card, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
                 .padding(.bottom, 16)
             }
         }

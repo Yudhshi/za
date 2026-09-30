@@ -1,14 +1,15 @@
 import AppKit
 import SwiftUI
 
-/// デザイントークン(2026-09 v8「Fauve Stage」:野獣派の関卡カード)。
-/// 黒い舞台の上に、一画面に一枚だけ「関卡カード」= 高彩度の平塗り色面 + 黒い文字。色は地、文字は図。
-/// - カード(HeroShape):3 つの角丸 + 右上ひとつの斜め切り。右端は面板の外へ出血する(山本の非対称・スプラトゥーンの関卡カード)。
+/// デザイントークン(2026-09 v9「青橙の関卡」:v8 の骨組みに v4〜v7 の鋭さと v1/v3/v5/v6 の墨迹を戻した)。
+/// 黒い舞台の上に、一画面に一枚だけ「関卡カード」= 平塗りの色面 + 黒い文字。色は青と橙の二色だけ:
+/// 色面が青なら墨迹(大数字・章)は橙、色面が橙(緊急・立て・座れ)なら墨迹は青。色面の上の文字はつねに黒。
+/// - カード(HeroShape):ほぼ直角(角丸 6)+ 右上ひとつの斜め切り(v5/v6 の切り角)。右端は面板の外へ出血する。
 /// - 拼縫(sacai):カードは一本の斜めの縫い目で「色布 = 見る」と「黒い里布 = する(数字・ボタン)」に分かれる。
+/// - 墨迹(スプラトゥーン):主役の数字は墨の塊の上に載る(v1/v3/v5/v6)。章(NICE!/MISS)も墨迹。
 /// - 褶皺(三宅):文字を載せない計量条(PleatGauge)を一画面に一本だけ。
-/// - 橡皮管:ボタンは胶囊。押すと潰れて戻る。章(NICE!/MISS)は墨迹のまま。
-/// - iOS 27:小窓の外枠だけ Liquid Glass。文字はガラスの上に置かない。
-/// 文字サイズは 12/13/15/22 + 大数字/見出し語/喊声。中文は直立の PingFang、幅の変形(expanded/compressed)は英語と数字だけ。
+/// - ボタンは角の立った塗りの塊(v4/v7)。胶囊は使わない。押すと潰れて戻る。
+/// 文字サイズは 12/13/15/22 + 大数字/見出し語/喊声。中文は直立の PingFang、幅の変形(expanded/compressed)と斜体は英語と数字だけ。
 /// 日付は英語の曜日(TUESDAY)だけ。月日はどこにも出さない
 enum Theme {
     static let panelWidth: CGFloat = 520
@@ -39,23 +40,23 @@ enum Theme {
     static let ink = rgb(0x0C0C0E)
     static let hairline = Color.white.opacity(0.08)
 
-    // 野獣派の関卡色。一画面に一色、色面の上の文字は黒(钴蓝だけ白)
-    static let chrome = rgb(0xFFC72C)      // 今日 NEXT。黒文字 12.5:1
-    static let vermilion = rgb(0xF24A2C)   // 緊急:NOW / 開始 5 分以内 / STAND UP。黒文字 5.4:1(灰文字・13pt 未満は禁止)
-    static let viridian = rgb(0x22D37E)    // 英语 / STANDING。黒文字 9.9:1
-    static let cobalt = rgb(0x1E44C4)      // SIT DOWN。唯一の白文字の面 7.8:1
-    static let rose = rgb(0xFF9CC7)        // CLEAR!。黒文字 10.1:1
-    /// 夜(19:00–07:00)は主役色を少し落とす(黒文字はなお 10.8:1 / 7.8:1)
-    static let chromeNight = rgb(0xF2B71E)
-    static let viridianNight = rgb(0x1FBB71)
+    // 青橙の二色墨。一画面に一色の色面 + もう一色の墨迹。色面の上の文字はつねに黒(白文字は使わない:橙に白は 2.6:1)
+    static let teal = rgb(0x1FD1C4)        // 青:今日 NEXT / 英语 / STANDING。黒文字 11.0:1
+    static let orange = rgb(0xFF7A1A)      // 橙:緊急(NOW / 開始 5 分以内)/ STAND UP / SIT DOWN / CLEAR!。黒文字 8.0:1
+    /// 夜(19:00–07:00)は少し落とす(黒文字はなお 8.2:1 / 6.7:1)
+    static let tealNight = rgb(0x19B5AA)
+    static let orangeNight = rgb(0xEA6D12)
 
     static func isNight(_ date: Date = Date(), calendar: Calendar = .current) -> Bool {
         let hour = calendar.component(.hour, from: date)
         return hour < 7 || hour >= 19
     }
 
-    static let cardRadius: CGFloat = 22
+    /// 関卡カードの角(ほぼ直角。斜め切りだけが大きい)
+    static let cardRadius: CGFloat = 6
     static let chamfer: CGFloat = 28
+    /// ボタン・入力欄・小さな面の角
+    static let blockRadius: CGFloat = 5
 
     static func rgb(_ hex: UInt32) -> Color {
         Color(.sRGB, red: Double((hex >> 16) & 0xFF) / 255, green: Double((hex >> 8) & 0xFF) / 255,
@@ -85,7 +86,7 @@ enum Theme {
 
 // MARK: - 関卡(いま画面を支配する一色)
 
-/// 関卡色と、その色面の上に置ける文字・主ボタンの色。画面ごとに 1 つを環境値で流す
+/// 関卡色と、その色面の上に置ける文字・主ボタンの色、もう一方の色(墨迹)。画面ごとに 1 つを環境値で流す
 struct Level: Equatable {
     let color: Color
     /// 色面の上の文字
@@ -93,34 +94,33 @@ struct Level: Equatable {
     /// 色面の上の主ボタン(塗り・文字)
     let primaryFill: Color
     let primaryText: Color
-    /// 里布・舞台の上の主ボタンの塗り(文字は墨)。钴蓝だけ白(钴蓝に墨は 2.7:1 で読めない)
+    /// 里布・舞台の上の主ボタンの塗り(文字は墨)
     let liningPrimary: Color
+    /// 墨迹(主役の数字の塊・章)の色 = 色面と反対の色
+    let splat: Color
 
-    static let chrome = Level(color: Theme.chrome, ink: Theme.ink, primaryFill: Theme.ink,
-                              primaryText: Theme.white, liningPrimary: Theme.chrome)
-    static let chromeNight = Level(color: Theme.chromeNight, ink: Theme.ink, primaryFill: Theme.ink,
-                                   primaryText: Theme.white, liningPrimary: Theme.chromeNight)
-    static let vermilion = Level(color: Theme.vermilion, ink: Theme.ink, primaryFill: Theme.ink,
-                                 primaryText: Theme.white, liningPrimary: Theme.vermilion)
-    static let viridian = Level(color: Theme.viridian, ink: Theme.ink, primaryFill: Theme.ink,
-                                primaryText: Theme.white, liningPrimary: Theme.viridian)
-    static let viridianNight = Level(color: Theme.viridianNight, ink: Theme.ink, primaryFill: Theme.ink,
-                                     primaryText: Theme.white, liningPrimary: Theme.viridianNight)
-    static let rose = Level(color: Theme.rose, ink: Theme.ink, primaryFill: Theme.ink,
-                            primaryText: Theme.white, liningPrimary: Theme.rose)
-    static let cobalt = Level(color: Theme.cobalt, ink: Theme.white, primaryFill: Theme.white,
-                              primaryText: Theme.ink, liningPrimary: Theme.white)
+    static let teal = Level(color: Theme.teal, ink: Theme.ink, primaryFill: Theme.ink,
+                            primaryText: Theme.white, liningPrimary: Theme.teal, splat: Theme.orange)
+    static let tealNight = Level(color: Theme.tealNight, ink: Theme.ink, primaryFill: Theme.ink,
+                                 primaryText: Theme.white, liningPrimary: Theme.tealNight, splat: Theme.orangeNight)
+    static let orange = Level(color: Theme.orange, ink: Theme.ink, primaryFill: Theme.ink,
+                              primaryText: Theme.white, liningPrimary: Theme.orange, splat: Theme.teal)
+    static let orangeNight = Level(color: Theme.orangeNight, ink: Theme.ink, primaryFill: Theme.ink,
+                                   primaryText: Theme.white, liningPrimary: Theme.orangeNight, splat: Theme.tealNight)
     /// 主役が終わった/いない(灰いカード。文字は淡く)
     static let done = Level(color: Theme.card, ink: Theme.textFaint, primaryFill: Theme.fill,
-                            primaryText: Theme.white, liningPrimary: Theme.fill)
+                            primaryText: Theme.white, liningPrimary: Theme.fill, splat: Theme.fill)
 
-    /// 今日の関卡(夜は少し落とした铬黄)/ 英语の関卡(夜は少し落とした翠绿)
-    static func today(night: Bool) -> Level { night ? .chromeNight : .chrome }
-    static func english(night: Bool) -> Level { night ? .viridianNight : .viridian }
+    /// 今日・英语の関卡は青(夜は少し落とす)。緊急(NOW / 5 分以内 / 立て / 座れ)は橙
+    static func today(night: Bool) -> Level { night ? .tealNight : .teal }
+    static func english(night: Bool) -> Level { night ? .tealNight : .teal }
+    static func urgent(night: Bool) -> Level { night ? .orangeNight : .orange }
+    /// CLEAR!(橙)
+    static let clear = Level.orange
 }
 
 private struct LevelKey: EnvironmentKey {
-    static let defaultValue = Level.chrome
+    static let defaultValue = Level.teal
 }
 
 /// いま色面(関卡カード)の上にいるか。ボタン・入力欄・計量条が色を切り替える
@@ -142,7 +142,7 @@ extension EnvironmentValues {
 
 // MARK: - 形
 
-/// 関卡カード:3 つの角丸 + 右上ひとつの斜め切り。この app で唯一の斜線
+/// 関卡カード:ほぼ直角の 3 つの角 + 右上ひとつの斜め切り(v5/v6 の切り角)
 struct HeroShape: Shape {
     var radius: CGFloat = Theme.cardRadius
     var chamfer: CGFloat = Theme.chamfer
@@ -233,11 +233,11 @@ private struct InputSurface: ViewModifier {
             .padding(.horizontal, 14)
             .frame(height: height)
             .background(onLevel ? level.ink.opacity(0.12) : Theme.fill,
-                        in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                        in: RoundedRectangle(cornerRadius: Theme.blockRadius, style: .continuous))
             // フォーカスは下辺の 2pt の線(墨 / 関卡色)。.plain の入力欄は自分で描かないと分からない
             .overlay(alignment: .bottom) {
                 if focused {
-                    Capsule()
+                    Rectangle()
                         .fill(onLevel ? level.ink : level.color)
                         .frame(height: 2)
                         .padding(.horizontal, 10)
@@ -258,7 +258,7 @@ extension View {
         self.padding(padding)
             .frame(maxWidth: .infinity, alignment: .leading)
             .foregroundStyle(Theme.white)
-            .background(Theme.card, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+            .background(Theme.card, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
     }
 
     func inputField(height: CGFloat, focused: Bool = false) -> some View {
@@ -313,7 +313,7 @@ struct PleatGauge: View {
             }
         }
         .frame(height: 10)
-        .clipShape(Capsule())
+        .clipShape(RoundedRectangle(cornerRadius: 2, style: .continuous))
         .accessibilityHidden(true)
     }
 
@@ -399,7 +399,7 @@ struct TabItem<Value: Hashable>: Identifiable {
 struct PillTabs<Value: Hashable>: View {
     let items: [TabItem<Value>]
     @Binding var selection: Value
-    var color: Color = Theme.chrome
+    var color: Color = Theme.teal
     var size: CGFloat = 13
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Namespace private var pill
@@ -433,7 +433,7 @@ struct PillTabs<Value: Hashable>: View {
             .frame(height: size + 13)
             .background {
                 if selected {
-                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    RoundedRectangle(cornerRadius: 4, style: .continuous)
                         .fill(color)
                         .matchedGeometryEffect(id: "pill", in: pill)
                 }
@@ -487,7 +487,7 @@ struct UnderlineTabs<Value: Hashable>: View {
             .padding(.bottom, 7)
             .overlay(alignment: .bottom) {
                 if selected {
-                    Capsule()
+                    Rectangle()
                         .fill(Theme.white)
                         .frame(height: 2)
                         .matchedGeometryEffect(id: "underline", in: underline)
@@ -505,7 +505,6 @@ struct Eyebrow: View {
     var lead: String?
     var text: String = ""
     var trail: String?
-    @Environment(\.level) private var level
 
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: 8) {
@@ -518,8 +517,8 @@ struct Eyebrow: View {
             if !text.isEmpty {
                 Text(text)
                     .font(Theme.font(12, .semibold).monospacedDigit())
-                    // 朱红の上では薄くしない(黒 5.4:1 しかないので、灰にすると 4.5:1 を割る)
-                    .opacity(level == .vermilion ? 1 : 0.72)
+                    // 青・橙とも黒 72% でなお 5:1 以上
+                    .opacity(0.72)
             }
             if let trail {
                 Text(trail)
@@ -568,7 +567,7 @@ struct KeyHint: View {
     }
 }
 
-/// 胶囊のボタン(橡皮管)。押すと横に伸びて縦に潰れ、弾んで戻る。
+/// 角の立った塗りの塊のボタン(v4/v7)。押すと横に伸びて縦に潰れ、弾んで戻る。
 /// primary:舞台の上では関卡色の塗り + 墨の文字、色面の上では墨の塗り + 白の文字(裏返し)。
 /// secondary:舞台の上では灰の塗り、色面の上では 2pt の描線。quiet:文字だけ
 struct CommandButtonStyle: ButtonStyle {
@@ -607,7 +606,7 @@ struct CommandButtonBody: View {
             .padding(.horizontal, square ? 0 : (kind == .quiet ? 2 : (small ? 12 : 18)))
             .frame(minWidth: square ? height : nil, maxWidth: wide ? .infinity : nil, minHeight: height)
             .background { background }
-            .contentShape(Capsule())
+            .contentShape(shape)
             .scaleEffect(x: pressed ? 1.04 : 1, y: pressed ? 0.94 : 1)
             .opacity(isEnabled ? 1 : 0.35)
             .animation(reduceMotion ? .easeInOut(duration: 0.12) : .spring(duration: 0.18, bounce: 0.5),
@@ -615,21 +614,25 @@ struct CommandButtonBody: View {
             .onHover { hovering = $0 }
     }
 
+    private var shape: RoundedRectangle {
+        RoundedRectangle(cornerRadius: Theme.blockRadius, style: .continuous)
+    }
+
     @ViewBuilder
     private var background: some View {
         switch kind {
         case .primary:
-            Capsule().fill((onLevel ? level.primaryFill : level.liningPrimary).opacity(hovering ? 0.88 : 1))
+            shape.fill((onLevel ? level.primaryFill : level.liningPrimary).opacity(hovering ? 0.88 : 1))
         case .secondary:
             if onLevel {
-                Capsule().fill(level.ink.opacity(hovering ? 0.12 : 0))
-                    .overlay(Capsule().strokeBorder(level.ink, lineWidth: 2))
+                shape.fill(level.ink.opacity(hovering ? 0.12 : 0))
+                    .overlay(shape.strokeBorder(level.ink, lineWidth: 2))
             } else {
-                Capsule().fill(hovering ? Theme.rgb(0x333339) : Theme.fill)
+                shape.fill(hovering ? Theme.rgb(0x333339) : Theme.fill)
             }
         case .quiet:
             if onLevel {
-                Capsule().fill(level.ink.opacity(hovering ? 0.12 : 0))
+                shape.fill(level.ink.opacity(hovering ? 0.12 : 0))
             } else {
                 EmptyView()
             }
@@ -684,7 +687,37 @@ struct BigNumber: View {
     }
 }
 
-/// 答えたときの章(NICE! / MISS)。インクはここだけ。NICE! は铬黄に墨、MISS は白に墨
+/// 主役の数字を墨の塊に載せる(v1/v3/v5/v6 の墨迹の数字)。数字は縦長の極太の斜体、単位は直立。
+/// 塊の色は関卡色と反対の色(青の面なら橙)。文字は墨
+struct SplatNumber<Number: View>: View {
+    let unit: String
+    var size: CGFloat = 60
+    /// nil = level.splat
+    var color: Color?
+    @ViewBuilder var number: () -> Number
+    @Environment(\.level) private var level
+
+    var body: some View {
+        VStack(alignment: .trailing, spacing: 2) {
+            number()
+                .font(Theme.numeral(size).italic())
+                .foregroundStyle(Theme.ink)
+                .lineLimit(1)
+                .minimumScaleFactor(0.5)
+            if !unit.isEmpty {
+                Text(unit)
+                    .font(Theme.font(12, .bold))
+                    .foregroundStyle(Theme.ink)
+            }
+        }
+        .padding(.horizontal, 22)
+        .padding(.vertical, 12)
+        .background(InkSplat(seed: 21, lobes: 11, depth: 0.14).fill(color ?? level.splat))
+        .accessibilityElement(children: .combine)
+    }
+}
+
+/// 答えたときの章(NICE! / MISS)。NICE! は橙に墨、MISS は白に墨
 struct Stamp: View {
     let good: Bool
 
@@ -695,11 +728,27 @@ struct Stamp: View {
             .foregroundStyle(Theme.ink)
             .padding(.horizontal, 24)
             .padding(.vertical, 14)
-            .background(splat.fill(good ? Theme.chrome : Theme.white))
-            // 墨の縁取り(黄が緑の上に落ちても輪郭が残る)
+            .background(splat.fill(good ? Theme.orange : Theme.white))
+            // 墨の縁取り(橙が青の上に落ちても輪郭が残る)
             .overlay(splat.stroke(Theme.ink, lineWidth: 2))
             .rotationEffect(.degrees(-8))
             .allowsHitTesting(false)
             .accessibilityLabel(good ? "答对了" : "答错了")
+    }
+}
+
+// MARK: - 窓を掴む所
+
+/// ここを掴むと窓ごと動く(面板の曜日の行・小窓の上段)。ボタンの無い所にだけ敷く
+struct WindowDragArea: NSViewRepresentable {
+    func makeNSView(context: Context) -> DragView { DragView() }
+    func updateNSView(_ nsView: DragView, context: Context) {}
+
+    final class DragView: NSView {
+        override var mouseDownCanMoveWindow: Bool { true }
+
+        override func mouseDown(with event: NSEvent) {
+            window?.performDrag(with: event)
+        }
     }
 }
