@@ -62,6 +62,51 @@ public enum BreakReminder {
 
     public static let caution = "※ 如有麻木或疼痛请停止"
 
+    /// 手順の文の中の数(秒・回・分)。文字の代わりに図と数字で見せるために取り出す
+    public struct StepMeta: Equatable, Sendable {
+        public var seconds: Int?
+        public var reps: Int?
+        public var minutes: Int?
+
+        public init(seconds: Int? = nil, reps: Int? = nil, minutes: Int? = nil) {
+            self.seconds = seconds
+            self.reps = reps
+            self.minutes = minutes
+        }
+
+        /// 「保持 5 秒后放松。做 10 次」→ 5 秒・10 回。「20 秒 × 2 次」→ 20 秒・2 回。全角数字も読む
+        public static func parse(_ text: String) -> StepMeta {
+            let normalized = text.applyingTransform(.fullwidthToHalfwidth, reverse: false) ?? text
+            func first(_ pattern: String) -> Int? {
+                guard let regex = try? NSRegularExpression(pattern: pattern),
+                      let match = regex.firstMatch(in: normalized, range: NSRange(normalized.startIndex..., in: normalized)),
+                      let range = Range(match.range(at: 1), in: normalized) else { return nil }
+                return Int(normalized[range])
+            }
+            return StepMeta(seconds: first(#"(\d+)\s*秒"#),
+                            reps: first(#"(?:×|x|X)\s*(\d+)"#) ?? first(#"(\d+)\s*(?:次|回)"#),
+                            minutes: first(#"(\d+)\s*分"#))
+        }
+    }
+
+    /// ストレッチの図(SF Symbols)。名前と手順のキーワードで選ぶので、設定で書き換えたものにも図が付く
+    public static func symbol(for stretch: Stretch) -> String {
+        let text = ([stretch.name] + stretch.steps).joined()
+        let table: [(keys: [String], symbol: String)] = [
+            (["走", "歩", "walk"], "figure.walk"),
+            (["呼吸", "息", "breath"], "lungs.fill"),
+            (["肩胛", "肩甲", "blade"], "figure.strengthtraining.functional"),
+            (["转肩", "肩回", "转动肩", "roll"], "figure.cooldown"),
+            (["颈", "首", "脖", "neck"], "figure.flexibility"),
+            (["胸", "chest"], "figure.arms.open"),
+            (["下巴", "顎", "あご", "chin"], "figure.stand"),
+        ]
+        for entry in table where entry.keys.contains(where: { text.localizedCaseInsensitiveContains($0) }) {
+            return entry.symbol
+        }
+        return "figure.cooldown"
+    }
+
     /// 会議とみなす予定:Google Meet のリンクがあるものだけ(ユーザー指定。
     /// Meet の無い予定は、参加者がいても Zoom 等でも会議扱いしない)
     static func isMeeting(_ e: MeetingEvent) -> Bool {

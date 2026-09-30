@@ -1,16 +1,13 @@
 import AppKit
 import SwiftUI
 
-/// デザイントークン(2026-09 v9「青橙の関卡」:v8 の骨組みに v4〜v7 の鋭さと v1/v3/v5/v6 の墨迹を戻した)。
-/// 黒い舞台の上に、一画面に一枚だけ「関卡カード」= 平塗りの色面 + 黒い文字。色は青と橙の二色だけ:
-/// 色面が青なら墨迹(大数字・章)は橙、色面が橙(緊急・立て・座れ)なら墨迹は青。色面の上の文字はつねに黒。
-/// - カード(HeroShape):ほぼ直角(角丸 6)+ 右上ひとつの斜め切り(v5/v6 の切り角)。右端は面板の外へ出血する。
-/// - 拼縫(sacai):カードは一本の斜めの縫い目で「色布 = 見る」と「黒い里布 = する(数字・ボタン)」に分かれる。
-/// - 墨迹(スプラトゥーン):主役の数字は墨の塊の上に載る(v1/v3/v5/v6)。章(NICE!/MISS)も墨迹。
-/// - 褶皺(三宅):文字を載せない計量条(PleatGauge)を一画面に一本だけ。
-/// - ボタンは角の立った塗りの塊(v4/v7)。胶囊は使わない。押すと潰れて戻る。
-/// 文字サイズは 12/13/15/22 + 大数字/見出し語/喊声。中文は直立の PingFang、幅の変形(expanded/compressed)と斜体は英語と数字だけ。
-/// 日付は英語の曜日(TUESDAY)だけ。月日はどこにも出さない
+/// デザイントークン(2026-09 v10「Phantom Glass」:ペルソナ5 の切り紙 × iOS 27 の Liquid Glass)。
+/// 形はペルソナ5:文字を載せる面はすべて「切り紙の札」(黒紙に白、白紙に墨、青/橙の紙に墨)。辺は斜め、右上をひと口かじる。
+/// 一覧はメニュー:行が 1 枚ずつ札で、選んだ行は関卡色になって ▶ が付く。英語の喊声は斜体・横広・大文字、小さな札は 3〜4° 傾く。中文は直立。
+/// 材質は iOS 27:窓そのものが Liquid Glass(机が透ける)、上の帯・下の帯・切り替えはガラスの胶囊、選んだ透镜は滑って変形する。
+/// 色は青と橙の二色だけ:色面が青なら墨迹(大数字・章)は橙、色面が橙(緊急・立て・座れ)なら墨迹は青。色面の上の文字はつねに黒。
+/// 重ねない:章は指令列の上の自分の枠に出る、数字は自分の格に居る。文字は減らして図で語る(小窓の図・下の帯の絵文字)。
+/// 文字サイズは 12/13/15/22 + 大数字/見出し語/喊声。日付は英語の曜日(TUESDAY)だけ。月日はどこにも出さない
 enum Theme {
     static let panelWidth: CGFloat = 520
     static let padding: CGFloat = 20
@@ -39,6 +36,9 @@ enum Theme {
     /// 色面の上の文字(墨)
     static let ink = rgb(0x0C0C0E)
     static let hairline = Color.white.opacity(0.08)
+    /// 切り紙:黒い札(行・指令・里布)と白い札(ラベル・選んだモード)
+    static let plate = rgb(0x111114)
+    static let paper = rgb(0xF4F2EC)
 
     // 青橙の二色墨。一画面に一色の色面 + もう一色の墨迹。色面の上の文字はつねに黒(白文字は使わない:橙に白は 2.6:1)
     static let teal = rgb(0x1FD1C4)        // 青:今日 NEXT / 英语 / STANDING。黒文字 11.0:1
@@ -52,11 +52,12 @@ enum Theme {
         return hour < 7 || hour >= 19
     }
 
-    /// 関卡カードの角(ほぼ直角。斜め切りだけが大きい)
-    static let cardRadius: CGFloat = 6
-    static let chamfer: CGFloat = 28
-    /// ボタン・入力欄・小さな面の角
-    static let blockRadius: CGFloat = 5
+    /// 札のひと口(右上の斜め切り)
+    static let chamfer: CGFloat = 22
+    /// 札の辺の傾き(横に何 pt ずれるか)
+    static let skew: CGFloat = 9
+    /// 入力欄・小さな面の角(ほぼ直角)
+    static let blockRadius: CGFloat = 3
 
     static func rgb(_ hex: UInt32) -> Color {
         Color(.sRGB, red: Double((hex >> 16) & 0xFF) / 255, green: Double((hex >> 8) & 0xFF) / 255,
@@ -142,47 +143,91 @@ extension EnvironmentValues {
 
 // MARK: - 形
 
-/// 関卡カード:ほぼ直角の 3 つの角 + 右上ひとつの斜め切り(v5/v6 の切り角)
-struct HeroShape: Shape {
-    var radius: CGFloat = Theme.cardRadius
-    var chamfer: CGFloat = Theme.chamfer
+/// 角をひと口かじった長方形(関卡カード・小窓の札)。corner でどの角か
+struct BiteShape: Shape {
+    enum Corner { case topRight, bottomLeft }
+    var corner: Corner = .topRight
+    var size: CGFloat = Theme.chamfer
 
     func path(in r: CGRect) -> Path {
-        let radius = min(self.radius, min(r.width, r.height) / 2)
-        let chamfer = min(self.chamfer, min(r.width, r.height) / 2)
+        let s = min(size, min(r.width, r.height) / 2)
         var p = Path()
-        p.move(to: CGPoint(x: r.minX + radius, y: r.minY))
-        p.addLine(to: CGPoint(x: r.maxX - chamfer, y: r.minY))
-        p.addLine(to: CGPoint(x: r.maxX, y: r.minY + chamfer))
-        p.addLine(to: CGPoint(x: r.maxX, y: r.maxY - radius))
-        // 角丸は接線円弧で(quadCurve より真円に近い)
-        p.addArc(tangent1End: CGPoint(x: r.maxX, y: r.maxY), tangent2End: CGPoint(x: r.maxX - radius, y: r.maxY),
-                 radius: radius)
-        p.addLine(to: CGPoint(x: r.minX + radius, y: r.maxY))
-        p.addArc(tangent1End: CGPoint(x: r.minX, y: r.maxY), tangent2End: CGPoint(x: r.minX, y: r.maxY - radius),
-                 radius: radius)
-        p.addLine(to: CGPoint(x: r.minX, y: r.minY + radius))
-        p.addArc(tangent1End: CGPoint(x: r.minX, y: r.minY), tangent2End: CGPoint(x: r.minX + radius, y: r.minY),
-                 radius: radius)
+        switch corner {
+        case .topRight:
+            p.move(to: CGPoint(x: r.minX, y: r.minY))
+            p.addLine(to: CGPoint(x: r.maxX - s, y: r.minY))
+            p.addLine(to: CGPoint(x: r.maxX, y: r.minY + s))
+            p.addLine(to: CGPoint(x: r.maxX, y: r.maxY))
+            p.addLine(to: CGPoint(x: r.minX, y: r.maxY))
+        case .bottomLeft:
+            p.move(to: CGPoint(x: r.minX, y: r.minY))
+            p.addLine(to: CGPoint(x: r.maxX, y: r.minY))
+            p.addLine(to: CGPoint(x: r.maxX, y: r.maxY))
+            p.addLine(to: CGPoint(x: r.minX + s, y: r.maxY))
+            p.addLine(to: CGPoint(x: r.minX, y: r.maxY - s))
+        }
         p.closeSubpath()
         return p
     }
 }
 
-/// 拼縫の左側(色布)。縫い目は上端 62%・下端 56% の斜線。すべてのカードで同じ傾き。
-/// 里布はカード全面に敷き、その上に色布を重ねる(2 枚を突き合わせると縫い目に隙間が見える)。
-/// SeamLayout はこの 2 つの定数で左右の幅を決める(左の文字は縫い目の下端より左、右の指令列は上端より右)
-struct SeamShape: Shape {
-    static let top: CGFloat = 0.62
-    static let bottom: CGFloat = 0.56
-    var top: CGFloat = SeamShape.top
-    var bottom: CGFloat = SeamShape.bottom
+/// 関卡カードの外形(右上ひと口)
+typealias HeroShape = BiteShape
+
+/// 切り紙の札(ペルソナ5):平行四辺形。bite > 0 なら右上もかじる
+struct PhantomPlate: Shape {
+    var skew: CGFloat = Theme.skew
+    var bite: CGFloat = 0
 
     func path(in r: CGRect) -> Path {
+        let skew = min(self.skew, r.width / 3)
+        let bite = min(self.bite, min(r.width, r.height) / 2)
+        var p = Path()
+        p.move(to: CGPoint(x: r.minX + skew, y: r.minY))
+        if bite > 0 {
+            p.addLine(to: CGPoint(x: r.maxX - bite, y: r.minY))
+            p.addLine(to: CGPoint(x: r.maxX, y: r.minY + bite))
+        } else {
+            p.addLine(to: CGPoint(x: r.maxX, y: r.minY))
+        }
+        p.addLine(to: CGPoint(x: r.maxX - skew, y: r.maxY))
+        p.addLine(to: CGPoint(x: r.minX, y: r.maxY))
+        p.closeSubpath()
+        return p
+    }
+}
+
+/// 章の爆ぜた形(ペルソナ5 の「ヒット」)。山と谷が交互に並ぶ 22 の角。文字を載せるので谷は浅め
+struct Burst: Shape {
+    func path(in r: CGRect) -> Path {
+        let radii: [CGFloat] = [1, 0.78, 0.96, 0.72, 1, 0.8, 0.94, 0.74, 0.98, 0.76, 1,
+                                0.8, 0.95, 0.73, 0.99, 0.78, 0.96, 0.74, 1, 0.79, 0.97, 0.75]
+        let c = CGPoint(x: r.midX, y: r.midY)
+        var p = Path()
+        for (i, k) in radii.enumerated() {
+            let a = Double(i) / Double(radii.count) * 2 * .pi - .pi / 2
+            let pt = CGPoint(x: c.x + CGFloat(cos(a)) * r.width / 2 * k, y: c.y + CGFloat(sin(a)) * r.height / 2 * k)
+            if i == 0 { p.move(to: pt) } else { p.addLine(to: pt) }
+        }
+        p.closeSubpath()
+        return p
+    }
+}
+
+/// 色布(見る)の札:関卡カードの左に載る切り紙。右の辺はギザギザ(ペルソナ5)。
+/// SeamLayout はこの 2 つの定数で左右の幅を決める(左の文字は bottom より左、右の指令列は top より右)
+struct SeamShape: Shape {
+    static let top: CGFloat = 0.60
+    static let bottom: CGFloat = 0.54
+
+    func path(in r: CGRect) -> Path {
+        let w = r.width, h = r.height
         var p = Path()
         p.move(to: CGPoint(x: r.minX, y: r.minY))
-        p.addLine(to: CGPoint(x: r.minX + r.width * top, y: r.minY))
-        p.addLine(to: CGPoint(x: r.minX + r.width * bottom, y: r.maxY))
+        p.addLine(to: CGPoint(x: r.minX + w * Self.top, y: r.minY))
+        p.addLine(to: CGPoint(x: r.minX + w * Self.top - 26, y: r.minY + h * 0.30))
+        p.addLine(to: CGPoint(x: r.minX + w * Self.top - 6, y: r.minY + h * 0.44))
+        p.addLine(to: CGPoint(x: r.minX + w * Self.bottom, y: r.maxY))
         p.addLine(to: CGPoint(x: r.minX, y: r.maxY))
         p.closeSubpath()
         return p
@@ -205,7 +250,7 @@ private struct HeroSurface: ViewModifier {
             .background {
                 ZStack {
                     if seam {
-                        Theme.lining
+                        Theme.plate
                         SeamShape().fill(level.color)
                     } else {
                         level.color
@@ -253,12 +298,19 @@ extension View {
         modifier(HeroSurface(seam: seam, bleed: bleed))
     }
 
-    /// 脇役の面(灰)。会議条・空の主役・素材なしなど
+    /// 脇役の札(黒い切り紙)。会議条・空の主役・素材なしなど
     func card(padding: CGFloat = 20) -> some View {
         self.padding(padding)
             .frame(maxWidth: .infinity, alignment: .leading)
             .foregroundStyle(Theme.white)
-            .background(Theme.card, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .background(Theme.plate, in: BiteShape())
+    }
+
+    /// iOS 27 の浮いたガラスの帯(上の帯・下の帯)。文字は 13pt 以上の太字か絵文字だけ
+    func glassBar() -> some View {
+        self.padding(.horizontal, 14)
+            .frame(height: 40)
+            .glassEffect(.regular.tint(Color.white.opacity(0.05)), in: Capsule())
     }
 
     func inputField(height: CGFloat, focused: Bool = false) -> some View {
@@ -313,7 +365,7 @@ struct PleatGauge: View {
             }
         }
         .frame(height: 10)
-        .clipShape(RoundedRectangle(cornerRadius: 2, style: .continuous))
+        .clipShape(PhantomPlate(skew: 4))
         .accessibilityHidden(true)
     }
 
@@ -395,7 +447,7 @@ struct TabItem<Value: Hashable>: Identifiable {
     var id: Value { value }
 }
 
-/// 面を切り替える瓦片(今日 / 英语)。選んだものだけ関卡色の瓦片、ほかは灰の文字だけ(溝は無い)
+/// 面を切り替えるガラスの胶囊(今日 / 英语)。選んだものは関卡色の透镜(滑って変形する)、ほかは灰の文字
 struct PillTabs<Value: Hashable>: View {
     let items: [TabItem<Value>]
     @Binding var selection: Value
@@ -410,6 +462,8 @@ struct PillTabs<Value: Hashable>: View {
                 tab(item)
             }
         }
+        .padding(3)
+        .glassEffect(.regular.tint(Color.white.opacity(0.06)), in: Capsule())
         .fixedSize()
     }
 
@@ -433,12 +487,12 @@ struct PillTabs<Value: Hashable>: View {
             .frame(height: size + 13)
             .background {
                 if selected {
-                    RoundedRectangle(cornerRadius: 4, style: .continuous)
+                    Capsule()
                         .fill(color)
                         .matchedGeometryEffect(id: "pill", in: pill)
                 }
             }
-            .contentShape(Rectangle())
+            .contentShape(Capsule())
         }
         .buttonStyle(.plain)
         .accessibilityAddTraits(selected ? .isSelected : [])
@@ -452,16 +506,15 @@ struct PillTabs<Value: Hashable>: View {
     }
 }
 
-/// 同じ面の中で「もの」を切り替えるタブ(单词 / 考点词…)。選んだものの下に白い細い線(色は関卡カードに譲る)
+/// 同じ面の中で「もの」を切り替える札(单词 / 考点词…)。選んだものは白い札に墨、ほかは黒い札に白
 struct UnderlineTabs<Value: Hashable>: View {
     let items: [TabItem<Value>]
     @Binding var selection: Value
-    var size: CGFloat = 14
+    var size: CGFloat = 13
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @Namespace private var underline
 
     var body: some View {
-        HStack(spacing: 18) {
+        HStack(spacing: 6) {
             ForEach(items) { item in
                 tab(item)
             }
@@ -474,45 +527,60 @@ struct UnderlineTabs<Value: Hashable>: View {
         return Button {
             withAnimation(reduceMotion ? nil : .spring(duration: 0.25, bounce: 0.2)) { selection = item.value }
         } label: {
-            HStack(alignment: .firstTextBaseline, spacing: 3) {
+            HStack(alignment: .firstTextBaseline, spacing: 5) {
                 Text(item.title)
-                    .font(Theme.font(size, .semibold))
-                    .foregroundStyle(selected ? Theme.white : Theme.textSoft)
+                    .font(Theme.font(size, selected ? .bold : .semibold))
                 if let badge = item.badge, badge > 0 {
                     Text("\(badge)")
-                        .font(Theme.font(12, .medium).monospacedDigit())
-                        .foregroundStyle(Theme.textFaint)
+                        .font(Theme.font(12, .bold).monospacedDigit())
+                        .opacity(0.7)
                 }
             }
-            .padding(.bottom, 7)
-            .overlay(alignment: .bottom) {
-                if selected {
-                    Rectangle()
-                        .fill(Theme.white)
-                        .frame(height: 2)
-                        .matchedGeometryEffect(id: "underline", in: underline)
-                }
-            }
-            .contentShape(Rectangle())
+            .foregroundStyle(selected ? Theme.ink : Theme.white)
+            .padding(.horizontal, 12)
+            .frame(height: 26)
+            .background(PhantomPlate().fill(selected ? Theme.paper : Theme.plate))
+            .contentShape(PhantomPlate())
         }
         .buttonStyle(.plain)
         .accessibilityAddTraits(selected ? .isSelected : [])
     }
 }
 
-/// 小さなラベル行。先頭の英語(NEXT / NOW / STAND UP)は横に広い極太、続く文字は細く薄く。色は周りの文字色を継ぐ
+/// 切り紙の小さな札に載せた英語の喊声(NEXT / STAND UP / NEW)。色面の上では黒札に白、舞台では白札に墨(dark で黒札に固定)
+struct PlateLabel: View {
+    let text: String
+    var tint: Color?
+    var dark: Bool?
+    var tilt: Double = -3
+    @Environment(\.onLevel) private var onLevel
+
+    var body: some View {
+        let onDark = dark ?? onLevel
+        Text(text)
+            .font(Theme.shout(12))
+            .tracking(0.8)
+            .textCase(.uppercase)
+            .foregroundStyle(tint ?? (onDark ? Theme.white : Theme.ink))
+            .padding(.horizontal, 10)
+            .frame(height: 24)
+            .background(PhantomPlate().fill(onDark ? Theme.plate : Theme.paper))
+            .rotationEffect(.degrees(tilt))
+            .fixedSize()
+    }
+}
+
+/// 小さなラベル行。先頭の英語(NEXT / NOW / STAND UP)は傾いた札、続く文字は細く薄く、trail(NEW)は黒札に関卡色
 struct Eyebrow: View {
     var lead: String?
     var text: String = ""
     var trail: String?
+    @Environment(\.level) private var level
 
     var body: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 8) {
+        HStack(alignment: .center, spacing: 10) {
             if let lead {
-                Text(lead)
-                    .font(Theme.label())
-                    .tracking(1.5)
-                    .textCase(.uppercase)
+                PlateLabel(text: lead)
             }
             if !text.isEmpty {
                 Text(text)
@@ -521,26 +589,35 @@ struct Eyebrow: View {
                     .opacity(0.72)
             }
             if let trail {
-                Text(trail)
-                    .font(Theme.label())
-                    .tracking(1.5)
-                    .textCase(.uppercase)
+                PlateLabel(text: trail, tint: level.color, dark: true)
             }
         }
         .lineLimit(1)
     }
 }
 
-/// 小見出し(ラベルと同じ灰色)+ 右に添え物
+/// 小見出し:白い札に絵文字 + 英語の喊声(SCHEDULE / TASKS)。右に添え物
 struct SectionHeader<Trailing: View>: View {
     let title: String
+    var symbol: String?
     @ViewBuilder var trailing: () -> Trailing
 
     var body: some View {
-        HStack(alignment: .firstTextBaseline) {
-            Text(title)
-                .font(Theme.font(12, .semibold))
-                .foregroundStyle(Theme.textFaint)
+        HStack(alignment: .center, spacing: 10) {
+            HStack(spacing: 6) {
+                if let symbol {
+                    Image(systemName: symbol)
+                        .font(.system(size: 12, weight: .bold))
+                }
+                Text(title)
+                    .font(Theme.shout(12))
+                    .tracking(0.8)
+                    .textCase(.uppercase)
+            }
+            .foregroundStyle(Theme.ink)
+            .padding(.horizontal, 10)
+            .frame(height: 24)
+            .background(PhantomPlate().fill(Theme.paper))
             Spacer(minLength: 8)
             trailing()
         }
@@ -548,8 +625,8 @@ struct SectionHeader<Trailing: View>: View {
 }
 
 extension SectionHeader where Trailing == EmptyView {
-    init(_ title: String) {
-        self.init(title: title) { EmptyView() }
+    init(_ title: String, symbol: String? = nil) {
+        self.init(title: title, symbol: symbol) { EmptyView() }
     }
 }
 
@@ -567,9 +644,9 @@ struct KeyHint: View {
     }
 }
 
-/// 角の立った塗りの塊のボタン(v4/v7)。押すと横に伸びて縦に潰れ、弾んで戻る。
-/// primary:舞台の上では関卡色の塗り + 墨の文字、色面の上では墨の塗り + 白の文字(裏返し)。
-/// secondary:舞台の上では灰の塗り、色面の上では 2pt の描線。quiet:文字だけ
+/// 切り紙の札のボタン(ペルソナ5 の指令)。押すと横に伸びて縦に潰れ、弾んで戻る。
+/// primary:舞台の上では関卡色の札 + 墨の文字、色面の上では黒い札 + 白の文字(裏返し)。
+/// secondary:舞台の上ではガラス(半透明の白 + 1pt の縁)、色面の上では 2pt の描線。quiet:文字だけ
 struct CommandButtonStyle: ButtonStyle {
     enum Kind { case primary, secondary, quiet }
 
@@ -614,9 +691,7 @@ struct CommandButtonBody: View {
             .onHover { hovering = $0 }
     }
 
-    private var shape: RoundedRectangle {
-        RoundedRectangle(cornerRadius: Theme.blockRadius, style: .continuous)
-    }
+    private var shape: PhantomPlate { PhantomPlate() }
 
     @ViewBuilder
     private var background: some View {
@@ -626,9 +701,10 @@ struct CommandButtonBody: View {
         case .secondary:
             if onLevel {
                 shape.fill(level.ink.opacity(hovering ? 0.12 : 0))
-                    .overlay(shape.strokeBorder(level.ink, lineWidth: 2))
+                    .overlay(shape.stroke(level.ink, lineWidth: 2))
             } else {
-                shape.fill(hovering ? Theme.rgb(0x333339) : Theme.fill)
+                shape.fill(Color.white.opacity(hovering ? 0.16 : 0.10))
+                    .overlay(shape.stroke(Color.white.opacity(0.18), lineWidth: 1))
             }
         case .quiet:
             if onLevel {
@@ -717,21 +793,19 @@ struct SplatNumber<Number: View>: View {
     }
 }
 
-/// 答えたときの章(NICE! / MISS)。NICE! は橙に墨、MISS は白に墨
+/// 答えたときの章(NICE! / MISS):爆ぜた形。NICE! は橙に墨、MISS は白い紙に墨。指令列の上の枠(StampSlot)に出る
 struct Stamp: View {
     let good: Bool
 
     var body: some View {
-        let splat = InkSplat(seed: good ? 33 : 37, lobes: 10, depth: 0.22)
         Text(good ? "NICE!" : "MISS")
-            .font(Theme.shout(26))
+            .font(Theme.shout(20))
+            .tracking(1)
             .foregroundStyle(Theme.ink)
-            .padding(.horizontal, 24)
-            .padding(.vertical, 14)
-            .background(splat.fill(good ? Theme.orange : Theme.white))
-            // 墨の縁取り(橙が青の上に落ちても輪郭が残る)
-            .overlay(splat.stroke(Theme.ink, lineWidth: 2))
-            .rotationEffect(.degrees(-8))
+            .padding(.horizontal, 26)
+            .frame(height: 48)
+            .background(Burst().fill(good ? Theme.orange : Theme.paper))
+            .rotationEffect(.degrees(-6))
             .allowsHitTesting(false)
             .accessibilityLabel(good ? "答对了" : "答错了")
     }

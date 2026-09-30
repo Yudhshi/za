@@ -46,9 +46,13 @@ final class MainPanelController: NSObject, NSWindowDelegate {
             self?.fit(size)
         }
         let host = NSHostingView(rootView: root)
-        host.sizingOptions = []   // 大きさはこちらで決める(中身の高さは PanelRoot が知らせる)
+        // 初回の大きさは intrinsic で測り、その後は PanelRoot が知らせる高さで決める
+        host.sizingOptions = [.intrinsicContentSize]
+        let initial = host.intrinsicContentSize
+        host.sizingOptions = []
         panel.contentView = host
-        place(size: host.fittingSize)
+        place(size: initial.width > 0 && initial.height > 0 ? initial
+                    : CGSize(width: Theme.panelWidth, height: 400))
         panel.makeKeyAndOrderFront(nil)
         panel.orderFrontRegardless()
         installMonitors()
@@ -167,7 +171,7 @@ private struct PanelRoot: View {
 
     var body: some View {
         MenuContentView(coordinator: coordinator)
-            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
             .background(GeometryReader { geo in
                 Color.clear.preference(key: PanelSizeKey.self, value: geo.size)
             })

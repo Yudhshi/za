@@ -1,9 +1,9 @@
 import SwiftUI
 import NippoCore
 
-/// 英語タブ(v8)。主役は翠绿の関卡カード 1 枚(単語・考点词・语料・词典)。
-/// 拼縫の左(色布)に題、右(黒い里布)に指令列——RPG の戦闘メニューのように縦に積む。
-/// 答えたら里布の右上に NICE! / MISS の章、撤销はカードの下の 1 行。
+/// 英語タブ(v10)。主役は青い切り紙の関卡カード 1 枚(単語・考点词・语料・词典)。
+/// 左(色布)に題、右(黒い里布)に指令列——ペルソナ5 の戦闘メニューのように札を縦に積む。
+/// 答えたら指令列の上の枠(StampSlot)に NICE! / MISS の章(ボタンに重ならない)、撤销はカードの下の 1 行。
 /// OOUI:もの(单词・考点词・语料・词典)を選ぶ → カード(1 つ)か列表(まとまり)→ カードに付いた操作。
 /// 1 問 10 秒前後、キーボードだけで回せる(单词:空格 → 1〜4、考点词:1〜4 → 回车、语料:输入 → 回车、⌘Z 撤销)
 struct EnglishView: View {
@@ -77,55 +77,63 @@ struct EnglishView: View {
         }
     }
 
-    /// 今天 12/20 · 连续 4 天(達成したら ✓ が付いて白くなる。関卡色は主役の色面だけに使う)
+    /// ☆ 12/20 · 4(星は達成で塗りつぶし。文は help に)
     private var progress: some View {
         let reached = english.todayCount >= EnglishCoordinator.dailyGoal
-        return HStack(alignment: .firstTextBaseline, spacing: 0) {
-            Text(reached ? "✓ 今天 " : "今天 ")
-                .foregroundStyle(reached ? Theme.white : Theme.textFaint)
-            Text("\(english.todayCount)")
-                .monospacedDigit()
-                .foregroundStyle(Theme.white)
-            Text("/\(EnglishCoordinator.dailyGoal)")
+        return HStack(spacing: 5) {
+            Image(systemName: reached ? "star.fill" : "star")
+                .font(.system(size: 11, weight: .bold))
+            Text("\(english.todayCount)/\(EnglishCoordinator.dailyGoal)")
                 .monospacedDigit()
             if english.streak > 0 {
-                Text(" · 连续 \(english.streak) 天")
+                Text("· \(english.streak)")
+                    .monospacedDigit()
             }
         }
-        .font(Theme.font(12, .medium))
-        .foregroundStyle(Theme.textFaint)
+        .font(Theme.font(12, .bold))
+        .foregroundStyle(Theme.white)
         .fixedSize()
-        .help("每天目标 \(EnglishCoordinator.dailyGoal) 题")
+        .help("今天答了 \(english.todayCount) 题，目标 \(EnglishCoordinator.dailyGoal) 题"
+              + (english.streak > 0 ? "，连续 \(english.streak) 天" : ""))
     }
 }
 
 // MARK: - 共通
 
-/// 関卡カード:主役の面。答えたときの章を里布の右上に重ねる。撤销の行はカードの外(下)
+/// 関卡カード:主役の面。撤销の行はカードの外(下)。章は各カードが指令列の上に置く StampSlot に出る
 private struct CardFrame<Content: View>: View {
     @ObservedObject var english: EnglishCoordinator
     var seam = true
     @ViewBuilder var content: () -> Content
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             content()
                 .hero(seam: seam)
-                .overlay(alignment: .topTrailing) {
-                    // 弾むのは章だけ(カード全体には animation を掛けない)
-                    ZStack(alignment: .topTrailing) {
-                        if let flash = english.flash {
-                            Stamp(good: flash.good)
-                                .offset(x: -36, y: 14)
-                                .transition(.scale(scale: 0.3).combined(with: .opacity))
-                                .id(flash.id)
-                        }
-                    }
-                    .animation(reduceMotion ? nil : .spring(duration: 0.35, bounce: 0.5), value: english.flash)
-                }
             UndoLine(english: english)
         }
+    }
+}
+
+/// 章の置き場:指令列の上に常にある高さ 52 の枠。章はここに出るので、ボタンにも文字にも重ならない
+private struct StampSlot: View {
+    @ObservedObject var english: EnglishCoordinator
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    var body: some View {
+        ZStack(alignment: .trailing) {
+            Color.clear
+            if let flash = english.flash {
+                Stamp(good: flash.good)
+                    .transition(.scale(scale: 0.3).combined(with: .opacity))
+                    .id(flash.id)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .trailing)
+        .frame(height: 52)
+        // 弾むのは章だけ(カード全体には animation を掛けない)
+        .animation(reduceMotion ? nil : .spring(duration: 0.35, bounce: 0.5), value: english.flash)
+        .accessibilityHidden(english.flash == nil)
     }
 }
 
@@ -160,8 +168,8 @@ private struct UndoLine: View {
                     .buttonStyle(.command(.quiet, height: 20))
                     .keyboardShortcut("z", modifiers: .command)
             }
-            .font(Theme.font(12, .medium))
-            .foregroundStyle(Theme.textFaint)
+            .font(Theme.font(12, .semibold))
+            .foregroundStyle(Theme.textSoft)
             .padding(.top, 10)
         }
     }
@@ -249,6 +257,7 @@ private struct VocabView: View {
     @ViewBuilder
     private func commands(_ card: EnglishCoordinator.VocabCard) -> some View {
         VStack(spacing: 8) {
+            StampSlot(english: english)
             if card.known {
                 Button("恢复出题") { english.restoreCurrent() }
                     .buttonStyle(.command(.primary, height: 40, wide: true))
@@ -324,6 +333,7 @@ private struct ParaphraseCard: View {
                     }
                 } right: {
                     VStack(spacing: 8) {
+                        StampSlot(english: english)
                         ForEach(Array(q.choices.enumerated()), id: \.offset) { index, choice in
                             choiceButton(index, choice, question: q)
                         }
@@ -411,6 +421,7 @@ private struct SpellCard: View {
                     }
                 } right: {
                     VStack(spacing: 8) {
+                        StampSlot(english: english)
                         // 動作は全部里布の列に(播放 → 慢速 → 不知道 → 检查)
                         Button {
                             english.play()
@@ -596,7 +607,7 @@ private struct WordList: View {
                     .foregroundStyle(Theme.textFaint)
                     .padding(.vertical, 6)
             } else {
-                VStack(spacing: 0) {
+                VStack(spacing: 4) {
                     ForEach(rows) { row in
                         WordRow(row: row) { english.focus(row.id) }
                     }
@@ -630,27 +641,23 @@ private struct WordRow: View {
             HStack(spacing: 14) {
                 Text(row.title)
                     .font(Theme.font(15, .semibold))
-                    .foregroundStyle(Theme.white)
+                    .foregroundStyle(hovering ? Theme.ink : Theme.white)
                     .lineLimit(1)
                     .frame(width: 160, alignment: .leading)
                 Text(row.gloss)
                     .font(Theme.font(13, .regular))
-                    .foregroundStyle(Theme.textSoft)
+                    .foregroundStyle(hovering ? Theme.ink.opacity(0.7) : Theme.textSoft)
                     .lineLimit(1)
                 Spacer(minLength: 8)
                 Text(row.dueLabel)
                     .font(Theme.font(12, .semibold))
-                    .foregroundStyle(row.dueLabel == "今天" ? Theme.white : Theme.textFaint)
+                    .foregroundStyle(hovering ? Theme.ink.opacity(0.7)
+                                     : (row.dueLabel == "今天" ? Theme.white : Theme.textFaint))
             }
+            .padding(.horizontal, 16)
             .frame(height: 34)
-            .background {
-                if hovering {
-                    RoundedRectangle(cornerRadius: 4, style: .continuous)
-                        .fill(Theme.card)
-                        .padding(.horizontal, -8)
-                }
-            }
-            .contentShape(Rectangle())
+            .background(PhantomPlate().fill(hovering ? Theme.paper : Theme.plate))
+            .contentShape(PhantomPlate())
         }
         .buttonStyle(.plain)
         .onHover { hovering = $0 }

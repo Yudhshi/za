@@ -32,6 +32,27 @@ func runBreakReminderTests() {
                  "solo block")
     }
 
+    T.run("step meta: seconds / reps / minutes are read out of the sentence") {
+        let a = BreakReminder.StepMeta.parse("保持 5 秒后放松。做 10 次")
+        T.expectEqual(a, BreakReminder.StepMeta(seconds: 5, reps: 10), "秒 + 次")
+        let b = BreakReminder.StepMeta.parse("20 秒 × 2 次。手臂不要高过肩膀")
+        T.expectEqual(b, BreakReminder.StepMeta(seconds: 20, reps: 2), "× 2 wins over 2 次")
+        let c = BreakReminder.StepMeta.parse("用鼻子吸气 4 秒，让肚子鼓起来")
+        T.expectEqual(c, BreakReminder.StepMeta(seconds: 4), "seconds only")
+        let d = BreakReminder.StepMeta.parse("向后转 １０ 次")
+        T.expectEqual(d, BreakReminder.StepMeta(reps: 10), "full-width digits")
+        T.expectEqual(BreakReminder.StepMeta.parse("放松肩膀"), BreakReminder.StepMeta(), "nothing")
+    }
+
+    T.run("stretch symbol picked by keyword, with a fallback") {
+        let list = BreakReminder.stretches(from: BreakReminder.defaultStretches)
+        T.expectEqual(BreakReminder.symbol(for: list[0]), "figure.strengthtraining.functional", "肩胛")
+        T.expectEqual(BreakReminder.symbol(for: list[5]), "lungs.fill", "呼吸")
+        T.expectEqual(BreakReminder.symbol(for: list[6]), "figure.walk", "走")
+        T.expectEqual(BreakReminder.symbol(for: BreakReminder.Stretch(name: "自定义", steps: ["随便动一动"])),
+                      "figure.cooldown", "fallback")
+    }
+
     T.run("stretch blocks: name + steps, blank-line separated, rotation") {
         let list = BreakReminder.stretches(from: """
 

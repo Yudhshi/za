@@ -2,7 +2,7 @@ import AppKit
 import SwiftUI
 import NippoCore
 
-/// 画面上部中央に出す、座り/立ちの小窓。掴んで動かせる(動かした位置は次からも使う)。
+/// 画面上部中央に出す、座り/立ちの小窓(ガラスの枠 + 切り紙の札)。掴んで動かせる(動かした位置は次からも使う)。
 /// フォーカスを奪わない(打鍵中のアプリはそのまま)・全スペースとフルスクリーンの上にも出る
 @MainActor
 final class PosturePanelController {
@@ -88,8 +88,9 @@ private final class PromptPanel: NSPanel {
 
 // MARK: - 小窓の中身
 
-/// デスクトップの上に浮く小窓(v9):ガラスは使わない。上段は関卡色(問いと大数字)、下段は黒い里布(説明とボタン)。
-/// STAND UP と SIT DOWN は橙(いま動け)、STANDING は青(順調)。文字はつねに黒。上段を掴んで動かせる
+/// デスクトップの上に浮く小窓(v10):ガラスの枠の中に切り紙の札が 2 枚。
+/// 上の札は関卡色:人の図 + 英語の喊声 + 一句の問い(STAND UP / SIT DOWN は橙、STANDING は青)。
+/// 下の札は黒:ストレッチの姿勢の図 + 秒・回の数字の札 + 一行の動作 + 手順の点 + 指令。文字は減らして図で語る。上の札を掴んで動かせる
 struct PosturePromptView: View {
     @ObservedObject var coordinator: AppCoordinator
 
@@ -111,8 +112,11 @@ struct PosturePromptView: View {
             case nil: EmptyView()
             }
         }
-        .frame(width: 360)
+        .frame(width: 348)
         .environment(\.level, level)
+        .padding(12)
+        // iOS 27:枠だけガラス。文字はガラスの上に置かない
+        .glassEffect(.regular.tint(Color.black.opacity(0.45)), in: RoundedRectangle(cornerRadius: 26, style: .continuous))
         .padding(12)   // 影の分
         .environment(\.colorScheme, .dark)
         .environment(\.locale, Theme.locale)
@@ -124,20 +128,49 @@ struct PosturePromptView: View {
     }
 
     private var askStand: some View {
-        HemLayout {
-            Eyebrow(lead: "STAND UP", text: "已坐 \(sittingMinutes) 分钟")
-            Text("站起来了吗？")
-                .font(Theme.font(22, .semibold))
-                .padding(.top, 8)
+        let stretch = coordinator.promptStretch
+        return HemLayout {
+            Pictogram("figure.stand", size: 56)
+            VStack(alignment: .leading, spacing: 8) {
+                PlateLabel(text: "STAND UP", dark: true)
+                Text("站起来了吗？")
+                    .font(Theme.font(22, .semibold))
+            }
         } bottom: {
-            Text("把桌子升到手肘 90° 的高度。接下来做「\(coordinator.promptStretch.name)」，顺便去喝杯水")
-                .font(Theme.font(13, .medium))
-                .fixedSize(horizontal: false, vertical: true)
+            StepPanel(symbol: BreakReminder.symbol(for: stretch)) {
+                HStack(spacing: 6) {
+                    MetaPlate(symbol: "table.furniture", text: "90°")
+                        .help("把桌子升到手肘 90° 的高度")
+                    MetaPlate(symbol: "clock", text: "\(sittingMinutes) 分钟")
+                        .help("已经坐了 \(sittingMinutes) 分钟")
+                }
+                Text(stretch.name)
+                    .font(Theme.font(15, .semibold))
+                    .lineLimit(2)
+                    .padding(.top, 8)
+                HStack(spacing: 6) {
+                    Image(systemName: "drop.fill")
+                        .font(.system(size: 12, weight: .bold))
+                    Text("顺便喝杯水")
+                        .font(Theme.font(13, .semibold))
+                }
+                .foregroundStyle(Theme.textSoft)
+                .padding(.top, 8)
+            }
             HStack(spacing: 8) {
-                Button("站起来了") { coordinator.confirmStood() }
-                    .buttonStyle(.command(.primary, height: 40, wide: true))
-                Button("15 分钟后") { coordinator.snoozePosture(minutes: 15) }
-                    .buttonStyle(.command(.secondary, height: 40))
+                Button {
+                    coordinator.confirmStood()
+                } label: {
+                    Label("站起来了", systemImage: "checkmark")
+                }
+                .buttonStyle(.command(.primary, height: 40, wide: true))
+                Button {
+                    coordinator.snoozePosture(minutes: 15)
+                } label: {
+                    Label("15", systemImage: "clock")
+                }
+                .buttonStyle(.command(.secondary, height: 40))
+                .help("15 分钟后再提醒")
             }
             .padding(.top, 14)
         }
@@ -146,56 +179,143 @@ struct PosturePromptView: View {
     private var askSit: some View {
         let standing = max(0, Int(Date().timeIntervalSince(coordinator.postureSince) / 60))
         return HemLayout {
-            Eyebrow(lead: "SIT DOWN", text: "已站 \(standing) 分钟")
-            Text("坐下了吗？")
-                .font(Theme.font(22, .semibold))
-                .padding(.top, 8)
+            Pictogram("figure.seated.side", size: 56)
+            VStack(alignment: .leading, spacing: 8) {
+                PlateLabel(text: "SIT DOWN", dark: true)
+                Text("坐下了吗？")
+                    .font(Theme.font(22, .semibold))
+            }
         } bottom: {
-            Text("辛苦了。坐深一点，双脚踩实地面")
-                .font(Theme.font(13, .medium))
-                .fixedSize(horizontal: false, vertical: true)
+            StepPanel(symbol: "figure.seated.side") {
+                MetaPlate(symbol: "clock", text: "站了 \(standing) 分钟")
+                Text("坐深，双脚踩实")
+                    .font(Theme.font(15, .semibold))
+                    .padding(.top, 8)
+            }
             HStack(spacing: 8) {
-                Button("坐下了") { coordinator.confirmSat() }
-                    .buttonStyle(.command(.primary, height: 40, wide: true))
-                Button("再站 5 分钟") { coordinator.snoozePosture(minutes: 5) }
-                    .buttonStyle(.command(.secondary, height: 40))
+                Button {
+                    coordinator.confirmSat()
+                } label: {
+                    Label("坐下了", systemImage: "checkmark")
+                }
+                .buttonStyle(.command(.primary, height: 40, wide: true))
+                Button {
+                    coordinator.snoozePosture(minutes: 5)
+                } label: {
+                    Label("5", systemImage: "clock")
+                }
+                .buttonStyle(.command(.secondary, height: 40))
+                .help("再站 5 分钟")
             }
             .padding(.top, 14)
         }
     }
 }
 
-/// 上下二段の裾:上段は関卡色(看)、下段は里布(做)。まとめて関卡の形に裁つ
+/// 上下 2 枚の札:上は関卡色(図 + 問い)、下は黒(やり方)。上は右上、下は左下をひと口かじる
 private struct HemLayout<Top: View, Bottom: View>: View {
     @Environment(\.level) private var level
     @ViewBuilder var top: () -> Top
     @ViewBuilder var bottom: () -> Bottom
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            VStack(alignment: .leading, spacing: 0) { top() }
-                .padding(.horizontal, 20)
-                .padding(.top, 18)
-                .padding(.bottom, 16)
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(alignment: .center, spacing: 14) { top() }
+                .padding(.horizontal, 18)
+                .padding(.vertical, 16)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .foregroundStyle(level.ink)
-                .background(WindowDragArea())   // 上段を掴むと窓が動く
-                .background(level.color)
+                .background(WindowDragArea())   // 上の札を掴むと窓が動く
+                .background(BiteShape(corner: .topRight).fill(level.color))
                 .environment(\.onLevel, true)
             VStack(alignment: .leading, spacing: 0) { bottom() }
-                .padding(.horizontal, 20)
+                .padding(.horizontal, 18)
                 .padding(.top, 14)
                 .padding(.bottom, 16)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .foregroundStyle(Theme.white)
-                .background(Theme.lining)
+                .background(BiteShape(corner: .bottomLeft, size: 18).fill(Theme.plate))
                 .environment(\.onLevel, false)
         }
-        .clipShape(HeroShape())
     }
 }
 
-/// 站立中:上段に剩余时间(墨の大数字)+ 褶皺の計量条(1 褶 = 1 分)、下段に拉伸,一次一步
+/// 人の図(SF Symbols)。文字の代わり
+private struct Pictogram: View {
+    let symbol: String
+    var size: CGFloat = 56
+
+    init(_ symbol: String, size: CGFloat = 56) {
+        self.symbol = symbol
+        self.size = size
+    }
+
+    var body: some View {
+        Image(systemName: symbol)
+            .font(.system(size: size, weight: .medium))
+            .frame(width: size + 8, height: size + 8)
+            .accessibilityHidden(true)
+    }
+}
+
+/// やり方の段:左に姿勢の図(96 の札)、右に数字の札と一行
+private struct StepPanel<Content: View>: View {
+    let symbol: String
+    @ViewBuilder var content: () -> Content
+
+    var body: some View {
+        HStack(alignment: .center, spacing: 14) {
+            Image(systemName: symbol)
+                .font(.system(size: 60, weight: .regular))
+                .foregroundStyle(Theme.paper)
+                .frame(width: 92, height: 92)
+                .background(PhantomPlate(skew: 6).fill(Color.white.opacity(0.07)))
+                .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 0) { content() }
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+}
+
+/// 数字の札(白い紙に絵文字 + 「5 秒」「× 10」「90°」)
+private struct MetaPlate: View {
+    let symbol: String
+    let text: String
+
+    var body: some View {
+        HStack(spacing: 5) {
+            Image(systemName: symbol)
+                .font(.system(size: 11, weight: .bold))
+            Text(text)
+                .font(Theme.font(13, .bold).monospacedDigit())
+        }
+        .foregroundStyle(Theme.ink)
+        .padding(.horizontal, 10)
+        .frame(height: 26)
+        .background(PhantomPlate().fill(Theme.paper))
+        .fixedSize()
+    }
+}
+
+/// 手順の点(何番目か)。傾いた短い棒
+private struct StepDots: View {
+    let count: Int
+    let index: Int
+    @Environment(\.level) private var level
+
+    var body: some View {
+        HStack(spacing: 5) {
+            ForEach(0..<max(count, 1), id: \.self) { i in
+                PhantomPlate(skew: 3)
+                    .fill(i <= index ? level.color : Color.white.opacity(0.18))
+                    .frame(width: 14, height: 6)
+            }
+        }
+        .accessibilityLabel("第 \(index + 1) 步，共 \(count) 步")
+    }
+}
+
+/// 站立中:上の札に人の図・STANDING・墨迹の残り時間・褶皺の計量条(1 褶 = 1 分)、下の札に拉伸,一次一步(図で)
 private struct StandingGuide: View {
     @ObservedObject var coordinator: AppCoordinator
     @Environment(\.level) private var level
@@ -208,30 +328,26 @@ private struct StandingGuide: View {
             let remaining = max(0, due.timeIntervalSince(context.date))
             let elapsedMinutes = max(0, min(total, Int((Double(total) * 60 - remaining) / 60)))
             HemLayout {
-                HStack(alignment: .top) {
-                    VStack(alignment: .leading, spacing: 0) {
-                        Eyebrow(lead: "STANDING")
-                        Text("放松肩膀，手肘 90°")
-                            .font(Theme.font(13, .medium))
-                            .opacity(0.8)
-                            .padding(.top, 6)
+                VStack(alignment: .leading, spacing: 10) {
+                    HStack(alignment: .center, spacing: 14) {
+                        Pictogram("figure.stand", size: 44)
+                        PlateLabel(text: "STANDING", dark: true)
+                        Spacer(minLength: 8)
+                        SplatNumber(unit: "剩余", size: 34) {
+                            Text(timerInterval: min(context.date, due)...due, countsDown: true, showsHours: false)
+                        }
                     }
-                    Spacer()
-                    SplatNumber(unit: "剩余", size: 40) {
-                        Text(timerInterval: min(context.date, due)...due, countsDown: true, showsHours: false)
-                    }
+                    PleatGauge(states: (0..<total).map { $0 < elapsedMinutes ? .meeting : .empty })
                 }
-                PleatGauge(states: (0..<total).map { $0 < elapsedMinutes ? .meeting : .empty })
-                    .padding(.top, 12)
             } bottom: {
                 stretch
-                HStack {
+                HStack(spacing: 8) {
                     Spacer()
                     Button("关闭") { coordinator.closePosturePrompt() }
                         .buttonStyle(.command(.quiet, height: 22))
                         .help("关掉后也会继续计时，到点了再提醒你")
                 }
-                .padding(.top, 8)
+                .padding(.top, 6)
             }
         }
     }
@@ -240,52 +356,71 @@ private struct StandingGuide: View {
         let s = coordinator.promptStretch
         let step = coordinator.stretchStep
         let done = step >= s.steps.count
+        let meta = done ? BreakReminder.StepMeta() : BreakReminder.StepMeta.parse(s.steps[step])
         return VStack(alignment: .leading, spacing: 0) {
-            HStack(alignment: .firstTextBaseline) {
-                Text(s.name)
-                    .font(Theme.font(12, .semibold))
+            StepPanel(symbol: done ? "checkmark" : BreakReminder.symbol(for: s)) {
+                if done {
+                    Text("完成！接下来站着工作吧")
+                        .font(Theme.font(15, .semibold))
+                        .fixedSize(horizontal: false, vertical: true)
+                    HStack(spacing: 6) {
+                        Image(systemName: "drop.fill")
+                            .font(.system(size: 12, weight: .bold))
+                        Text("喝杯水")
+                            .font(Theme.font(13, .semibold))
+                    }
                     .foregroundStyle(Theme.textSoft)
-                Spacer()
-                if !s.steps.isEmpty && !done {
-                    Text("\(step + 1) / \(s.steps.count)")
-                        .font(Theme.font(12, .semibold).monospacedDigit())
-                        .foregroundStyle(Theme.textSoft)
+                    .padding(.top, 8)
+                } else {
+                    HStack(spacing: 6) {
+                        if let seconds = meta.seconds {
+                            MetaPlate(symbol: "clock", text: "\(seconds) 秒")
+                        }
+                        if let reps = meta.reps {
+                            MetaPlate(symbol: "repeat", text: "× \(reps)")
+                        }
+                        if meta.seconds == nil, meta.reps == nil, let minutes = meta.minutes {
+                            MetaPlate(symbol: "clock", text: "\(minutes) 分钟")
+                        }
+                        PlateLabel(text: "\(step + 1) / \(s.steps.count)", dark: true, tilt: 0)
+                    }
+                    Text(s.steps[step])
+                        .font(Theme.font(15, .semibold))
+                        .fixedSize(horizontal: false, vertical: true)
+                        .frame(maxWidth: .infinity, minHeight: 40, alignment: .topLeading)
+                        .padding(.top, 8)
+                    StepDots(count: s.steps.count, index: step)
+                        .padding(.top, 8)
                 }
             }
-            if done {
-                Text("完成！接下来站着工作吧")
-                    .font(Theme.font(15, .semibold))
-                    .padding(.top, 8)
-                Text("喝杯水")
-                    .font(Theme.font(13, .medium))
-                    .foregroundStyle(Theme.body)
-                    .padding(.top, 2)
-            } else {
-                Text(s.steps[step])
-                    .font(Theme.font(15, .semibold))
-                    .fixedSize(horizontal: false, vertical: true)
-                    .frame(maxWidth: .infinity, minHeight: 44, alignment: .topLeading)
-                    .padding(.top, 8)
+            if !done {
                 Text(BreakReminder.caution)
                     .font(Theme.font(12, .medium))
                     .foregroundStyle(Theme.textSoft)
+                    .padding(.top, 10)
             }
             HStack(spacing: 8) {
                 if step > 0 && !done {
-                    Button("上一步") { coordinator.moveStretchStep(by: -1) }
-                        .buttonStyle(.command(.secondary, height: 32))
-                }
-                Spacer()
-                if !done {
-                    Button(step == s.steps.count - 1 ? "做完了" : "下一步") {
-                        coordinator.moveStretchStep(by: 1)
+                    Button {
+                        coordinator.moveStretchStep(by: -1)
+                    } label: {
+                        Image(systemName: "chevron.left")
                     }
-                    .buttonStyle(.command(.primary, height: 32))
+                    .buttonStyle(.commandSquare(.secondary, size: 36))
+                    .help("上一步")
+                    .accessibilityLabel("上一步")
+                }
+                if !done {
+                    Button {
+                        coordinator.moveStretchStep(by: 1)
+                    } label: {
+                        Label(step == s.steps.count - 1 ? "做完了" : "下一步",
+                              systemImage: step == s.steps.count - 1 ? "checkmark" : "chevron.right")
+                    }
+                    .buttonStyle(.command(.primary, height: 36, wide: true))
                 }
             }
             .padding(.top, 12)
         }
-        .padding(14)
-        .background(Theme.card, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
     }
 }
