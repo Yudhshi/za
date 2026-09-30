@@ -59,14 +59,14 @@
 
 ## SM-2 评分（NippoCore `SRSState.applying`）
 
-新卡 interval 0、ease 2.5、reps 0、lapses 0。
+新卡 interval 0、ease 2.5、reps 0、lapses 0。`round` 为四舍五入到整数；下面的 reps 指评分**之前**的值。
 
-- `again`：interval 0、reps 0、lapses + 1、ease = max(1.3, ease − 0.2)
-- `hard`：reps + 1、ease = max(1.3, ease − 0.15)；interval = reps 为 1 时 1，否则 max(interval + 1, round(max(interval, 1) × 1.2))
-- `good`：reps + 1；interval = reps 为 1 时 1，reps 为 2 时 max(3, round(interval × ease))，否则 round(interval × ease)
-- `easy`：reps + 1、ease + 0.15；interval = reps 为 1 时 4，否则 round(interval × ease × 1.3)
+- `again`：interval = 0；reps = 0；lapses + 1；ease = max(1.3, ease − 0.2)
+- `hard`：interval = max(interval + 1, round(max(interval, 1) × 1.2))；ease = max(1.3, ease − 0.15)；reps + 1
+- `good`：reps 为 0 → interval 1；reps 为 1 → max(3, round(interval × ease))；否则 max(1, round(interval × ease))；reps + 1（ease 不变）
+- `easy`：reps 为 0 → interval 4；否则 max(1, round(interval × ease × 1.3))；ease + 0.15；reps + 1
 
-以 Swift 端 `Sources/NippoCore/English/EnglishDrill.swift` 与 `Sources/nippo-tests/EnglishTests.swift` 为准；Windows 实现请跑同一组用例。
+以 Swift 端 `Sources/NippoCore/English/EnglishDrill.swift` 与 `Sources/nippo-tests/EnglishTests.swift` 为准；Windows 实现请跑同一组用例（good 连续三次：1 → 3 → 8；之后 hard → 10、ease 2.35；again → 0、reps 0、lapses 1；新卡 easy → 4、新卡 hard → 1；ease 最低 1.3）。
 
 ## 统计
 
