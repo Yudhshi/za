@@ -63,6 +63,10 @@ func runSettingsTests() {
         T.expectEqual(s.ritualStrengthLog, [:])
         T.expectEqual(s.ritualVoice, true)
         T.expectEqual(s.breathHabit, true)
+        T.expectEqual(s.meetingStandAsk, true, "asks to stand for meetings by default")
+        T.expectEqual(s.callDetection, true, "mic / camera in use counts as a meeting by default")
+        s.callDetection = false
+        T.expectEqual(AppSettings(defaults: d).callDetection, false)
         T.expectEqual(s.breathLog, [:])
         s.breathLog = BreathLog.recording(s.breathLog, day: "2026-10-01")
         T.expectEqual(AppSettings(defaults: d).breathLog, ["2026-10-01": 1], "the breath log survives a restart")

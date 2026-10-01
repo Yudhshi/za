@@ -186,6 +186,7 @@ struct PosturePromptView: View {
         case .askStand: askStand
         case .standing: PostureStandingGuide(coordinator: coordinator)
         case .askSit: askSit
+        case .standForMeeting: askStandForMeeting
         }
     }
 
@@ -194,6 +195,7 @@ struct PosturePromptView: View {
         case .askStand: return "STAND UP"
         case .standing: return "STRETCH"
         case .askSit: return "SIT DOWN"
+        case .standForMeeting: return "MEETING"
         }
     }
 
@@ -225,7 +227,8 @@ struct PosturePromptView: View {
             VStack(alignment: .leading, spacing: 0) {
                 PostureQuestion(pose: "stand-up", symbol: "figure.stand",
                                 title: "站起来\n了吗？", spoken: "站起来了吗？") {
-                    PostureMinutesLine(prefix: "已经坐了", minutes: sitting)
+                    PostureMinutesLine(prefix: coordinator.promptAfterMeeting ? "开完会了，已经坐了" : "已经坐了",
+                                       minutes: sitting)
                 }
                 PostureRule()
                     .padding(.vertical, PostureMetrics.ruleGap)
@@ -276,6 +279,78 @@ struct PosturePromptView: View {
         }
     }
 
+    // MARK: 会前 站着开会？
+
+    /// 会議の 10 分前から(座って 10 分以上のとき):立つ人の剪影 + 「站着开会？」+ 何時から何分。
+    /// 折り目の下:会議名・90° と已坐の札・倒杯水带进去。指令 2 つ(站着开 / 坐着开)。会議が始まれば自然に閉じる
+    @ViewBuilder
+    private var askStandForMeeting: some View {
+        let meeting = coordinator.meetingAsk
+        TimelineView(.periodic(from: .now, by: 30)) { context in
+            let sitting = Self.minutes(since: coordinator.postureSince, now: context.date)
+            VStack(alignment: .leading, spacing: 0) {
+                PostureQuestion(pose: "stand-up", symbol: "figure.stand",
+                                title: "站着\n开会？", spoken: "站着开会？") {
+                    Text(meeting.map(Self.meetingLine) ?? "会议马上开始")
+                        .font(Typeface.cjk(13, weight: .semibold))
+                        .foregroundStyle(Palette.kraftTextSecondary)
+                }
+                PostureRule()
+                    .padding(.vertical, PostureMetrics.ruleGap)
+                VStack(alignment: .leading, spacing: 10) {
+                    if let title = meeting?.title {
+                        Text(title)
+                            .font(Typeface.mixed(18, weight: 900, japanese: Typeface.isJapanese(title)))
+                            .typesetting(for: title)
+                            .foregroundStyle(Palette.kraftText)
+                            .lineLimit(2)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    HStack(spacing: 10) {
+                        PostureChip(asset: "chip-black-kraft", fallback: Palette.black) {
+                            PostureNumbers(text: "90°", color: Palette.white)
+                        }
+                        .help("把桌子升到手肘 90° 的高度")
+                        PostureChip(asset: "tag-orange-kraft", fallback: Palette.orange) {
+                            PostureNumbers(text: "已坐 \(sitting) 分钟", color: Palette.black)
+                        }
+                        .help("已经坐了 \(sitting) 分钟")
+                    }
+                    Text("倒杯水带进去")
+                        .font(Typeface.cjk(13, weight: .semibold))
+                        .foregroundStyle(Palette.kraftTextSecondary)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                HStack(spacing: 12) {
+                    Button {
+                        coordinator.standForMeeting()
+                    } label: {
+                        Text("站着开")
+                    }
+                    .buttonStyle(SprayButtonStyle(kind: .teal, height: Turf.popupButton, wide: true))
+                    Button {
+                        coordinator.sitForMeeting()
+                    } label: {
+                        Text("坐着开")
+                    }
+                    .buttonStyle(FrameButtonStyle(height: Turf.popupButton, wide: true, onKraft: true))
+                    .frame(width: PostureMetrics.secondaryWidth)
+                    .help("这个会坐着开，开完再提醒站起来")
+                }
+                .padding(.top, PostureMetrics.buttonGap)
+            }
+        }
+    }
+
+    /// 「10:30 开始 · 60 分钟」
+    private static func meetingLine(_ meeting: MeetingEvent) -> String {
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "en_US_POSIX")
+        f.dateFormat = "HH:mm"
+        let minutes = max(1, Int((meeting.end.timeIntervalSince(meeting.start) / 60).rounded()))
+        return "\(f.string(from: meeting.start)) 开始 · \(minutes) 分钟"
+    }
+
     // MARK: 11 坐下了吗？
 
     /// 上:座る人の剪影 + 問い + 立った分(ここ全体が持ち手)。折り目の下:已站(黒漆)と目標(橙)の札 + 坐深，双脚踩实。指令 2 つ
@@ -286,7 +361,8 @@ struct PosturePromptView: View {
             VStack(alignment: .leading, spacing: 0) {
                 PostureQuestion(pose: "sit-down", symbol: "figure.seated.side",
                                 title: "坐下了\n吗？", spoken: "坐下了吗？") {
-                    PostureMinutesLine(prefix: "已经站了", minutes: standing)
+                    PostureMinutesLine(prefix: coordinator.promptAfterMeeting ? "开完会了，已经站了" : "已经站了",
+                                       minutes: standing)
                 }
                 PostureRule()
                     .padding(.vertical, PostureMetrics.ruleGap)

@@ -1,7 +1,8 @@
 import Foundation
 
-/// 昇降デスクの座り/立ちの切り替えリマインド(判定だけ。通知・アイドル検出はアプリ側)。
-/// 会議中と会議の直前は出さない:予定が終わったあとの tick で出る。
+/// 昇降デスクの座り/立ちの切り替えリマインド(判定だけ。通知・アイドル検出・通話の検出はアプリ側)。
+/// 会議中と会議の直前・通話中(マイクかカメラが使われている)は出さない:終わって 1 分たってから出る。
+/// 座っていて会議が近づいたら「站着开会？」と聞く(立って会議に出るのが好き、というユーザーの希望)。
 public enum BreakReminder {
     /// 机の高さは測れないので、ユーザーの「立った/座った」で切り替える
     public enum Posture: String, Sendable {
@@ -125,19 +126,60 @@ public enum BreakReminder {
         }
     }
 
+    /// 会前に「站着开会？」と聞く時間:開始の 10 分前から開始まで
+    public static let meetingAskWindow: TimeInterval = 10 * 60
+    /// 座ってからこれより短ければ会前に聞かない(立ち終えて座った直後に、また立つか聞かない)
+    public static let meetingAskMinimumSitting: TimeInterval = 10 * 60
+    /// 会議・通話が終わってから小窓を出すまで待つ時間(会議が延びた・すぐ次の通話に入る)
+    public static let afterMeetingGrace: TimeInterval = 60
+
+    /// これから始まる会議のうち、いちばん近いもの(開始の window 秒前から開始まで。始まったものは含まない)
+    public static func upcomingMeeting(events: [MeetingEvent], now: Date,
+                                       window: TimeInterval = meetingAskWindow) -> MeetingEvent? {
+        events
+            .filter { isMeeting($0) && $0.start > now && $0.start.timeIntervalSince(now) <= window }
+            .min { $0.start < $1.start }
+    }
+
+    /// 「站着开会？」と聞く会議(nil = 聞かない):座っていて(10 分以上)、10 分以内に会議が始まり、
+    /// その会議にまだ答えていないとき。別の会議の最中は聞かない(連続した会議は前の会議が終わってから)
+    public static func meetingStandAsk(events: [MeetingEvent], now: Date, posture: Posture,
+                                       sittingSince: Date, answered: Set<String>) -> MeetingEvent? {
+        guard posture == .sitting,
+              now.timeIntervalSince(sittingSince) >= meetingAskMinimumSitting,
+              !isInMeeting(events: events, now: now, lead: 0),
+              let next = upcomingMeeting(events: events, now: now),
+              !answered.contains(next.id) else { return nil }
+        return next
+    }
+
+    /// 離席の判定に使う無操作の秒数:会議・通話のあいだの無操作は数えない
+    /// (聞いているだけで操作しない。終わった瞬間に「3 分以上操作なし = 離席」と数えて座った時間を消さないように)
+    public static func awayIdle(idle: TimeInterval, now: Date, lastBusyAt: Date?) -> TimeInterval {
+        guard let lastBusyAt else { return idle }
+        return min(idle, max(0, now.timeIntervalSince(lastBusyAt)))
+    }
+
     /// 画面上部に出す小窓の状態
     public enum Prompt: Equatable, Sendable {
         case askStand   // 「立ちましたか?」
         case standing   // 立ち作業の残り時間 + ストレッチの手順
         case askSit     // 「座りましたか?」
+        case standForMeeting   // 会前:「站着开会？」
     }
 
     /// 30 秒ごとの判定:いま出すべき小窓(nil = 出さない)。
-    /// Meet の会議中・直前は何も出さない。切り替え時刻を過ぎたら姿勢に応じて尋ね、
-    /// 「立った」後の手順表示は立ち作業の終わりまで続ける
+    /// 通話中は何も出さない。座っていて会議が近ければ「站着开会？」(開始前 5 分の中でも聞く:会議の話なので割り込みではない)。
+    /// Meet の会議中・直前と、会議・通話が終わって quietUntil までは出さない。
+    /// 切り替え時刻を過ぎたら姿勢に応じて尋ね、「立った」後の手順表示は立ち作業の終わりまで続ける
     public static func desiredPrompt(posture: Posture, current: Prompt?, now: Date,
-                                     dueAt: Date, inMeeting: Bool, guideDismissed: Bool = false) -> Prompt? {
+                                     dueAt: Date, inMeeting: Bool, guideDismissed: Bool = false,
+                                     inCall: Bool = false, standForMeeting: Bool = false,
+                                     quietUntil: Date? = nil) -> Prompt? {
+        if inCall { return nil }
+        if standForMeeting, posture == .sitting { return .standForMeeting }
         if inMeeting { return nil }
+        if let quietUntil, now < quietUntil { return nil }
         if now >= dueAt { return posture == .sitting ? .askStand : .askSit }
         // 立ち作業中は(自分で閉じていなければ)手順の小窓を出し続ける。会議で隠れても終われば戻る
         if posture == .standing { return guideDismissed ? nil : .standing }

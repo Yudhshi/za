@@ -103,6 +103,73 @@ func runBreakReminderTests() {
                       nil, "closed by hand stays closed")
     }
 
+    T.run("upcoming meeting: the nearest Meet starting within 10 minutes, not one already running") {
+        let now = tokyoDate(2026, 10, 1, 10, 22)
+        let events = [ev("定例", 10, 30), ev("1on1", 10, 25, minutes: 30), ev("対面", 10, 24, link: nil),
+                      ev("午後", 13, 0), ev("進行中", 10, 0, minutes: 30)]
+        T.expectEqual(BreakReminder.upcomingMeeting(events: events, now: now)?.title, "1on1",
+                      "nearest Meet; no-link events and running meetings are skipped")
+        T.expectEqual(BreakReminder.upcomingMeeting(events: [ev("定例", 10, 33)], now: now)?.title, nil,
+                      "11 minutes away is too early")
+        T.expectEqual(BreakReminder.upcomingMeeting(events: [ev("定例", 10, 32)], now: now)?.title, "定例",
+                      "exactly 10 minutes counts")
+        T.expectEqual(BreakReminder.upcomingMeeting(events: [ev("定例", 10, 22)], now: now)?.title, nil,
+                      "starting now is not upcoming")
+    }
+
+    T.run("meeting stand ask: sitting 10+ minutes, a Meet soon, not answered, not inside another meeting") {
+        let now = tokyoDate(2026, 10, 1, 10, 22)
+        let events = [ev("定例", 10, 30)]
+        func ask(_ p: BreakReminder.Posture = .sitting, sat minutes: Double = 25,
+                 in list: [MeetingEvent]? = nil, answered: Set<String> = []) -> String? {
+            BreakReminder.meetingStandAsk(events: list ?? events, now: now, posture: p,
+                                          sittingSince: now.addingTimeInterval(-minutes * 60),
+                                          answered: answered)?.title
+        }
+        T.expectEqual(ask(), "定例")
+        T.expectEqual(ask(sat: 10), "定例", "exactly 10 minutes of sitting")
+        T.expectEqual(ask(sat: 4), nil, "just sat down after standing: don't ask to stand again")
+        T.expectEqual(ask(.standing), nil, "already standing")
+        T.expectEqual(ask(answered: ["定例"]), nil, "answered once, not asked again")
+        T.expectEqual(ask(in: events + [ev("前の会議", 9, 30, minutes: 60)]), nil,
+                      "inside another meeting: wait until it ends")
+        // 連続した会議:前の会議が 10:20 に終わって 10:30 から次。間の 10 分で聞く
+        let backToBack = [ev("A", 9, 30, minutes: 50), ev("B", 10, 30)]
+        T.expectEqual(ask(in: backToBack), "B", "the gap between back-to-back meetings")
+        T.expectEqual(ask(in: [ev("Zoom", 10, 30, link: "https://zoom.us/j/1")]), nil, "Meet only")
+    }
+
+    T.run("desiredPrompt: calls, the stand-for-meeting ask and the quiet minute after a meeting") {
+        let now = tokyoDate(2026, 10, 1, 10, 0)
+        let past = now.addingTimeInterval(-60), later = now.addingTimeInterval(600)
+        func d(_ p: BreakReminder.Posture, due: Date, meeting: Bool = false, call: Bool = false,
+               ask: Bool = false, quiet: Date? = nil) -> BreakReminder.Prompt? {
+            BreakReminder.desiredPrompt(posture: p, current: nil, now: now, dueAt: due, inMeeting: meeting,
+                                        inCall: call, standForMeeting: ask, quietUntil: quiet)
+        }
+        T.expectEqual(d(.sitting, due: past, call: true), nil, "never during a call, even when due")
+        T.expectEqual(d(.standing, due: later, call: true), nil, "the standing guide hides in a call")
+        T.expectEqual(d(.sitting, due: later, ask: true), .standForMeeting, "ask before the meeting, even if not due")
+        T.expectEqual(d(.sitting, due: past, meeting: true, ask: true), .standForMeeting,
+                      "the ask may show in the 5 minutes before start")
+        T.expectEqual(d(.sitting, due: past, call: true, ask: true), nil, "joined early: no ask")
+        T.expectEqual(d(.standing, due: later, ask: true), .standing, "standing: no meeting ask")
+        T.expectEqual(d(.sitting, due: past, quiet: now.addingTimeInterval(30)), nil, "the minute after a meeting")
+        T.expectEqual(d(.sitting, due: past, quiet: now), .askStand, "after the quiet minute")
+        T.expectEqual(d(.standing, due: past, quiet: now.addingTimeInterval(30)), nil, "askSit waits too")
+    }
+
+    T.run("away idle: no input during a meeting or call is not leaving the desk") {
+        let now = tokyoDate(2026, 10, 1, 11, 0)
+        T.expectEqual(BreakReminder.awayIdle(idle: 3600, now: now, lastBusyAt: nil), 3600, "no meeting today")
+        T.expectEqual(BreakReminder.awayIdle(idle: 3600, now: now, lastBusyAt: now.addingTimeInterval(-30)), 30,
+                      "listened for an hour, call ended 30 s ago")
+        T.expectEqual(BreakReminder.awayIdle(idle: 200, now: now, lastBusyAt: now.addingTimeInterval(-3600)), 200,
+                      "meeting long over: real idle counts")
+        T.expectEqual(BreakReminder.awayIdle(idle: 100, now: now, lastBusyAt: now.addingTimeInterval(60)), 0,
+                      "clock skew never goes negative")
+    }
+
     T.run("stretch guide: name split into title · duration") {
         T.expectEqual(StretchGuide.split("夹肩胛骨（约 1 分钟）").title, "夹肩胛骨")
         T.expectEqual(StretchGuide.split("夹肩胛骨（约 1 分钟）").note, "1 分钟", "约 dropped")

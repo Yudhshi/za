@@ -18,6 +18,12 @@ public final class EventKitCalendar: CalendarProviding {
         return (try? await store.requestFullAccessToEvents()) ?? false
     }
 
+    /// Google のアカウントは押し通知が無く定期の取得だけなので、こちらからも促す(古くなければ何もしない)
+    public func refreshSources() {
+        guard isAuthorized else { return }
+        store.refreshSourcesIfNecessary()
+    }
+
     public func events(on day: Date) -> [MeetingEvent] {
         let start = calendar.startOfDay(for: day)
         guard let end = calendar.date(byAdding: .day, value: 1, to: start) else { return [] }

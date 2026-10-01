@@ -170,6 +170,18 @@ public final class AppSettings: ObservableObject {
         set { d.set(newValue, forKey: "breathHabit"); objectWillChange.send() }
     }
 
+    /// 座っていて 10 分以内に会議が始まるとき「站着开会？」と聞く(立って会議に出るのが好み)
+    public var meetingStandAsk: Bool {
+        get { d.object(forKey: "meetingStandAsk") as? Bool ?? true }
+        set { d.set(newValue, forKey: "meetingStandAsk"); objectWillChange.send() }
+    }
+
+    /// マイクかカメラが使われていたら通話中とみなす(小窓を出さない・無操作を離席と数えない)。日历に無い会議にも効く
+    public var callDetection: Bool {
+        get { d.object(forKey: "callDetection") as? Bool ?? true }
+        set { d.set(newValue, forKey: "callDetection"); objectWillChange.send() }
+    }
+
     /// 腹式呼吸をした回数("yyyy-MM-dd" → 回数)
     public var breathLog: [String: Int] {
         get { d.dictionary(forKey: "breathLog") as? [String: Int] ?? [:] }

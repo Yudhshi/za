@@ -1,5 +1,6 @@
 import Foundation
 import AppKit
+import EventKit
 import ServiceManagement
 import NippoCore
 
@@ -29,6 +30,20 @@ final class AppCoordinator: ObservableObject {
     var standingGuideDismissed = false
     /// メニューから自分で開いた「站起来了吗?」(時間前でも判定で閉じない)
     var posturePromptPinned = false
+    /// 会前に「站着开会？」と聞いている会議(小窓の中身。聞いていなければ nil)
+    @Published var meetingAsk: MeetingEvent?
+    /// 「站着开 / 坐着开」と答えた会議(その日のうち。同じ会議で何度も聞かない)
+    var meetingAskAnswered: Set<String> = []
+    /// マイクかカメラが使われている(通話中)。tick ごとに読む
+    @Published var inCall = false
+    /// 会議の最中か通話中だった最後の時刻(終わってすぐ小窓を出さない・会議中の無操作を離席と数えない)
+    var lastBusyAt: Date?
+    /// 会議・通話が終わってすぐに出た「站起来了吗？/ 坐下了吗？」(問いの下に「开完会了」と添える)
+    @Published var promptAfterMeeting = false
+    /// 日历のアカウントに最後に取りに行かせた時刻(5 分ごと)
+    private var lastSourceRefreshAt: Date?
+    /// 日历が変わった知らせ(臨時の会議が入ったらすぐ読み直す)
+    private var calendarObserver: NSObjectProtocol?
     /// 前回の tick。スリープや日付をまたいだら姿勢を計り直す
     private var lastTickAt: Date?
     /// 英語の同期を最後に走らせた時刻(5 分ごと)
@@ -52,10 +67,10 @@ final class AppCoordinator: ObservableObject {
     /// 英語タブ(すきま時間の英語)
     lazy var english: EnglishCoordinator = {
         let english = EnglishCoordinator(db: db)
-        // Meet の会議中は語料を自動再生しない(通話にマイクで拾われないように)
+        // Meet の会議中・通話中は語料を自動再生しない(通話にマイクで拾われないように)
         english.isInMeeting = { [weak self] in
             guard let self else { return false }
-            return BreakReminder.isInMeeting(events: self.todayEvents, now: Date())
+            return self.inCall || BreakReminder.isInMeeting(events: self.todayEvents, now: Date())
         }
         // 同期(設定でフォルダを選んだときだけ)
         english.deviceName = { [weak self] in self?.settings.deviceName ?? "Mac" }
@@ -123,6 +138,13 @@ final class AppCoordinator: ObservableObject {
                 self?.refreshShachoken(force: true)
             }
         }
+        // 日历の中身が変わったら(Google から新しい会議が届いた・動いた・取り消された)、30 秒を待たずに読み直す
+        calendarObserver = NotificationCenter.default.addObserver(forName: .EKEventStoreChanged, object: nil,
+                                                                  queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated {
+                self?.refreshTodayEvents()
+            }
+        }
         timer = Timer.scheduledTimer(withTimeInterval: 30, repeats: true) { [weak self] _ in
             Task { @MainActor in self?.tick() }
         }
@@ -141,6 +163,9 @@ final class AppCoordinator: ObservableObject {
             resetPostureTimer(now: now)
             standingGuideDismissed = false
             posturePromptPinned = false
+            meetingAsk = nil
+            meetingAskAnswered = []
+            lastBusyAt = nil
             if posturePrompt != nil { posturePrompt = nil }
         }
         lastTickAt = now
@@ -159,6 +184,19 @@ final class AppCoordinator: ObservableObject {
             resetPostureTimer(now: now)
         }
         wasWorking = working
+
+        // 通話中か(マイク・カメラ)。坐站の判定と語料の自動再生に使う
+        let call = settings.callDetection && CallDetector.isInCall()
+        if call != inCall {
+            inCall = call
+            AppLog.shared.log("posture", call ? "call started" : "call ended")
+        }
+
+        // Google のアカウントは押し通知が無いので、勤務時間は 5 分ごとに日历へ取りに行かせる(臨時の会議を早く拾う)
+        if calendarAuthorized, working, lastSourceRefreshAt.map({ now.timeIntervalSince($0) >= 300 }) ?? true {
+            lastSourceRefreshAt = now
+            calendarProvider.refreshSources()
+        }
 
         // メニューの会議一覧はお休みの日でも更新する。
         // 会議リマインドは OS 予約制(scheduleMeetingReminders):スリープで時刻を跨いでも届く
@@ -338,10 +376,13 @@ final class AppCoordinator: ObservableObject {
                                now.addingTimeInterval(2))
             let id = "nippo-meet-\(e.id)-\(Int(e.start.timeIntervalSince1970))-\(lead)"
             let title = "即将开会：\(e.title)"
-            // 会議の前の数分も碎片時間:腹式呼吸を 3 回(习惯にする)
+            // 会議の前の数分も碎片時間:腹式呼吸を 3 回(习惯にする)。45 分以上の会議は水を持って入る
+            var tips: [String] = []
+            if settings.breathHabit { tips.append("开会前先做 3 次腹式呼吸") }
+            if e.end.timeIntervalSince(e.start) >= 45 * 60 { tips.append("会比较长，倒杯水带进去") }
             let body = "\(f.string(from: e.start)) 开始"
                 + (e.joinURL != nil ? "。点击加入会议" : "")
-                + (settings.breathHabit ? "。开会前先做 3 次腹式呼吸" : "")
+                + (tips.isEmpty ? "" : "。" + tips.joined(separator: "；"))
             let signature = [title, body, e.joinURL?.absoluteString ?? ""]
                 .joined(separator: "\n")
             next[id] = signature

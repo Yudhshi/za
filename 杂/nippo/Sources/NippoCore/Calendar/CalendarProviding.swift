@@ -8,4 +8,6 @@ public protocol CalendarProviding {
     func events(on day: Date) -> [MeetingEvent]
     /// [from, to) の予定(終日・キャンセル・欠席回答は除く)
     func events(from: Date, to: Date) -> [MeetingEvent]
+    /// 日历のアカウント(Google など)に、古ければ取りに行かせる(臨時に入った会議を早く拾う)
+    func refreshSources()
 }

@@ -41,7 +41,17 @@ struct SettingsView: View {
                 Stepper("站 \(settings.standMinutes) 分钟后坐下",
                         value: binding(\.standMinutes), in: 5...60, step: 5)
                     .disabled(!settings.postureEnabled)
-                Text("到点后在屏幕上方弹出小窗问「站起来了吗？」，站好后显示剩余时间和拉伸步骤。Google Meet 会议中和开始前 5 分钟不弹，结束后再问（没有 Meet 链接的日程不算会议）。坐着时 3 分钟以上没有操作，就当作离开座位，重新计时")
+                Text("到点后在屏幕上方弹出小窗问「站起来了吗？」，站好后显示剩余时间和拉伸步骤。Google Meet 会议中和开始前 5 分钟不弹，会议结束 1 分钟后再问（没有 Meet 链接的日程不算会议）。坐着时 3 分钟以上没有操作，就当作离开座位，重新计时（开会时不动不算）")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Toggle("开会前问要不要站着开", isOn: binding(\.meetingStandAsk))
+                    .disabled(!settings.postureEnabled)
+                Text("坐了 10 分钟以上、10 分钟内有 Meet 会议时，小窗问「站着开会？」。选「站着开」就从这时算站立时间，会议中不打扰，开完再问坐不坐；选「坐着开」就等开完再提醒站起来")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Toggle("麦克风或摄像头在用时当作在开会", isOn: binding(\.callDetection))
+                    .disabled(!settings.postureEnabled)
+                Text("日历里没有的会（临时拉的会、Slack 通话、Zoom）和超时的会也不打扰，挂断 1 分钟后再问。只看麦克风和摄像头有没有在被使用，不录音也不需要授权")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                 VStack(alignment: .leading) {
