@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="zh-Hans">
+  <head>
+    <meta charset="utf-8" />
+    <title>Yudh</title>
+    <link rel="stylesheet" href="css/turf.css" />
+    <link rel="stylesheet" href="css/panel.css" />
+  </head>
+  <body>
+    <main id="panel" class="panel">
+      <div class="wall" aria-hidden="true"></div>
+      <header class="header row" data-tauri-drag-region>
+        <span id="weekday" class="weekday" data-tauri-drag-region></span>
+        <span class="grow" data-tauri-drag-region></span>
+        <nav id="tabs" class="tabs row"></nav>
+      </header>
+      <div class="seam" aria-hidden="true"></div>
+      <section id="view" class="view"></section>
+      <footer id="footer" class="footer row"></footer>
+    </main>
+    <script type="module" src="js/panel.js"></script>
+  </body>
+</html>

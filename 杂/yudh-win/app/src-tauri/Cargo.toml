@@ -1,0 +1,29 @@
+[package]
+name = "yudh-app"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+description = "Yudh for Windows: tray, English drill, tomorrow's meetings, sit/stand, after-bath ritual"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+yudh-core = { path = "../../core" }
+tauri = { version = "2", features = ["tray-icon", "image-png"] }
+tauri-plugin-dialog = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+chrono = { version = "0.4", default-features = false, features = ["std", "clock", "serde"] }
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61", features = [
+  "Win32_Foundation",
+  "Win32_System_SystemInformation",
+  "Win32_UI_Input_KeyboardAndMouse",
+  "Win32_UI_Shell",
+] }
+
+[features]
+# tauri dev / build が使う
+custom-protocol = ["tauri/custom-protocol"]

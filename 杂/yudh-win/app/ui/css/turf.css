@@ -1,0 +1,225 @@
+/* Yudh for Windows:Mac の v12「Stencil Turf」夜版と同じ色・字。大きな面はすべて焼いた素材(material/)で、
+   ここで塗るのは素材が無いときの代わりと、本物の文字だけ */
+
+@font-face {
+  font-family: "Archivo";
+  src: url("../fonts/Archivo[wdth,wght].ttf") format("truetype");
+  font-weight: 100 900;
+  font-stretch: 62% 125%;
+}
+
+@font-face {
+  font-family: "JetBrains Mono";
+  src: url("../fonts/JetBrainsMono[wght].ttf") format("truetype");
+  font-weight: 100 800;
+}
+
+:root {
+  --teal: #12e9d3;
+  --orange: #ff6412;
+  --black: #161615;
+  --white: #f4f3ee;
+  --kraft: #c49c69;
+  --surface: #2a2d30;
+  --text: #f4f3ee;
+  --text-2: #abafb2;
+  --card-text: #161615;
+  --card-text-2: #2a2926;
+  --kraft-text: #161615;
+  --kraft-text-2: #3e2f1c;
+  --kraft-rule: rgba(40, 26, 10, 0.35);
+  /* 欧文・数字は Archivo、中文は 微软雅黑、日文(仮名)は 游ゴシック */
+  --mixed: "Archivo", "Microsoft YaHei UI", "Microsoft YaHei", "Yu Gothic UI", sans-serif;
+  --mono: "JetBrains Mono", "Cascadia Mono", Consolas, monospace;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  background: transparent;
+  color: var(--text);
+  font-family: var(--mixed);
+  font-size: 15px;
+  -webkit-font-smoothing: antialiased;
+  user-select: none;
+  overflow: hidden;
+}
+
+button {
+  font: inherit;
+  color: inherit;
+  background: none;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+}
+
+button:disabled {
+  cursor: default;
+  opacity: 0.45;
+}
+
+/* 焼いた素材を敷く箱:.paint は箱 + 焼いた影の外側(bleed)まで広がり、中身の後ろに描く */
+.baked {
+  position: relative;
+  isolation: isolate;
+}
+
+.paint {
+  position: absolute;
+  border-style: solid;
+  border-color: transparent;
+  pointer-events: none;
+  z-index: -1;
+}
+
+.paint.over {
+  z-index: 2;
+}
+
+.sprite {
+  display: block;
+  pointer-events: none;
+  flex: none;
+}
+
+.stencil {
+  position: relative;
+  display: inline-block;
+  flex: none;
+  overflow: visible;
+}
+
+.stencil > span {
+  position: absolute;
+  background-repeat: no-repeat;
+}
+
+/* 字の役割(Mac の TypeRole) */
+.t-title {
+  font-size: 30px;
+  font-weight: 900;
+  letter-spacing: 0.02em;
+}
+
+.t-card-title {
+  font-size: 20px;
+  font-weight: 700;
+}
+
+.t-body {
+  font-size: 15px;
+  font-weight: 500;
+}
+
+.t-caption {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text-2);
+}
+
+.t-section {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-2);
+}
+
+.t-button {
+  font-size: 17px;
+  font-weight: 900;
+  letter-spacing: 0.04em;
+}
+
+.t-time {
+  font-family: "Archivo", sans-serif;
+  font-weight: 900;
+  font-stretch: 108%;
+  font-variant-numeric: tabular-nums;
+  font-size: 17px;
+}
+
+.t-count {
+  font-family: var(--mono);
+  font-weight: 700;
+  font-size: 12px;
+}
+
+.t-tag-latin {
+  font-family: "Archivo", sans-serif;
+  font-weight: 900;
+  font-stretch: 112%;
+  font-size: 12px;
+  letter-spacing: 0.06em;
+}
+
+/* ボタン:喷漆の块(主)/ 白漆の枠(次)/ 文字だけ */
+.spray,
+.frame {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 50px;
+  padding: 0 22px;
+  min-width: 120px;
+  color: var(--black);
+  font-size: 17px;
+  font-weight: 900;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+  transition: transform 0.06s, filter 0.12s;
+}
+
+.frame {
+  color: var(--white);
+}
+
+.frame.on-kraft {
+  color: var(--kraft-text);
+}
+
+.spray:hover:not(:disabled),
+.frame:hover:not(:disabled) {
+  filter: brightness(1.08);
+}
+
+.spray:active:not(:disabled),
+.frame:active:not(:disabled) {
+  transform: translateY(2px);
+}
+
+.bare {
+  color: var(--text-2);
+  font-size: 12.5px;
+  font-weight: 700;
+  padding: 4px 6px;
+}
+
+.bare:hover:not(:disabled) {
+  color: var(--text);
+}
+
+.bare.on-kraft {
+  color: var(--kraft-text-2);
+}
+
+.bare.on-kraft:hover:not(:disabled) {
+  color: var(--kraft-text);
+}
+
+.row {
+  display: flex;
+  align-items: center;
+}
+
+.grow {
+  flex: 1;
+  min-width: 0;
+}
+
+.drag {
+  -webkit-app-region: drag;
+}

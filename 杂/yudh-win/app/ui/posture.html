@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="zh-Hans">
+  <head>
+    <meta charset="utf-8" />
+    <title>Yudh</title>
+    <link rel="stylesheet" href="css/turf.css" />
+    <style>
+      body {
+        color: var(--kraft-text);
+      }
+      .wrap {
+        position: relative;
+        width: 360px;
+        margin: 4px 14px 30px 14px;
+        padding-top: 16px;
+      }
+      .tape {
+        position: absolute;
+        top: 0;
+        left: 50%;
+        transform: translateX(-50%);
+        z-index: 3;
+        height: 32px;
+        min-width: 128px;
+        padding: 0 18px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-family: "Archivo", sans-serif;
+        font-weight: 800;
+        font-stretch: 112%;
+        font-size: 12px;
+        letter-spacing: 0.14em;
+        color: var(--kraft-text);
+        cursor: grab;
+      }
+      .sheet {
+        position: relative;
+        isolation: isolate;
+        padding: 30px 22px 22px;
+        min-height: 200px;
+      }
+      .sheet.fallback {
+        background: var(--kraft);
+        border-radius: 10px;
+      }
+      .title {
+        font-size: 28px;
+        font-weight: 900;
+        letter-spacing: 0.02em;
+      }
+      .head {
+        gap: 8px;
+        min-height: 40px;
+      }
+      .head .label {
+        font-size: 15px;
+        font-weight: 900;
+      }
+      .body {
+        gap: 14px;
+        margin-top: 6px;
+        align-items: center;
+      }
+      .col {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        min-width: 0;
+        flex: 1;
+      }
+      .heading {
+        font-size: 20px;
+        font-weight: 800;
+      }
+      .text {
+        font-size: 14px;
+        font-weight: 700;
+        line-height: 1.45;
+      }
+      .muted {
+        font-size: 12px;
+        font-weight: 500;
+        color: var(--kraft-text-2);
+        line-height: 1.45;
+      }
+      .chip {
+        align-self: flex-start;
+        display: inline-flex;
+        align-items: center;
+        height: 24px;
+        padding: 0 10px;
+        color: var(--white);
+        font-family: var(--mono);
+        font-size: 12px;
+        font-weight: 700;
+      }
+      .buttons {
+        gap: 12px;
+        margin-top: 22px;
+      }
+      .dots {
+        gap: 6px;
+        align-items: center;
+      }
+      .breath-word {
+        font-size: 30px;
+        font-weight: 900;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="wrap" class="wrap">
+      <div id="tape" class="tape" data-tauri-drag-region></div>
+      <div id="sheet" class="sheet"></div>
+    </div>
+    <script type="module" src="js/posture.js"></script>
+  </body>
+</html>

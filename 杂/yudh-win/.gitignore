@@ -1,1 +1,5 @@
 target/
+app/node_modules/
+app/ui/material/
+app/ui/fonts/
+app/src-tauri/gen/

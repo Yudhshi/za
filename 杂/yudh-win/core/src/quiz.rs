@@ -57,6 +57,7 @@ impl Rng {
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct Question {
     pub entry: ParaphraseEntry,
     pub choices: Vec<String>,

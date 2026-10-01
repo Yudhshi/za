@@ -40,6 +40,7 @@ pub struct UndoPoint {
 
 /// 単語カードの表示内容(詞池の語か、辞書から足した語)
 #[derive(Clone, Debug, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct VocabCard {
     pub id: String,
     pub word: String,
@@ -54,6 +55,7 @@ pub struct VocabCard {
 
 /// 画面の上の数(今日の数・本轮の盤面・連続日数・種類ごとの残り)
 #[derive(Clone, Debug, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct Stats {
     pub today: String,
     pub today_count: usize,
