@@ -30,16 +30,32 @@ final class AppCoordinator: ObservableObject {
     var standingGuideDismissed = false
     /// メニューから自分で開いた「站起来了吗?」(時間前でも判定で閉じない)
     var posturePromptPinned = false
-    /// 会前に「站着开会？」と聞いている会議(小窓の中身。聞いていなければ nil)
-    @Published var meetingAsk: MeetingEvent?
+    /// 会前に「站着开会？」と聞いている会議(小窓の中身。聞いていなければ nil)。
+    /// 会議名や長さが変わったら小窓の高さも合わせ直す
+    @Published var meetingAsk: MeetingEvent? {
+        didSet { if posturePrompt == .standForMeeting { posturePanel.update() } }
+    }
     /// 「站着开 / 坐着开」と答えた会議(その日のうち。同じ会議で何度も聞かない)
     var meetingAskAnswered: Set<String> = []
-    /// マイクかカメラが使われている(通話中)。tick ごとに読む
+    /// マイクかカメラが使われている(通話中)。2 回続けて(30 秒以上)見えたら通話とみなす(音声入力の一瞬は数えない)
     @Published var inCall = false
-    /// 会議の最中か通話中だった最後の時刻(終わってすぐ小窓を出さない・会議中の無操作を離席と数えない)
+    /// マイク・カメラが続けて見えた tick の数
+    private var callTicks = 0
+    /// いまの通話が始まった時刻と、最後に終わった通話(早く終わった会議を見分ける)
+    private var callStartedAt: Date?
+    var lastCall: DateInterval?
+    /// 会議の最中か通話中だった最後の時刻(終わってすぐ小窓を出さない・会議中の無操作を離席と数えない)と、
+    /// その忙しさが始まった時刻(5 分以上続いた会議・通話のあとだけ「开完会了」と添える)
     var lastBusyAt: Date?
+    var busySince: Date?
     /// 会議・通話が終わってすぐに出た「站起来了吗？/ 坐下了吗？」(問いの下に「开完会了」と添える)
     @Published var promptAfterMeeting = false
+    /// 「坐着开」で会議の終わりまで「站起来了吗？」を待たせている会議(取り消された・早く終わったら待たせない)
+    var postureHoldMeetingID: String?
+    /// 「15 分钟后」で自分で後回しにした時刻(そのあいだは「站着开会？」も聞かない)
+    var postureSnoozedUntil: Date?
+    /// メニューから開いた「站起来了吗？」が、会議・通話の最中に開いたものか(それなら通話中でも閉じない)
+    var posturePinnedWhileBusy = false
     /// 日历のアカウントに最後に取りに行かせた時刻(5 分ごと)
     private var lastSourceRefreshAt: Date?
     /// 日历が変わった知らせ(臨時の会議が入ったらすぐ読み直す)
@@ -50,7 +66,10 @@ final class AppCoordinator: ObservableObject {
     private var lastSyncAt: Date?
     /// 画面上部の小窓(nil で閉じる)。変わるたびに小窓を出し入れ・サイズ調整する
     @Published var posturePrompt: BreakReminder.Prompt? {
-        didSet { posturePanel.update() }
+        didSet {
+            if posturePrompt == nil { promptAfterMeeting = false }
+            posturePanel.update()
+        }
     }
     @Published var promptStretch = BreakReminder.Stretch(name: "", steps: [])
     /// 手順の何番目か(steps.count = 完了)
@@ -166,6 +185,9 @@ final class AppCoordinator: ObservableObject {
             meetingAsk = nil
             meetingAskAnswered = []
             lastBusyAt = nil
+            busySince = nil
+            lastCall = nil
+            promptAfterMeeting = false
             if posturePrompt != nil { posturePrompt = nil }
         }
         lastTickAt = now
@@ -185,11 +207,22 @@ final class AppCoordinator: ObservableObject {
         }
         wasWorking = working
 
-        // 通話中か(マイク・カメラ)。坐站の判定と語料の自動再生に使う
-        let call = settings.callDetection && CallDetector.isInCall()
+        // 通話中か(マイク・カメラ)。坐站の判定と語料の自動再生に使う。2 回続けて見えたら通話(音声入力の一瞬は数えない)
+        let sources = settings.callDetection ? CallDetector.activeSources() : []
+        callTicks = sources.isEmpty ? 0 : callTicks + 1
+        let call = callTicks >= 2
         if call != inCall {
             inCall = call
-            AppLog.shared.log("posture", call ? "call started" : "call ended")
+            if call {
+                callStartedAt = now
+            } else if let start = callStartedAt {
+                lastCall = DateInterval(start: start, end: max(start, now))
+                callStartedAt = nil
+            }
+            // 何がマイク・カメラを使っているかも残す(一日中開けっぱなしのアプリで提醒が止まったときの手がかり)。勤務時間だけ
+            if working {
+                AppLog.shared.log("posture", call ? "call started (\(sources.joined(separator: ", ")))" : "call ended")
+            }
         }
 
         // Google のアカウントは押し通知が無いので、勤務時間は 5 分ごとに日历へ取りに行かせる(臨時の会議を早く拾う)
@@ -379,7 +412,7 @@ final class AppCoordinator: ObservableObject {
             // 会議の前の数分も碎片時間:腹式呼吸を 3 回(习惯にする)。45 分以上の会議は水を持って入る
             var tips: [String] = []
             if settings.breathHabit { tips.append("开会前先做 3 次腹式呼吸") }
-            if e.end.timeIntervalSince(e.start) >= 45 * 60 { tips.append("会比较长，倒杯水带进去") }
+            if e.joinURL != nil, BreakReminder.isLong(e) { tips.append("会比较长，倒杯水带进去") }
             let body = "\(f.string(from: e.start)) 开始"
                 + (e.joinURL != nil ? "。点击加入会议" : "")
                 + (tips.isEmpty ? "" : "。" + tips.joined(separator: "；"))

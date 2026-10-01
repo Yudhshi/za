@@ -1736,7 +1736,11 @@ private struct TodayPostureStatus: View {
                         Text("分钟")
                             .font(TodayFont.footer)
                     }
-                    if due {
+                    // 通话中は小窓を出さない(挂断して 1 分後に聞く)ことを、到点了の代わりに見せる
+                    if coordinator.inCall {
+                        PaintTag(text: "通话中")
+                            .padding(.leading, 8)
+                    } else if due {
                         PaintTag(text: "到点了")
                             .padding(.leading, 8)
                     }
@@ -1747,8 +1751,9 @@ private struct TodayPostureStatus: View {
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .help(standing ? "已站 \(minutes) 分钟，\(dueAt) 坐下。点击打开拉伸步骤"
-                           : "已坐 \(minutes) 分钟，\(dueAt) 站起来\(due ? "（该站起来了）" : "")。点击打开「站起来了吗？」小窗")
+            .help((coordinator.inCall ? "通话中（麦克风或摄像头在用），挂断 1 分钟后再提醒。" : "")
+                  + (standing ? "已站 \(minutes) 分钟，\(dueAt) 坐下。点击打开拉伸步骤"
+                              : "已坐 \(minutes) 分钟，\(dueAt) 站起来\(due ? "（该站起来了）" : "")。点击打开「站起来了吗？」小窗"))
         }
     }
 }

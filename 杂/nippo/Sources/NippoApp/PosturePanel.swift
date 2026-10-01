@@ -227,7 +227,7 @@ struct PosturePromptView: View {
             VStack(alignment: .leading, spacing: 0) {
                 PostureQuestion(pose: "stand-up", symbol: "figure.stand",
                                 title: "站起来\n了吗？", spoken: "站起来了吗？") {
-                    PostureMinutesLine(prefix: coordinator.promptAfterMeeting ? "开完会了，已经坐了" : "已经坐了",
+                    PostureMinutesLine(prefix: coordinator.promptAfterMeeting ? "开完会，已坐" : "已经坐了",
                                        minutes: sitting)
                 }
                 PostureRule()
@@ -282,7 +282,7 @@ struct PosturePromptView: View {
     // MARK: 会前 站着开会？
 
     /// 会議の 10 分前から(座って 10 分以上のとき):立つ人の剪影 + 「站着开会？」+ 何時から何分。
-    /// 折り目の下:会議名・90° と已坐の札・倒杯水带进去。指令 2 つ(站着开 / 坐着开)。会議が始まれば自然に閉じる
+    /// 折り目の下:会議名・90° と已坐の札・水(長い会議は「倒杯水带进去」)。指令 2 つ(站着开 / 坐着开)。会議が始まれば自然に閉じる
     @ViewBuilder
     private var askStandForMeeting: some View {
         let meeting = coordinator.meetingAsk
@@ -291,9 +291,11 @@ struct PosturePromptView: View {
             VStack(alignment: .leading, spacing: 0) {
                 PostureQuestion(pose: "stand-up", symbol: "figure.stand",
                                 title: "站着\n开会？", spoken: "站着开会？") {
-                    Text(meeting.map(Self.meetingLine) ?? "会议马上开始")
-                        .font(Typeface.cjk(13, weight: .semibold))
-                        .foregroundStyle(Palette.kraftTextSecondary)
+                    // 数字は等幅(ほかの小窓の分数と同じ)
+                    PostureNumbers(text: meeting.map(Self.meetingLine) ?? "会议马上开始",
+                                   color: Palette.kraftTextSecondary,
+                                   digits: Typeface.mono(14, weight: 700),
+                                   words: Typeface.cjk(13, weight: .semibold))
                 }
                 PostureRule()
                     .padding(.vertical, PostureMetrics.ruleGap)
@@ -316,7 +318,8 @@ struct PosturePromptView: View {
                         }
                         .help("已经坐了 \(sitting) 分钟")
                     }
-                    Text("倒杯水带进去")
+                    // 45 分以上の会議は水を持って入る(会議の通知と同じ決まり)
+                    Text(meeting.map(BreakReminder.isLong) == true ? "会比较长，倒杯水带进去" : "顺便喝杯水")
                         .font(Typeface.cjk(13, weight: .semibold))
                         .foregroundStyle(Palette.kraftTextSecondary)
                 }
@@ -361,7 +364,7 @@ struct PosturePromptView: View {
             VStack(alignment: .leading, spacing: 0) {
                 PostureQuestion(pose: "sit-down", symbol: "figure.seated.side",
                                 title: "坐下了\n吗？", spoken: "坐下了吗？") {
-                    PostureMinutesLine(prefix: coordinator.promptAfterMeeting ? "开完会了，已经站了" : "已经站了",
+                    PostureMinutesLine(prefix: coordinator.promptAfterMeeting ? "开完会，已站" : "已经站了",
                                        minutes: standing)
                 }
                 PostureRule()
@@ -891,6 +894,7 @@ private struct PostureMinutesLine: View {
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: 4) {
             Text(prefix)
+                .lineLimit(1)
             Text("\(minutes)")
                 .font(Typeface.mono(14, weight: 700))
                 .foregroundStyle(Palette.kraftText)

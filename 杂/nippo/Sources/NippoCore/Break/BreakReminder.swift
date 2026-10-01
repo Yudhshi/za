@@ -132,6 +132,31 @@ public enum BreakReminder {
     public static let meetingAskMinimumSitting: TimeInterval = 10 * 60
     /// 会議・通話が終わってから小窓を出すまで待つ時間(会議が延びた・すぐ次の通話に入る)
     public static let afterMeetingGrace: TimeInterval = 60
+    /// 「开完会了」と添えるのは、5 分以上続いた会議・通話が終わって 10 分以内(音声入力や短い通話には添えない)
+    public static let afterMeetingMinimum: TimeInterval = 5 * 60
+    public static let afterMeetingWording: TimeInterval = 10 * 60
+    /// 水を持って入るほど長い会議
+    public static let longMeeting: TimeInterval = 45 * 60
+
+    /// 予定より早く終わった会議を除く:5 分以上続いた通話が会議の開始後に終わっていれば(いまは通話していない前提)、
+    /// その会議は終わったとみなし、予定の終わりまで待たずに聞く。短いマイク(音声入力など)では終わらせない
+    /// (電話で出ている会議の最中に音声入力しても、会議は続いている)。通話を見張っていないときは lastCall = nil
+    public static func excludingEndedEarly(_ events: [MeetingEvent], now: Date,
+                                           lastCall: DateInterval?) -> [MeetingEvent] {
+        guard let call = lastCall, call.end <= now, call.duration >= afterMeetingMinimum else { return events }
+        return events.filter { !($0.start < call.end && now < $0.end) }
+    }
+
+    /// 問いに「开完会了」と添えるか:busySince〜lastBusyAt の会議・通話が 5 分以上続き、終わって 10 分以内
+    public static func saysAfterMeeting(now: Date, busySince: Date?, lastBusyAt: Date?) -> Bool {
+        guard let since = busySince, let last = lastBusyAt else { return false }
+        return last.timeIntervalSince(since) >= afterMeetingMinimum
+            && now.timeIntervalSince(last) < afterMeetingWording
+    }
+
+    public static func isLong(_ meeting: MeetingEvent) -> Bool {
+        meeting.end.timeIntervalSince(meeting.start) >= longMeeting
+    }
 
     /// これから始まる会議のうち、いちばん近いもの(開始の window 秒前から開始まで。始まったものは含まない)
     public static func upcomingMeeting(events: [MeetingEvent], now: Date,

@@ -67,6 +67,8 @@ func runSettingsTests() {
         T.expectEqual(s.callDetection, true, "mic / camera in use counts as a meeting by default")
         s.callDetection = false
         T.expectEqual(AppSettings(defaults: d).callDetection, false)
+        s.meetingStandAsk = false
+        T.expectEqual(AppSettings(defaults: d).meetingStandAsk, false, "the stand-for-meeting toggle survives a restart")
         T.expectEqual(s.breathLog, [:])
         s.breathLog = BreathLog.recording(s.breathLog, day: "2026-10-01")
         T.expectEqual(AppSettings(defaults: d).breathLog, ["2026-10-01": 1], "the breath log survives a restart")
