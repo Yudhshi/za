@@ -209,6 +209,12 @@ public final class AppSettings: ObservableObject {
         set { d.set(newValue, forKey: "libraryExport"); objectWillChange.send() }
     }
 
+    /// 最後に書いた habits-<端末>.json の場所(端末名を変えたら古いほうを消す:別の端末として二重に数えないように)
+    public var habitsWrittenPath: String? {
+        get { d.string(forKey: "habitsWrittenPath") }
+        set { d.set(newValue, forKey: "habitsWrittenPath") }
+    }
+
     /// 出来事に付ける、この端末の名前(同期フォルダのファイル名にもなる)
     public var deviceName: String {
         get {

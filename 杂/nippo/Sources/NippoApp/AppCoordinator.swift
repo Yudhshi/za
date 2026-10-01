@@ -67,6 +67,11 @@ final class AppCoordinator: ObservableObject {
     private var lastTickAt: Date?
     /// 英語の同期を最後に走らせた時刻(5 分ごと)
     private var lastSyncAt: Date?
+    /// ほかの端末(Windows)の日课・腹式呼吸の記録。同期フォルダから読む(5 分ごと・記録したとき)
+    @Published private(set) var otherHabits = Habits()
+    private var habitsSyncInFlight = false
+    /// 書いている最中に記録が増えた(終わったらもう一度書く)
+    private var habitsSyncAgain = false
     /// 画面上部の小窓(nil で閉じる)。変わるたびに小窓を出し入れ・サイズ調整する
     @Published var posturePrompt: BreakReminder.Prompt? {
         didSet {
@@ -174,6 +179,8 @@ final class AppCoordinator: ObservableObject {
         }
         // 数秒ずれてもよいので、システムに起床をまとめさせる(常駐アプリの省電力)
         timer?.tolerance = 5
+        // 日课・呼吸の記録を Windows と足し合わせる(起動時に書いて、向こうの分を読む)
+        syncHabits()
     }
 
     func tick() {
@@ -271,6 +278,7 @@ final class AppCoordinator: ObservableObject {
         if settings.syncRoot != nil, lastSyncAt.map({ now.timeIntervalSince($0) >= 300 }) ?? true {
             lastSyncAt = now
             english.syncNow()
+            syncHabits()
         }
     }
 
@@ -364,11 +372,68 @@ final class AppCoordinator: ObservableObject {
         }
         settings.breathLog = BreathLog.recording(settings.breathLog, day: today)
         objectWillChange.send()
+        syncHabits()
     }
 
-    /// 今日の腹式呼吸の回数
+    /// このパソコンの日课・呼吸の記録(設定の中)
+    var ownHabits: Habits {
+        Habits(ritual: settings.ritualLog, ritualStrength: settings.ritualStrengthLog, breath: settings.breathLog)
+    }
+
+    /// Windows の分も足した記録。連続日数・隔天の力量・今日の呼吸の回数はこれで数える
+    var habits: Habits {
+        ownHabits.merged(with: otherHabits)
+    }
+
+    /// 今日の腹式呼吸の回数(Windows で立ったときの分も含む)
     var breathToday: Int {
-        settings.breathLog[DayKey.key(for: Date())] ?? 0
+        habits.breath[DayKey.key(for: Date())] ?? 0
+    }
+
+    /// 同期フォルダに自分の記録を書き(同じ中身なら書かない)、ほかの端末の記録を読み直す。
+    /// 端末名を変えたら古い名前のファイルを消す(別の端末として二重に数えないように)。フォルダが無ければ自分の分だけ
+    func syncHabits() {
+        guard let root = settings.syncRoot else {
+            if otherHabits != Habits() { otherHabits = Habits() }
+            return
+        }
+        guard !habitsSyncInFlight else {
+            habitsSyncAgain = true
+            return
+        }
+        habitsSyncInFlight = true
+        let own = ownHabits
+        let device = settings.deviceName
+        let folder = URL(fileURLWithPath: root)
+        let file = folder.appendingPathComponent(HabitsSync.fileName(for: device)).path
+        let previous = settings.habitsWrittenPath
+        Task.detached(priority: .utility) { [weak self] in
+            var failure: String?
+            do {
+                try HabitsSync.write(own, device: device, to: folder)
+                if let previous, previous != file,
+                   (previous as NSString).deletingLastPathComponent == folder.path {
+                    try? FileManager.default.removeItem(atPath: previous)
+                }
+            } catch {
+                failure = "\(error)"
+            }
+            let others = HabitsSync.others(device: device, root: folder)
+            await MainActor.run {
+                guard let self else { return }
+                self.habitsSyncInFlight = false
+                if let failure {
+                    AppLog.shared.log("habits", "habits file write failed: \(failure)")
+                } else {
+                    self.settings.habitsWrittenPath = file
+                }
+                if self.otherHabits != others { self.otherHabits = others }
+                if self.habitsSyncAgain {
+                    self.habitsSyncAgain = false
+                    self.syncHabits()
+                }
+            }
+        }
     }
 
     /// 腹式呼吸 3 回が終わった(飛ばしたときは数えない)。そのまま拉伸の手順へ
@@ -376,6 +441,7 @@ final class AppCoordinator: ObservableObject {
         guard breathStartedAt != nil else { return }
         if counted {
             settings.breathLog = BreathLog.recording(settings.breathLog, day: DayKey.key(for: Date()))
+            syncHabits()
         }
         breathStartedAt = nil
     }

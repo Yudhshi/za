@@ -76,7 +76,7 @@ struct SettingsView: View {
                     .foregroundStyle(.secondary)
                 Toggle("站起来时先做 3 次腹式呼吸（吸 4 秒、呼 6 秒）", isOn: binding(\.breathHabit))
                 Text("用碎片时间养成腹式呼吸：每次站起来、每次开会前（会议提醒里会提示）、泡完澡的日课最后各做几次。"
-                     + "今天 \(coordinator.breathToday) 次，连续 \(BreathLog.streak(settings.breathLog, today: Date())) 天")
+                     + "今天 \(coordinator.breathToday) 次，连续 \(BreathLog.streak(coordinator.habits.breath, today: Date())) 天（和 Windows 加在一起算）")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -129,7 +129,7 @@ struct SettingsView: View {
                     .foregroundStyle(.secondary)
                 Toggle("拉伸时语音播报每一步（到时间自动进入下一步）", isOn: binding(\.ritualVoice))
                 HStack {
-                    Text("晚上和休息日，面板底部会出现「泡完澡了」。已连续 \(BreathLog.streak(settings.ritualLog, today: Date())) 天")
+                    Text("晚上和休息日，面板底部会出现「泡完澡了」。已连续 \(BreathLog.streak(coordinator.habits.ritual, today: Date())) 天（在 Windows 上做的也算）")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                     Spacer()

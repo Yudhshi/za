@@ -23,8 +23,9 @@ final class RitualWindowController: NSObject, NSWindowDelegate {
             return
         }
         let settings = coordinator.settings
+        // 隔天は Windows でやった日课も含めて数える
         let strength = settings.ritualStrengthOn
-            && Ritual.includesStrength(log: settings.ritualStrengthLog, today: Date())
+            && Ritual.includesStrength(log: coordinator.habits.ritualStrength, today: Date())
         let session = RitualSession(videos: Ritual.videos(from: settings.ritualVideos),
                                     standing: settings.ritualStretches,
                                     strength: strength ? settings.ritualStrength : nil,
@@ -564,7 +565,7 @@ private struct RitualDone: View {
     @ObservedObject var coordinator: AppCoordinator
 
     var body: some View {
-        let streak = BreathLog.streak(coordinator.settings.ritualLog, today: Date())
+        let streak = BreathLog.streak(coordinator.habits.ritual, today: Date())
         VStack(alignment: .leading, spacing: 14) {
             Text("今天的日课做完了")
                 .font(TypeRole.titleZh)
@@ -615,7 +616,7 @@ private struct RitualList: View {
             }
             .buttonStyle(BareButtonStyle())
             .font(TypeRole.caption)
-            Text("连续 \(BreathLog.streak(coordinator.settings.ritualLog, today: Date())) 天 · 腹式呼吸今天 \(coordinator.breathToday) 次")
+            Text("连续 \(BreathLog.streak(coordinator.habits.ritual, today: Date())) 天 · 腹式呼吸今天 \(coordinator.breathToday) 次")
                 .font(TypeRole.caption)
                 .foregroundStyle(Palette.textSecondary)
         }
