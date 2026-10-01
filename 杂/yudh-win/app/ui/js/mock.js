@@ -121,6 +121,7 @@ const handlers = {
   settings_get: () => ({
     syncRoot: "C:\\Users\\yudh\\OneDrive\\Yudh",
     device: "DESKTOP-9F2",
+    autostart: true,
     postureEnabled: true,
     sitMinutes: 40,
     standMinutes: 15,

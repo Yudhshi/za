@@ -15,6 +15,8 @@ pub struct Settings {
     pub sync_root: Option<String>,
     /// 出来事に付ける端末名(ファイル名にもなる)
     pub device: String,
+    /// ログインしたら自動で起動する(坐站の提醒が毎日届くように)
+    pub autostart: bool,
     pub posture: PostureSettings,
     /// 次に出す拉伸の番号(実際に立ったときに進める)
     pub stretch_index: usize,
@@ -36,6 +38,7 @@ impl Default for Settings {
         Settings {
             sync_root: None,
             device: std::env::var("COMPUTERNAME").unwrap_or_else(|_| "Windows PC".into()),
+            autostart: true,
             posture: PostureSettings::default(),
             stretch_index: 0,
             breath_habit: true,
@@ -73,6 +76,7 @@ impl Settings {
 pub struct SettingsPatch {
     pub sync_root: Option<Option<String>>,
     pub device: Option<String>,
+    pub autostart: Option<bool>,
     pub posture_enabled: Option<bool>,
     pub sit_minutes: Option<i64>,
     pub stand_minutes: Option<i64>,
@@ -98,6 +102,9 @@ impl Settings {
         if let Some(device) = patch.device.filter(|d| !d.trim().is_empty()) {
             resync |= device != self.device;
             self.device = device;
+        }
+        if let Some(v) = patch.autostart {
+            self.autostart = v;
         }
         if let Some(v) = patch.posture_enabled {
             self.posture.enabled = v;

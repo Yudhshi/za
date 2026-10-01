@@ -268,7 +268,7 @@ impl EnglishState {
             .enumerate()
             .filter(|(_, l)| l.day == day)
             .collect();
-        rows.sort_by(|a, b| (a.1.at, a.0).cmp(&(b.1.at, b.0)));
+        rows.sort_by_key(|a| (a.1.at, a.0));
         rows.into_iter().map(|(_, l)| l.result.clone()).collect()
     }
 

@@ -50,6 +50,14 @@ impl AppState {
 
 fn main() {
     tauri::Builder::default()
+        // 2 回目に起動されたら、新しく立ち上げずに面板を開く(トレイが 2 つにならないように)
+        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+            surfaces::open_panel(app);
+        }))
+        .plugin(tauri_plugin_autostart::init(
+            tauri_plugin_autostart::MacosLauncher::LaunchAgent,
+            None,
+        ))
         .plugin(tauri_plugin_dialog::init())
         .setup(|app| {
             let dir = app
@@ -71,6 +79,7 @@ fn main() {
                 }),
                 settings_path,
             });
+            apply_autostart(app.handle());
             build_tray(app.handle())?;
             let handle = app.handle().clone();
             std::thread::spawn(move || ticker(handle));
@@ -103,6 +112,24 @@ fn main() {
                 api.prevent_exit();
             }
         });
+}
+
+/// 設定どおりにログイン時の自動起動を入れる / 外す(既定は入れる)
+pub fn apply_autostart(app: &AppHandle) {
+    use tauri_plugin_autostart::ManagerExt;
+    let wanted = app
+        .state::<AppState>()
+        .inner
+        .lock()
+        .map(|inner| inner.settings.autostart)
+        .unwrap_or(true);
+    let launcher = app.autolaunch();
+    let enabled = launcher.is_enabled().unwrap_or(false);
+    if wanted && !enabled {
+        let _ = launcher.enable();
+    } else if !wanted && enabled {
+        let _ = launcher.disable();
+    }
 }
 
 fn build_tray(app: &AppHandle) -> tauri::Result<()> {

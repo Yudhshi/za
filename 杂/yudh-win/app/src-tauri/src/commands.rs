@@ -404,6 +404,7 @@ pub fn ritual_done(state: State<'_, AppState>, strength: bool) -> usize {
 pub struct SettingsView {
     sync_root: Option<String>,
     device: String,
+    autostart: bool,
     posture_enabled: bool,
     sit_minutes: i64,
     stand_minutes: i64,
@@ -425,6 +426,7 @@ pub fn settings_get(state: State<'_, AppState>) -> SettingsView {
     SettingsView {
         sync_root: s.sync_root.clone(),
         device: s.device.clone(),
+        autostart: s.autostart,
         posture_enabled: s.posture.enabled,
         sit_minutes: s.posture.sit_minutes,
         stand_minutes: s.posture.stand_minutes,
@@ -447,16 +449,28 @@ pub fn settings_get(state: State<'_, AppState>) -> SettingsView {
 }
 
 #[tauri::command]
-pub fn settings_save(state: State<'_, AppState>, patch: SettingsPatch) -> Result<(), String> {
-    let mut inner = state.inner.lock().expect("state");
-    if inner.settings.apply(patch) {
-        inner.english = None;
-        inner.undo = None;
+pub fn settings_save(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    patch: SettingsPatch,
+) -> Result<(), String> {
+    let autostart = patch.autostart.is_some();
+    {
+        let mut inner = state.inner.lock().expect("state");
+        if inner.settings.apply(patch) {
+            inner.english = None;
+            inner.undo = None;
+        }
+        inner
+            .settings
+            .save(&state.settings_path)
+            .map_err(|e| e.to_string())?;
     }
-    inner
-        .settings
-        .save(&state.settings_path)
-        .map_err(|e| e.to_string())
+    // 自動起動はレジストリを触るので、鍵を放してから
+    if autostart {
+        crate::apply_autostart(&app);
+    }
+    Ok(())
 }
 
 /// 同期フォルダを選ぶ(選んでいるあいだ面板を閉じない)

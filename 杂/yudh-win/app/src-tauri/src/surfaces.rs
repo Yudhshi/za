@@ -1,9 +1,8 @@
-//! 窓の出し入れ:面板(トレイの上、フォーカスを失ったら閉じる)・坐站の小窓(画面上部の中央、フォーカスを奪わない)・
-//! 日课の窓(ふつうの窓)。どれも閉じたら捨てる
+//! 窓の出し入れ:面板(タスクバーのそば、フォーカスを失ったら閉じる)・坐站の小窓(画面上部の中央、フォーカスを奪わない)・
+//! 日课の窓(ふつうの窓)。どれも閉じたら捨てる。位置はマウスのある画面の、タスクバーを除いた範囲で決める
 
 use tauri::{
-    AppHandle, Emitter, LogicalPosition, LogicalSize, Manager, WebviewUrl, WebviewWindowBuilder,
-    WindowEvent,
+    AppHandle, Emitter, LogicalSize, Manager, WebviewUrl, WebviewWindowBuilder, WindowEvent,
 };
 
 use crate::AppState;
@@ -13,31 +12,46 @@ const PANEL_SIZE: (f64, f64) = (560.0, 760.0);
 /// 坐站の小窓(牛皮纸 360 + はみ出し。高さは中身に合わせて画面側が変える)
 const POSTURE_SIZE: (f64, f64) = (400.0, 520.0);
 
-/// 主画面の論理サイズ(取れなければ 1920×1080)
-fn screen(app: &AppHandle) -> (f64, f64) {
-    app.primary_monitor()
+/// マウスのある画面の、タスクバーを除いた範囲(論理 px:x, y, 幅, 高さ)。
+/// 取れなければ主画面、それも無ければ 1920×1040
+fn area(app: &AppHandle) -> (f64, f64, f64, f64) {
+    let monitor = app
+        .cursor_position()
         .ok()
-        .flatten()
+        .and_then(|p| app.monitor_from_point(p.x, p.y).ok().flatten())
+        .or_else(|| app.primary_monitor().ok().flatten());
+    monitor
         .map(|m| {
             let scale = m.scale_factor();
-            let size = m.size();
+            let work = m.work_area();
             (
-                f64::from(size.width) / scale,
-                f64::from(size.height) / scale,
+                f64::from(work.position.x) / scale,
+                f64::from(work.position.y) / scale,
+                f64::from(work.size.width) / scale,
+                f64::from(work.size.height) / scale,
             )
         })
-        .unwrap_or((1920.0, 1080.0))
+        .unwrap_or((0.0, 0.0, 1920.0, 1040.0))
 }
 
+/// トレイから:開いていれば閉じる、閉じていれば開く
 pub fn toggle_panel(app: &AppHandle) {
     if let Some(window) = app.get_webview_window("panel") {
         let _ = window.close();
         return;
     }
-    let (w, h) = screen(app);
-    // タスクバー(下 48)の上、右端に寄せる
-    let x = (w - PANEL_SIZE.0 - 8.0).max(0.0);
-    let y = (h - PANEL_SIZE.1 - 56.0).max(0.0);
+    open_panel(app);
+}
+
+/// 面板を開く(開いていれば前に出す)。タスクバーを除いた範囲の右下(タスクバーが横や上にあっても重ならない)
+pub fn open_panel(app: &AppHandle) {
+    if let Some(window) = app.get_webview_window("panel") {
+        let _ = window.set_focus();
+        return;
+    }
+    let (ax, ay, aw, ah) = area(app);
+    let x = (ax + aw - PANEL_SIZE.0 - 4.0).max(ax);
+    let y = (ay + ah - PANEL_SIZE.1 - 4.0).max(ay);
     let built = WebviewWindowBuilder::new(app, "panel", WebviewUrl::App("index.html".into()))
         .title("Yudh")
         .inner_size(PANEL_SIZE.0, PANEL_SIZE.1)
@@ -93,12 +107,13 @@ pub fn sync_posture(app: &AppHandle) {
             let _ = app.emit_to("posture", "posture-changed", ());
         }
         (true, None) => {
-            let (w, _) = screen(app);
+            // マウスのある画面の上部中央
+            let (ax, ay, aw, _) = area(app);
             let _ =
                 WebviewWindowBuilder::new(app, "posture", WebviewUrl::App("posture.html".into()))
                     .title("Yudh")
                     .inner_size(POSTURE_SIZE.0, POSTURE_SIZE.1)
-                    .position(((w - POSTURE_SIZE.0) / 2.0).max(0.0), 16.0)
+                    .position(ax + ((aw - POSTURE_SIZE.0) / 2.0).max(0.0), ay + 12.0)
                     .decorations(false)
                     .transparent(true)
                     .shadow(false)
@@ -130,13 +145,9 @@ pub fn open_ritual(app: &AppHandle) {
         .build();
 }
 
-/// 画面側から大きさを合わせる(坐站の小窓の高さ)
+/// 画面側から大きさを合わせる(坐站の小窓の高さ。幅は決まっているので位置はそのまま:自分で動かした位置も保つ)
 pub fn fit(app: &AppHandle, label: &str, width: f64, height: f64) {
     if let Some(window) = app.get_webview_window(label) {
         let _ = window.set_size(LogicalSize::new(width, height));
-        if label == "posture" {
-            let (w, _) = screen(app);
-            let _ = window.set_position(LogicalPosition::new(((w - width) / 2.0).max(0.0), 16.0));
-        }
     }
 }

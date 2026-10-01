@@ -52,9 +52,9 @@ function renderWeekday() {
 }
 
 function renderTabs() {
-  const remaining = state.panel?.stats
-    ? Object.values(state.panel.stats.remaining).reduce((a, b) => a + b, 0)
-    : null;
+  // 角标は単語と言い換えだけ(拼写は Windows では出さないので、数えると消せない数字が残る)
+  const r = state.panel?.stats?.remaining;
+  const remaining = r ? (r.vocab ?? 0) + (r.para ?? 0) : null;
   const tabs = [
     ["english", "英语", remaining],
     ["tomorrow", "明天", null],
@@ -549,6 +549,7 @@ async function settingsView() {
       h("div", { class: "hint" }, "选 Mac 设置里的同一个文件夹（OneDrive 等）。单词进度、明天的会议、词表都从这里来。"),
     ),
     h("div", { class: "field" }, "这台电脑的名字", text("device"), h("div", { class: "hint" }, "进度文件按名字分开写，两台设备不要同名。")),
+    check("autostart", "开机后自动启动（只待在托盘里，几乎不占资源）"),
     h("h3", {}, "坐站提醒"),
     check("postureEnabled", "提醒我切换坐姿和站姿"),
     h("div", { class: "row", style: { gap: "16px" } }, h("div", { class: "field" }, "坐几分钟", number("sitMinutes", 20, 90, 5)), h("div", { class: "field" }, "站几分钟", number("standMinutes", 5, 60, 5))),
