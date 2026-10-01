@@ -178,6 +178,29 @@ public struct EnglishStore {
         }
     }
 
+    /// その日に答えた結果(答えた順。again / hard / good / easy、「知ってる」は known)。本轮の盤面の漆に使う
+    public func results(day: String) throws -> [String] {
+        try db.dbQueue.read {
+            try String.fetchAll($0, sql: "SELECT result FROM english_log WHERE day = ? ORDER BY at, id",
+                                arguments: [day])
+        }
+    }
+
+    /// そのカードの評分の履歴(古い順。取り消した分は除く)。卡の复习记录に使う
+    public func ratings(card id: String) throws -> [SRSRating] {
+        try db.dbQueue.read { db in
+            // 取り消しの出来事も同じカードに付くので、まとめて読んで除く
+            let events = try String.fetchAll(db, sql: "SELECT json FROM sync_event WHERE card = ? ORDER BY seq",
+                                              arguments: [id])
+                .compactMap { SyncEvent.parse(line: $0) }
+            let undone = Set(events.filter { $0.op == .undo }.compactMap(\.target))
+            return events
+                .filter { $0.op == .rate && !undone.contains($0.id) }
+                .sorted { ($0.at, $0.id) < ($1.at, $1.id) }
+                .compactMap { $0.rating.flatMap(SRSRating.init(rawValue:)) }
+        }
+    }
+
     /// 連続日数(今日まだなら昨日までで数える)
     public func streak(today: Date = Date(), calendar: Calendar = .current) throws -> Int {
         let days = try db.dbQueue.read {

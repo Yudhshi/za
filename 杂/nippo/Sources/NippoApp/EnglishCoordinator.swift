@@ -148,6 +148,8 @@ final class EnglishCoordinator: ObservableObject {
     @Published private(set) var lastAction: LastAction?
     @Published private(set) var flash: Flash?
     @Published private(set) var todayCount = 0
+    /// 今日答えた結果(答えた順。本轮の盤面の漆)
+    @Published private(set) var todayResults: [String] = []
     @Published private(set) var streak = 0
     @Published private(set) var remaining: [Mode: Int] = [:]
 
@@ -696,6 +698,7 @@ final class EnglishCoordinator: ObservableObject {
         let now = Date()
         let today = DayKey.key(for: now)
         todayCount = (try? store.answeredCount(day: today)) ?? 0
+        todayResults = (try? store.results(day: today)) ?? []
         streak = (try? store.streak(today: now)) ?? 0
         guard loaded else { return }
         resetExtraIfNewDay()
@@ -710,6 +713,11 @@ final class EnglishCoordinator: ObservableObject {
                                                   newLimit: newLimit(mode))
         }
         remaining = counts
+    }
+
+    /// そのカードの評分の履歴(古い順。卡の复习记录)
+    func history(for id: String) -> [SRSRating] {
+        (try? store.ratings(card: id)) ?? []
     }
 
     /// タブの見出しに出す、今日の残り(復習 + 新規)

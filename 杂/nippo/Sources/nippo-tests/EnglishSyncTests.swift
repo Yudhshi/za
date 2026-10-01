@@ -102,4 +102,19 @@ func runEnglishSyncTests() {
         T.expectEqual(before.1, after.1, "other kind unchanged")
         T.expectEqual(before.2, after.2, "log count unchanged")
     }
+
+    T.run("today's results and a card's rating history skip what was undone") {
+        let a = EnglishStore(db: try AppDatabase.inMemory(), device: "A")
+        let day1 = tokyoDate(2026, 10, 1, 10, 0)
+        try a.record(id: "vocab:h", kind: .vocab, rating: .again, now: day1, calendar: cal)
+        try a.record(id: "vocab:h", kind: .vocab, rating: .hard, now: day1.addingTimeInterval(30), calendar: cal)
+        try a.markKnown(id: "vocab:k", kind: .vocab, now: day1.addingTimeInterval(40), calendar: cal)
+        let point = try a.undoPoint(for: "vocab:h")
+        try a.record(id: "vocab:h", kind: .vocab, rating: .easy, now: day1.addingTimeInterval(60), calendar: cal)
+        T.expectEqual(try a.ratings(card: "vocab:h"), [.again, .hard, .easy])
+        try a.undo(point, now: day1.addingTimeInterval(90), calendar: cal)
+        T.expectEqual(try a.ratings(card: "vocab:h"), [.again, .hard], "the undone answer is gone")
+        T.expectEqual(try a.results(day: "2026-10-01"), ["again", "hard", "known"], "in answer order")
+        T.expectEqual(try a.ratings(card: "vocab:none"), [], "unknown card")
+    }
 }
