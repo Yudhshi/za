@@ -57,6 +57,10 @@ func runSettingsTests() {
 
         T.expectEqual(s.ritualVideos, Ritual.defaultVideos)
         T.expectEqual(s.ritualStretches, Ritual.defaultStretches)
+        T.expectEqual(s.ritualStrength, Ritual.defaultStrength)
+        T.expectEqual(s.ritualFloor, Ritual.defaultFloor)
+        T.expectEqual(s.ritualStrengthOn, true)
+        T.expectEqual(s.ritualStrengthLog, [:])
         T.expectEqual(s.ritualVoice, true)
         T.expectEqual(s.breathHabit, true)
         T.expectEqual(s.breathLog, [:])

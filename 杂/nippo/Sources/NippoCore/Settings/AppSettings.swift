@@ -129,6 +129,29 @@ public final class AppSettings: ObservableObject {
         set { d.set(newValue, forKey: "ritualStretches"); objectWillChange.send() }
     }
 
+    /// 隔天に足す肩袖の力と、床の上の拉伸(最後は仰向けの腹式呼吸)
+    public var ritualStrength: String {
+        get { d.string(forKey: "ritualStrength") ?? Ritual.defaultStrength }
+        set { d.set(newValue, forKey: "ritualStrength"); objectWillChange.send() }
+    }
+
+    public var ritualFloor: String {
+        get { d.string(forKey: "ritualFloor") ?? Ritual.defaultFloor }
+        set { d.set(newValue, forKey: "ritualFloor"); objectWillChange.send() }
+    }
+
+    /// 日课に隔天で肩袖の力を入れる
+    public var ritualStrengthOn: Bool {
+        get { d.object(forKey: "ritualStrengthOn") as? Bool ?? true }
+        set { d.set(newValue, forKey: "ritualStrengthOn"); objectWillChange.send() }
+    }
+
+    /// 力量を入れた日课を終えた日
+    public var ritualStrengthLog: [String: Int] {
+        get { d.dictionary(forKey: "ritualStrengthLog") as? [String: Int] ?? [:] }
+        set { d.set(newValue, forKey: "ritualStrengthLog"); objectWillChange.send() }
+    }
+
     /// 日课の拉伸を声で読む(床で拉伸しているあいだ画面を見なくていいように)
     public var ritualVoice: Bool {
         get { d.object(forKey: "ritualVoice") as? Bool ?? true }

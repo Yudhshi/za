@@ -3,13 +3,21 @@ import AVFoundation
 /// 英語の読み上げ(macOS 内蔵の音声)。IELTS に合わせて英国英語の声を優先し、
 /// 高品質版(「拡張」「プレミアム」)を入れてあればそちらを使う
 @MainActor
-final class Speaker {
+final class Speaker: NSObject, AVSpeechSynthesizerDelegate {
     static let shared = Speaker()
 
     private let synthesizer = AVSpeechSynthesizer()
     private lazy var voice: AVSpeechSynthesisVoice? = Self.bestVoice()
+    /// guide(_:then:) の読み終わりの知らせ(いま読んでいる 1 文のものだけ)
+    private var pending: (id: ObjectIdentifier, done: () -> Void)?
+
+    override private init() {
+        super.init()
+        synthesizer.delegate = self
+    }
 
     func say(_ text: String, slow: Bool = false) {
+        pending = nil
         synthesizer.stopSpeaking(at: .immediate)
         let utterance = AVSpeechUtterance(string: text)
         utterance.voice = voice
@@ -18,16 +26,34 @@ final class Speaker {
     }
 
     func stop() {
+        pending = nil
         synthesizer.stopSpeaking(at: .immediate)
     }
 
-    /// 日课の拉伸の読み上げ(中文の声。少しゆっくり)
-    func guide(_ text: String) {
+    /// 日课の拉伸の読み上げ(中文の声。少しゆっくり)。読み終えたら then を呼ぶ(止めた・次を読んだときは呼ばない)
+    func guide(_ text: String, then done: (() -> Void)? = nil) {
+        pending = nil
         synthesizer.stopSpeaking(at: .immediate)
         let utterance = AVSpeechUtterance(string: text)
         utterance.voice = guideVoice
         utterance.rate = AVSpeechUtteranceDefaultSpeechRate * 0.9
+        if let done {
+            pending = (ObjectIdentifier(utterance), done)
+        }
         synthesizer.speak(utterance)
+    }
+
+    nonisolated func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didFinish utterance: AVSpeechUtterance) {
+        let id = ObjectIdentifier(utterance)
+        Task { @MainActor in
+            self.finished(id)
+        }
+    }
+
+    private func finished(_ id: ObjectIdentifier) {
+        guard let pending, pending.id == id else { return }
+        self.pending = nil
+        pending.done()
     }
 
     private lazy var guideVoice: AVSpeechSynthesisVoice? = Self.bestVoice(languages: ["zh-CN", "zh-TW", "zh-HK"])

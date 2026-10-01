@@ -3,7 +3,7 @@ import NippoCore
 import SwiftUI
 import WebKit
 
-// MARK: - 泡澡のあとの日课(跟练の動画 → 肩・首の拉伸 → 仰向けの腹式呼吸)
+// MARK: - 泡澡のあとの日课(跟练の動画 → 立ってやる拉伸 →(隔天)肩袖の力 → 床の拉伸 → 仰向けの腹式呼吸)
 
 /// 日课の窓。「泡完澡了」で毎回最初(動画 1 本目)から。閉じたら動画のプレーヤーごと捨てる(音を残さない・メモリを返す)
 @MainActor
@@ -23,10 +23,14 @@ final class RitualWindowController: NSObject, NSWindowDelegate {
             return
         }
         let settings = coordinator.settings
+        let strength = settings.ritualStrengthOn
+            && Ritual.includesStrength(log: settings.ritualStrengthLog, today: Date())
         let session = RitualSession(videos: Ritual.videos(from: settings.ritualVideos),
-                                    stretches: BreakReminder.stretches(from: settings.ritualStretches),
+                                    standing: settings.ritualStretches,
+                                    strength: strength ? settings.ritualStrength : nil,
+                                    floor: settings.ritualFloor,
                                     voice: settings.ritualVoice)
-        session.onFinish = { [weak self] in self?.coordinator.recordRitual() }
+        session.onFinish = { [weak self] withStrength in self?.coordinator.recordRitual(strength: withStrength) }
         self.session = session
         let host = NSHostingController(rootView: RitualView(session: session, coordinator: coordinator))
         let window = NSWindow(contentViewController: host)
@@ -52,8 +56,9 @@ final class RitualWindowController: NSObject, NSWindowDelegate {
     }
 }
 
-/// 日课の進み方。動画は自分で「下一个」(動画の終わりは取れないので)、拉伸は 1 歩ずつ秒を数えて自動で次へ(床にいても手を使わない)。
-/// 秒の無い構えの行は 10 秒。声で読む設定なら、歩ごとに読み上げる
+/// 日课の進み方。動画は自分で「下一个」(動画の終わりは取れないので)、拉伸は 1 歩ずつ自動で次へ(床にいても手を使わない)。
+/// 1 歩の始まりは「准备」:声で読むなら読み終えて 1.5 秒、読まないなら 3 秒たってから秒を数え始める(構えるあいだに減らさない)。
+/// 秒の無い構えの行は 10 秒。简版に切り替えると、拉伸は简版の 4 つだけ(力量は入れない)
 @MainActor
 final class RitualSession: ObservableObject {
     struct StretchStep: Equatable {
@@ -74,22 +79,52 @@ final class RitualSession: ObservableObject {
 
     /// 秒の書いていない構えの行の長さ
     static let setupSeconds: TimeInterval = 10
+    /// 読み終えてから数え始めるまで / 読まないときの准备
+    static let afterVoice: TimeInterval = 1.5
+    static let quietLead: TimeInterval = 3
 
-    let items: [Item]
-    let videoTitles: [String]
-    let stretchNames: [String]
+    private let videos: [Ritual.Video]
+    private let standing: String
+    private let strength: String?
+    private let floor: String
     let voice: Bool
-    var onFinish: () -> Void = {}
+    /// 終えたとき(力量を入れた日か)
+    var onFinish: (Bool) -> Void = { _ in }
 
+    @Published private(set) var items: [Item] = []
+    @Published private(set) var stretchNames: [String] = []
+    @Published private(set) var short = false
     @Published private(set) var index = 0
-    /// いまの歩が終わる時刻(拉伸の歩だけ。止めているあいだは nil)
+    /// 読んでいる / 構えている(まだ秒を数えていない)
+    @Published private(set) var preparing = false
+    /// いまの歩が終わる時刻(数えているあいだだけ)
     @Published private(set) var endsAt: Date?
     /// 止めたときの残り秒
     @Published private(set) var pausedLeft: TimeInterval?
     @Published private(set) var finished = false
     private var timer: Task<Void, Never>?
+    private var lead: Task<Void, Never>?
+    /// いまの歩の番号札(遅れて届いた「読み終わり」を前の歩に効かせない)
+    private var token = 0
 
-    init(videos: [Ritual.Video], stretches: [BreakReminder.Stretch], voice: Bool) {
+    init(videos: [Ritual.Video], standing: String, strength: String?, floor: String, voice: Bool) {
+        self.videos = videos
+        self.standing = standing
+        self.strength = strength
+        self.floor = floor
+        self.voice = voice
+        rebuild()
+    }
+
+    var videoTitles: [String] { videos.map(\.title) }
+    var videoCount: Int { videos.count }
+    var current: Item? { items.indices.contains(index) ? items[index] : nil }
+    /// 今日は力量を入れているか(简版では入れない)
+    var hasStrength: Bool { strength != nil && !short }
+
+    private func rebuild() {
+        let stretches = Ritual.plan(standing: standing, strength: hasStrength ? strength : nil, floor: floor,
+                                    short: short)
         var items: [Item] = videos.enumerated().map { Item.video($0.element, number: $0.offset) }
         for (number, stretch) in stretches.enumerated() {
             let steps = StretchGuide.steps(of: stretch)
@@ -102,13 +137,19 @@ final class RitualSession: ObservableObject {
             }
         }
         self.items = items
-        videoTitles = videos.map(\.title)
         stretchNames = stretches.map { StretchGuide.split($0.name).title }
-        self.voice = voice
     }
 
-    var current: Item? { items.indices.contains(index) ? items[index] : nil }
-    var videoCount: Int { videoTitles.count }
+    /// 简版 / 全部 を切り替える。拉伸の途中なら拉伸の最初から
+    func setShort(_ value: Bool) {
+        guard value != short else { return }
+        let inStretches = index >= videoCount
+        short = value
+        rebuild()
+        if inStretches || finished {
+            enter(videoCount)
+        }
+    }
 
     /// 次の拉伸の歩(画面の右に予告する)
     var upcoming: StretchStep? {
@@ -129,11 +170,19 @@ final class RitualSession: ObservableObject {
     func previous() { enter(max(0, min(index, items.count) - 1)) }
     func jump(to item: Int) { enter(item) }
 
-    private func enter(_ item: Int) {
+    private func cancelTimers() {
         timer?.cancel()
         timer = nil
+        lead?.cancel()
+        lead = nil
+    }
+
+    private func enter(_ item: Int) {
+        cancelTimers()
+        token += 1
         endsAt = nil
         pausedLeft = nil
+        preparing = false
         guard item < items.count else {
             finish()
             return
@@ -142,32 +191,66 @@ final class RitualSession: ObservableObject {
         finished = false
         switch items[item] {
         case .stretch(let s):
-            run(s.duration)
-            if voice {
-                Speaker.shared.guide(s.stepNumber == 0 ? "\(s.heading)。\(s.step.text)" : s.step.text)
-            }
+            prepare(s)
         case .video:
             Speaker.shared.stop()
         }
     }
 
+    /// 准备:読み上げる(読むなら読み終わり + 1.5 秒、読まないなら 3 秒)→ 数え始める
+    private func prepare(_ s: StretchStep) {
+        preparing = true
+        let mine = token
+        let text = s.stepNumber == 0 ? "\(s.heading)。\(s.step.text)" : s.step.text
+        if voice {
+            Speaker.shared.guide(text) { [weak self] in
+                self?.startAfter(Self.afterVoice, token: mine, seconds: s.duration)
+            }
+            // 声が出ない環境でも止まらないように:1 字 0.35 秒 + 3 秒で始める
+            startAfter(Double(text.count) * 0.35 + 3, token: mine, seconds: s.duration)
+        } else {
+            startAfter(Self.quietLead, token: mine, seconds: s.duration)
+        }
+    }
+
+    private func startAfter(_ delay: TimeInterval, token mine: Int, seconds: TimeInterval) {
+        lead?.cancel()
+        lead = Task { [weak self] in
+            do {
+                try await Task.sleep(for: .seconds(delay))
+            } catch {
+                return
+            }
+            guard let self, self.token == mine, self.preparing else { return }
+            self.preparing = false
+            self.run(seconds)
+        }
+    }
+
     private func run(_ seconds: TimeInterval) {
         endsAt = Date().addingTimeInterval(seconds)
+        let mine = token
         timer = Task { [weak self] in
             do {
                 try await Task.sleep(for: .seconds(seconds))
             } catch {
                 return
             }
-            guard let self else { return }
+            guard let self, self.token == mine else { return }
             NSSound(named: NSSound.Name("Tink"))?.play()
             self.next()
         }
     }
 
-    /// 拉伸の歩を止める / 続ける
+    /// 准备のあいだは「すぐ始める」、数えているあいだは止める / 続ける
     func togglePause() {
-        if let left = pausedLeft {
+        if preparing, case .stretch(let s)? = current {
+            lead?.cancel()
+            lead = nil
+            preparing = false
+            Speaker.shared.stop()
+            run(s.duration)
+        } else if let left = pausedLeft {
             pausedLeft = nil
             run(left)
         } else if let end = endsAt {
@@ -184,12 +267,12 @@ final class RitualSession: ObservableObject {
         finished = true
         index = items.count
         if voice { Speaker.shared.guide("今天的日课做完了") }
-        onFinish()
+        onFinish(hasStrength)
     }
 
     func stop() {
-        timer?.cancel()
-        timer = nil
+        cancelTimers()
+        token += 1
         Speaker.shared.stop()
     }
 }
@@ -305,8 +388,11 @@ struct RitualView: View {
             Button("‹ 上一步") { session.previous() }
                 .buttonStyle(BareButtonStyle())
             Spacer(minLength: 0)
-            Button(session.pausedLeft == nil ? "暂停" : "继续") { session.togglePause() }
-                .buttonStyle(FrameButtonStyle(height: Turf.popupButton, width: 110))
+            Button(session.preparing ? "开始" : (session.pausedLeft == nil ? "暂停" : "继续")) {
+                session.togglePause()
+            }
+            .buttonStyle(FrameButtonStyle(height: Turf.popupButton, width: 110))
+            .help(session.preparing ? "不等语音读完，马上开始计时" : "暂停 / 继续计时")
             Button("下一步") { session.next() }
                 .buttonStyle(SprayButtonStyle(kind: .teal, height: Turf.popupButton, width: 150))
         }
@@ -405,6 +491,11 @@ private struct RitualStretchCard: View {
             HStack(alignment: .center, spacing: 14) {
                 PosturePose(name: stretch.step.pose, height: 132, symbol: "figure.cooldown")
                 VStack(alignment: .leading, spacing: 8) {
+                    if session.preparing {
+                        Text("准备")
+                            .font(TypeRole.sectionCaption)
+                            .foregroundStyle(Palette.kraftTextSecondary)
+                    }
                     TimelineView(.periodic(from: .now, by: 0.5)) { context in
                         PostureTimer(text: clock(now: context.date))
                     }
@@ -431,8 +522,11 @@ private struct RitualStretchCard: View {
         .kraftSurface()
     }
 
-    /// 残り(止めているときは止めた残り)
+    /// 残り(准备のあいだはこの歩の長さ、止めているときは止めた残り)
     private func clock(now: Date) -> String {
+        if session.preparing {
+            return StretchGuide.clock(until: now.addingTimeInterval(stretch.duration), now: now)
+        }
         if let left = session.pausedLeft {
             return StretchGuide.clock(until: now.addingTimeInterval(left), now: now)
         }
@@ -505,7 +599,7 @@ private struct RitualList: View {
                 }
             }
             if !session.stretchNames.isEmpty {
-                caption("拉伸")
+                caption(session.short ? "拉伸（简版）" : (session.hasStrength ? "拉伸 · 今天加肩袖力量" : "拉伸"))
                     .padding(.top, session.videoCount > 0 ? 12 : 0)
                 ForEach(Array(session.stretchNames.enumerated()), id: \.offset) { number, name in
                     if let first = session.firstItem(ofStretch: number) {
@@ -515,6 +609,12 @@ private struct RitualList: View {
                 }
             }
             Spacer(minLength: 12)
+            // 累的晚上:拉伸只做 4 个(约 5 分钟)。连续比量重要
+            Button(session.short ? "改回全部拉伸" : "今天累了，只做简版（约 5 分钟）") {
+                session.setShort(!session.short)
+            }
+            .buttonStyle(BareButtonStyle())
+            .font(TypeRole.caption)
             Text("连续 \(BreathLog.streak(coordinator.settings.ritualLog, today: Date())) 天 · 腹式呼吸今天 \(coordinator.breathToday) 次")
                 .font(TypeRole.caption)
                 .foregroundStyle(Palette.textSecondary)

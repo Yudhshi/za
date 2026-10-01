@@ -86,14 +86,38 @@ struct SettingsView: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
                 HStack {
-                    Text("跟练之后的拉伸（写法和上面的拉伸一样）")
+                    Text("跟练之后：站着做的拉伸（写法和上面的拉伸一样）")
                     Spacer()
                     Button("恢复默认") { settings.ritualStretches = Ritual.defaultStretches }
                         .disabled(settings.ritualStretches == Ritual.defaultStretches)
                 }
                 TextEditor(text: binding(\.ritualStretches))
                     .font(.body)
-                    .frame(height: 200)
+                    .frame(height: 180)
+                Toggle("隔天加肩袖力量（约 6 分钟，徒手 + 一瓶水）", isOn: binding(\.ritualStrengthOn))
+                HStack {
+                    Text("肩袖力量（在地上做）")
+                    Spacer()
+                    Button("恢复默认") { settings.ritualStrength = Ritual.defaultStrength }
+                        .disabled(settings.ritualStrength == Ritual.defaultStrength)
+                }
+                TextEditor(text: binding(\.ritualStrength))
+                    .font(.body)
+                    .frame(height: 110)
+                    .disabled(!settings.ritualStrengthOn)
+                HStack {
+                    Text("最后在地上做的拉伸（默认以躺着的腹式呼吸收尾）")
+                    Spacer()
+                    Button("恢复默认") { settings.ritualFloor = Ritual.defaultFloor }
+                        .disabled(settings.ritualFloor == Ritual.defaultFloor)
+                }
+                TextEditor(text: binding(\.ritualFloor))
+                    .font(.body)
+                    .frame(height: 120)
+                Text("顺序：跟练视频 → 站着的拉伸 →（隔天）肩袖力量 → 地上的拉伸。累的晚上可以在日课窗口里切换成简版（约 5 分钟）。"
+                     + "泡完热水澡先喝点水，从地上站起来时慢一点；夜里疼醒、抬手没力气、手发麻，或者不舒服超过 6 周，请去看医生或理疗师")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
                 Toggle("拉伸时语音播报每一步（到时间自动进入下一步）", isOn: binding(\.ritualVoice))
                 HStack {
                     Text("晚上和休息日，面板底部会出现「泡完澡了」。已连续 \(BreathLog.streak(settings.ritualLog, today: Date())) 天")

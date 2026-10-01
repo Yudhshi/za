@@ -258,10 +258,13 @@ final class AppCoordinator: ObservableObject {
         ritualWindow.show()
     }
 
-    /// 日课をやり終えた(最後が仰向けの腹式呼吸なので、呼吸の 1 回にも数える)
-    func recordRitual() {
+    /// 日课をやり終えた(最後が仰向けの腹式呼吸なので、呼吸の 1 回にも数える)。力量を入れた日は隔天の記録も
+    func recordRitual(strength: Bool) {
         let today = DayKey.key(for: Date())
         settings.ritualLog = BreathLog.recording(settings.ritualLog, day: today)
+        if strength {
+            settings.ritualStrengthLog = BreathLog.recording(settings.ritualStrengthLog, day: today)
+        }
         settings.breathLog = BreathLog.recording(settings.breathLog, day: today)
         objectWillChange.send()
     }

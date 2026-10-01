@@ -8,14 +8,14 @@ use chrono::{DateTime, Utc};
 use serde::Serialize;
 
 use crate::day::{self, Zone};
-use crate::posture::StepMeta;
+use crate::posture::{stretches, StepMeta, Stretch};
 
 pub const DEFAULT_VIDEOS: &str = "跟练 1 https://www.bilibili.com/video/BV1JW4y1k7F7/
 跟练 2 https://www.bilibili.com/video/BV1UL411F7Hk/
 跟练 3 https://www.youtube.com/watch?v=SGPBSqxKGAc
 跟练 4 https://www.youtube.com/watch?v=aHlNoTpXf_8";
 
-/// 跟练のあとの拉伸(斜角肌・颈后・三角肌・小圆肌・冈上肌・背中、最後に仰向けの腹式呼吸)
+/// 跟练のあとの拉伸、立ってやる分(先に立ったまま全部やってから床へ)
 pub const DEFAULT_STRETCHES: &str = "斜角肌拉伸（约 2 分钟）
 右手按住右侧锁骨下方，头向左倒，拉伸右侧颈部，停 20 秒
 微微抬头停 15 秒，再微微低头停 15 秒
@@ -31,26 +31,30 @@ pub const DEFAULT_STRETCHES: &str = "斜角肌拉伸（约 2 分钟）
 左手扣住右肘往左肩方向拉，肩膀不要耸，停 30 秒
 换另一侧，停 30 秒
 
-侧卧压前臂（约 1 分钟）
-右侧躺下，右上臂在身前和身体成 90°，手肘弯 90°，指尖朝上
-左手把右前臂慢慢往地板方向压，肩后侧有拉伸感就停，停 30 秒（肩膀前面夹痛就压浅一点）
-换左侧躺，停 30 秒
-
 背后拉手腕（约 1 分钟）
-双手背到身后，左手抓住右手腕（拉冈上肌、三角肌中束）
-把右手往左下方拉，头向左倒加强，停 30 秒
-换另一侧，停 30 秒
+双手背到身后，左手轻轻握住右手腕（拉冈上肌、三角肌中束）
+把右手轻轻往左下方带，有拉伸感就停，肩膀上面或前面刺痛就放松，停 20 秒
+换另一侧，停 20 秒
 
 背后扣手抬臂（约 1 分钟）
 双手在背后十指相扣，手臂伸直（拉三角肌前束）
 挺胸，手臂慢慢往后上方抬，停 30 秒 × 2 次
 
-网球放松（约 4 分钟）
-背靠墙，网球放在右边腋窝后方（小圆肌），小幅上下滚动 60 秒。不要压到锁骨上方和喉咙两侧
-把球移到右肩后上方的凹处（冈上肌），压住慢慢转动手臂 60 秒
-换左边：腋窝后方 60 秒，肩后上方 60 秒
+网球放松（约 3 分钟）
+背靠墙，网球放在右边腋窝后方（小圆肌），小幅上下滚动 45 秒。不要压到锁骨上方和喉咙两侧
+把球移到右肩后上方的凹处（冈上肌），压住慢慢转动手臂 45 秒
+换左边：腋窝后方 45 秒，肩后上方 45 秒";
 
-猫牛式和穿针式（约 2 分钟）
+/// 隔天に足す肩袖の力(床の上。手で押し合う等長と、水 1 本)
+pub const DEFAULT_STRENGTH: &str = "肩袖力量（隔天做，约 6 分钟）
+坐在地上，右手肘贴腰弯 90°，左手握住右手腕；右手往外推、左手顶住不让动，用 5 成力，停 10 秒 × 5 次
+换左手往外推，停 10 秒 × 5 次
+左侧躺，右手拿一瓶水，手肘贴腰弯 90°，前臂慢慢转向天花板再慢慢放下，做 15 次
+换右侧躺，左手拿水，做 15 次
+趴下，两手肘弯成 W 放在身体两侧，收紧肩胛把手肘和手抬离地面，停 3 秒，做 12 次";
+
+/// 床の上の拉伸と、最後に仰向けの腹式呼吸
+pub const DEFAULT_FLOOR: &str = "猫牛式和穿针式（约 2 分钟）
 四点跪姿，吸气塌腰抬头，呼气拱背低头，慢慢做 8 次
 右手从左手下方穿过去，右肩和右耳贴地，停 30 秒
 换另一侧，停 30 秒
@@ -59,6 +63,41 @@ pub const DEFAULT_STRETCHES: &str = "斜角肌拉伸（约 2 分钟）
 仰躺，膝盖弯曲，一只手放肚子上，一只手放胸口
 收下巴，后脑轻轻压向地面，停 5 秒 × 5 次
 用鼻子吸气 4 秒只让肚子鼓起来，用嘴呼气 6 秒，做 8 次";
+
+/// 累的晚上の简版(約 5 分)
+pub const SHORT_STRETCHES: &str = "斜角肌拉伸（约 1 分钟）
+右手按住右侧锁骨下方，头向左倒，拉伸右侧颈部，停 30 秒
+换左边：左手按左侧锁骨下方，头向右倒，停 30 秒
+
+横臂拉肩后侧（约 1 分钟）
+右臂伸直横过身体前方，左手扣住右肘往左肩方向拉，停 30 秒
+换另一侧，停 30 秒
+
+网球放松（约 2 分钟）
+背靠墙，网球放在右边腋窝后方，小幅上下滚动 60 秒。不要压到锁骨上方和喉咙两侧
+换左边，腋窝后方 60 秒
+
+仰躺腹式呼吸（约 1 分钟）
+仰躺，膝盖弯曲，一只手放肚子上，一只手放胸口
+用鼻子吸气 4 秒只让肚子鼓起来，用嘴呼气 6 秒，做 6 次";
+
+/// 今日の日课に力量を入れるか:隔天(今日・昨日にやっていなければ入れる)
+pub fn includes_strength(log: &BTreeMap<String, u32>, now: DateTime<Utc>, zone: Zone) -> bool {
+    let today = zone.date(now);
+    let done = |d: chrono::NaiveDate| log.get(&day::key(d)).is_some_and(|n| *n > 0);
+    !done(today) && !done(day::add_days(today, -1))
+}
+
+/// 今日の拉伸の並び:立ってやる分 → (隔天)力量 → 床の上。简版なら简版だけ
+pub fn plan(standing: &str, strength: Option<&str>, floor: &str, short: bool) -> Vec<Stretch> {
+    if short {
+        return stretches(SHORT_STRETCHES);
+    }
+    let mut all = stretches(standing);
+    all.extend(stretches(strength.unwrap_or("")));
+    all.extend(stretches(floor));
+    all
+}
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "lowercase")]
@@ -295,7 +334,7 @@ pub fn streak(log: &BTreeMap<String, u32>, now: DateTime<Utc>, zone: Zone) -> us
 mod tests {
     use super::*;
     use crate::day::testing::tokyo;
-    use crate::posture::{illustration, stretches};
+    use crate::posture::illustration;
 
     #[test]
     fn videos_sites_embeds_and_tracking_dropped() {
@@ -342,31 +381,85 @@ mod tests {
             Some(32)
         );
         assert_eq!(duration("头向右转 45°，低头看右边腋下，停 30 秒"), Some(30));
+        assert_eq!(
+            duration(
+                "趴下，两手肘弯成 W 放在身体两侧，收紧肩胛把手肘和手抬离地面，停 3 秒，做 12 次"
+            ),
+            Some(58)
+        );
         assert_eq!(duration("走 2 分钟"), Some(120));
         assert_eq!(duration("仰躺，膝盖弯曲，一只手放肚子上"), None);
-        let list = stretches(DEFAULT_STRETCHES);
-        assert_eq!(list.len(), 9);
-        let untimed = list
-            .iter()
-            .flat_map(|s| s.steps.iter())
-            .filter(|l| duration(l).is_none())
-            .count();
-        assert_eq!(untimed, 5, "only setup lines");
-        let pics: Vec<&str> = list.iter().map(illustration).collect();
+        let pics = |text: &str| stretches(text).iter().map(illustration).collect::<Vec<_>>();
         assert_eq!(
-            pics,
+            pics(DEFAULT_STRETCHES),
             vec![
                 "neck-side",
                 "neck-side",
                 "stretch",
                 "stretch",
-                "stretch",
                 "chest-doorway",
-                "stretch",
-                "stretch",
-                "belly-breathing"
+                "stretch"
             ]
         );
+        assert_eq!(pics(DEFAULT_STRENGTH), vec!["shoulder-blades"]);
+        assert_eq!(pics(DEFAULT_FLOOR), vec!["stretch", "belly-breathing"]);
+        assert!(
+            !DEFAULT_STRETCHES.contains("侧卧压") && !DEFAULT_FLOOR.contains("侧卧压"),
+            "no sleeper stretch"
+        );
+    }
+
+    #[test]
+    fn plan_order_strength_every_other_day_and_short() {
+        let secs = |plan: &[Stretch]| -> u32 {
+            plan.iter()
+                .flat_map(|s| s.steps.iter())
+                .map(|l| duration(l).unwrap_or(SETUP_SECONDS))
+                .sum()
+        };
+        let full = plan(
+            DEFAULT_STRETCHES,
+            Some(DEFAULT_STRENGTH),
+            DEFAULT_FLOOR,
+            false,
+        );
+        let names: Vec<String> = full
+            .iter()
+            .map(|s| crate::posture::split(&s.name).0)
+            .collect();
+        assert_eq!(
+            names,
+            vec![
+                "斜角肌拉伸",
+                "颈后斜拉",
+                "横臂拉肩后侧",
+                "背后拉手腕",
+                "背后扣手抬臂",
+                "网球放松",
+                "肩袖力量",
+                "猫牛式和穿针式",
+                "仰躺腹式呼吸"
+            ]
+        );
+        let rest = plan(DEFAULT_STRETCHES, None, DEFAULT_FLOOR, false);
+        assert_eq!(rest.len(), 8);
+        assert!(secs(&rest) <= 13 * 60, "{}", secs(&rest));
+        assert!(secs(&full) - secs(&rest) <= 6 * 60);
+        let short = plan(
+            DEFAULT_STRETCHES,
+            Some(DEFAULT_STRENGTH),
+            DEFAULT_FLOOR,
+            true,
+        );
+        assert_eq!(short.len(), 4);
+        assert!(secs(&short) <= 6 * 60, "{}", secs(&short));
+        let z = Zone::tokyo();
+        let today = tokyo(2026, 10, 3, 21, 0, 0);
+        let log = |d: &str| BTreeMap::from([(d.to_string(), 1u32)]);
+        assert!(includes_strength(&BTreeMap::new(), today, z));
+        assert!(!includes_strength(&log("2026-10-02"), today, z));
+        assert!(!includes_strength(&log("2026-10-03"), today, z));
+        assert!(includes_strength(&log("2026-10-01"), today, z));
     }
 
     #[test]
