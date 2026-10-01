@@ -287,8 +287,9 @@ pub fn apply_posture(app: &AppHandle, action: &str) -> PostureView {
     view
 }
 
+/// 窓を作ることがあるので async(同期の命令の中で窓を作ると Windows では止まる)
 #[tauri::command]
-pub fn posture_action(app: AppHandle, action: String) -> PostureView {
+pub async fn posture_action(app: AppHandle, action: String) -> PostureView {
     apply_posture(&app, &action)
 }
 
@@ -484,9 +485,10 @@ pub struct Fit {
     height: f64,
 }
 
-/// 窓を開く("ritual" / "panel")・大きさを合わせる("fit:posture")
+/// 窓を開く("ritual" / "panel")・大きさを合わせる("fit:posture")。
+/// 窓を作るので async(同期の命令の中で窓を作ると Windows では止まる)
 #[tauri::command]
-pub fn open_surface(app: AppHandle, which: String, fit: Option<Fit>) {
+pub async fn open_surface(app: AppHandle, which: String, fit: Option<Fit>) {
     match (which.as_str(), fit) {
         ("ritual", _) => surfaces::open_ritual(&app),
         ("panel", _) => surfaces::toggle_panel(&app),
