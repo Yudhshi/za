@@ -93,6 +93,7 @@ fn main() {
             commands::english_card,
             commands::english_rate,
             commands::english_known,
+            commands::english_spell,
             commands::english_undo,
             commands::english_more,
             commands::posture_state,

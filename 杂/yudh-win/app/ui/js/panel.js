@@ -1,7 +1,7 @@
-// 面板:英語(単語・考点词)/ 明天的会 / 设置。底栏は坐站の状態と「泡完澡了」
+// 面板:英語(単語・考点词・听写)/ 明天的会 / 设置。底栏は坐站の状態と「泡完澡了」
 import { loadMaterial, slice, sprite, tile, h, button, first, asset } from "./baked.js";
 import { call, closeWindow, openUrl } from "./api.js";
-import { loadIcons, icon, weekdays, weekdaysZh, hhmm, speak, clear } from "./common.js";
+import { loadIcons, icon, weekdays, weekdaysZh, hhmm, speak, stopSpeaking, clear, voiceFor, voicesReady } from "./common.js";
 
 const $ = (id) => document.getElementById(id);
 
@@ -12,6 +12,9 @@ const state = {
   card: null,
   revealed: false,
   picked: null,
+  /** 听写:採点の結果({ result, marks })と、一度でも再生したか(したら次の語は自動で読む) */
+  graded: null,
+  listened: false,
   undoable: false,
   settings: null,
 };
@@ -52,9 +55,9 @@ function renderWeekday() {
 }
 
 function renderTabs() {
-  // 角标は単語と言い換えだけ(拼写は Windows では出さないので、数えると消せない数字が残る)
-  const r = state.panel?.stats?.remaining;
-  const remaining = r ? (r.vocab ?? 0) + (r.para ?? 0) : null;
+  const remaining = state.panel?.stats
+    ? Object.values(state.panel.stats.remaining).reduce((a, b) => a + b, 0)
+    : null;
   const tabs = [
     ["english", "英语", remaining],
     ["tomorrow", "明天", null],
@@ -123,7 +126,13 @@ async function renderView() {
   const view = $("view");
   if (state.tab === "tomorrow") return clear(view, tomorrowView());
   if (state.tab === "settings") return clear(view, await settingsView());
-  return clear(view, await englishView());
+  clear(view, await englishView());
+  focusSpell();
+}
+
+/** 听写は入力欄に焦点を置く(開いてすぐ打てる・Enter で続けられるように) */
+function focusSpell() {
+  if (state.card?.kind === "spell" && !state.graded) $("spell-input")?.focus();
 }
 
 function emptyState(title, note, action) {
@@ -150,6 +159,7 @@ async function englishView() {
   state.card = await call("english_card", { kind: state.mode });
   state.revealed = false;
   state.picked = null;
+  state.graded = null;
   return h("div", {}, modesRow(), state.card ? stage() : doneView());
 }
 
@@ -158,6 +168,7 @@ function modesRow() {
   const modes = [
     ["vocab", "单词"],
     ["para", "考点词"],
+    ["spell", "听写"],
   ];
   return h(
     "div",
@@ -170,6 +181,7 @@ function modesRow() {
           class: `tab${on ? " on" : ""}`,
           onclick: () => {
             state.mode = key;
+            stopSpeaking();
             renderView();
           },
         },
@@ -271,6 +283,137 @@ function paraCard() {
   );
 }
 
+// MARK: 听写(Mac と同じ:英式の読み上げを聞いて綴る。正确 / 差一个字母 = 模糊 / 错 = 今天再来)
+
+/** 読む(慢速は 0.7 倍。Mac の 0.34 / 0.5 と同じくらい) */
+function playSpell(slow = false) {
+  const w = state.card?.spell;
+  if (!w) return;
+  state.listened = true;
+  speak(w.w, { lang: "en-GB", rate: slow ? 0.7 : 1 });
+  focusSpell();
+}
+
+/** 字の格(20 × 32、Archivo 26)の列。印の字は焼いた橙 / 青の遮块(素材がなければ下線)。長い語は 0.6 倍まで縮めて折り返す */
+function letterRow(text, marks, paint) {
+  const letters = Array.from(text);
+  const room = 244;
+  const scale = Math.max(0.6, Math.min(1, room / (Math.max(letters.length, 1) * 20)));
+  return h(
+    "div",
+    { class: "letters" },
+    letters.map((ch, i) => {
+      const cell = h("span", { class: "letter", style: { width: `${20 * scale}px`, height: `${32 * scale}px`, fontSize: `${26 * scale}px` } }, ch);
+      if (marks[i] && !slice(cell, `letter-${paint}-card`)) cell.classList.add(`under-${paint}`);
+      return cell;
+    }),
+  );
+}
+
+/** 再生ボタンの下の一言:英式の声が無ければ、美式で読んでいることを正直に言う(一覧が取れないときは既定の言い方) */
+function accentNote() {
+  const known = "speechSynthesis" in window && speechSynthesis.getVoices().length > 0;
+  if (!known || voiceFor(["en-GB"])) return "英式发音 · 建议戴耳机";
+  return "美式发音（没装英式语音）";
+}
+
+const spellTitles = {
+  correct: "正确",
+  almost: "差一点（错了 1 个字母）",
+  wrong: "正确答案 · 今天再来一次",
+};
+
+function spellCard() {
+  const c = state.card;
+  const w = c.spell;
+  const g = state.graded;
+  const disc = h("span", { class: "play-disc" }, sprite("button-play-orange-night") ?? h("span", { class: "disc" }), icon("play", 20));
+  // spellcheck は文字列で切る(h() は false の属性を書かない。赤い波線が出ると答えが分かってしまう)
+  const input = h("input", {
+    id: "spell-input",
+    type: "text",
+    lang: "en",
+    autocomplete: "off",
+    autocapitalize: "off",
+    spellcheck: "false",
+    placeholder: "输入听到的单词，按回车",
+    onkeydown: (e) => {
+      // 中文・日本語の入力法で変換を確定する Enter は採点にしない
+      if (e.key === "Enter" && !e.isComposing && e.keyCode !== 229) {
+        e.preventDefault();
+        submitSpell();
+      }
+    },
+  });
+  const box = h("div", { class: `spell-box${g ? " graded" : ""}` }, g ? (g.marks.typed ? letterRow(g.marks.typed, g.marks.typedMarks, "orange") : h("span", { class: "dash" }, "—")) : input);
+  slice(box, "input-frame-night") || box.classList.add("fallback");
+  const answer = g
+    ? h(
+        "div",
+        { class: "spell-answer" },
+        h("div", { class: "label" }, spellTitles[g.result]),
+        h("div", { class: "answer-row" }, letterRow(g.marks.answer, g.marks.answerMarks, "teal")),
+        w.ipa || w.zh ? h("div", { class: "gloss" }, [w.ipa ? `/${w.ipa}/` : null, w.zh].filter(Boolean).join(" · ")) : null,
+      )
+    : null;
+  return card(
+    h("div", { class: "tags row", title: `王陆语料 · ${w.set}` }, tag("听写", "black"), tag(w.set, "frame"), c.isNew ? tag("NEW", "orange") : null),
+    h(
+      "button",
+      { class: "play row", title: "播放（Ctrl+R）", onclick: () => playSpell() },
+      disc,
+      h("span", { class: "play-text" }, h("span", { class: "play-title" }, "播放", h("span", { class: "keycap" }, "Ctrl+R")), h("span", { class: "play-note" }, accentNote())),
+    ),
+    history(c.history),
+    h("div", { class: "spell-label" }, "你的拼写"),
+    box,
+    answer,
+  );
+}
+
+function spellActions() {
+  const g = state.graded;
+  return h(
+    "div",
+    { class: "actions row" },
+    button("慢速", { kind: "frame", width: 96, onClick: () => playSpell(true) }),
+    g ? null : button("不知道", { kind: "frame", width: 110, onClick: () => submitSpell(true) }),
+    h("span", { class: "grow" }),
+    h("span", { class: "keycap on-wall" }, "Enter"),
+    g ? button("下一个", { kind: "teal", width: 150, onClick: submitSpell }) : button("检查", { kind: "teal", width: 150, onClick: submitSpell }),
+  );
+}
+
+/** Enter:未採点なら採点、採点済みなら次へ。giveUp は「不知道」(答えを見せて、今日もう一度) */
+let spellBusy = false;
+
+async function submitSpell(giveUp = false) {
+  const c = state.card;
+  if (!c?.spell || spellBusy) return;
+  spellBusy = true;
+  try {
+    await gradeOrNext(c, giveUp);
+  } finally {
+    spellBusy = false;
+  }
+}
+
+async function gradeOrNext(c, giveUp) {
+  if (state.graded) {
+    await nextCard();
+    if (state.listened && state.card?.spell) speak(state.card.spell.w, { lang: "en-GB" });
+    return;
+  }
+  const typed = $("spell-input")?.value ?? "";
+  if (!giveUp && !typed.trim()) return;
+  const graded = await call("english_spell", { id: c.id, input: giveUp ? null : typed });
+  state.panel.stats = graded.stats;
+  state.graded = { result: graded.result, marks: graded.marks };
+  state.undoable = true;
+  renderTabs();
+  rerenderStage();
+}
+
 function column() {
   const s = state.panel.stats;
   return h(
@@ -341,12 +484,12 @@ function paraOptions() {
 }
 
 function stage() {
-  const isVocab = state.card.kind === "vocab";
+  const kind = state.card.kind;
   return h(
     "div",
     {},
-    h("div", { class: "stage" }, isVocab ? vocabCard() : paraCard(), column()),
-    isVocab ? vocabActions() : paraOptions(),
+    h("div", { class: "stage" }, kind === "vocab" ? vocabCard() : kind === "spell" ? spellCard() : paraCard(), column()),
+    kind === "vocab" ? vocabActions() : kind === "spell" ? spellActions() : paraOptions(),
     state.undoable ? h("button", { class: "bare", style: { marginTop: "10px" }, onclick: undo }, "撤销刚才的回答（Ctrl+Z）") : null,
   );
 }
@@ -358,7 +501,7 @@ function doneView() {
     h(
       "div",
       { class: "empty-state", style: { padding: "24px 4px", width: "308px" } },
-      h("div", { class: "title" }, state.mode === "vocab" ? "今天的单词做完了" : "今天的考点词做完了"),
+      h("div", { class: "title" }, { vocab: "今天的单词做完了", para: "今天的考点词做完了", spell: "今天的语料做完了" }[state.mode]),
       h("div", { class: "note" }, "复习的都做完了，新的也到了今天的数量。还想做的话再来 10 个。"),
       button("再来 10 个", {
         kind: "frame",
@@ -377,6 +520,7 @@ function rerenderStage() {
   const scroll = view.scrollTop;
   clear(view, h("div", {}, modesRow(), state.card ? stage() : doneView()));
   view.scrollTop = scroll;
+  focusSpell();
 }
 
 function reveal() {
@@ -411,6 +555,7 @@ async function nextCard() {
   state.card = await call("english_card", { kind: state.mode });
   state.revealed = false;
   state.picked = null;
+  state.graded = null;
   renderTabs();
   rerenderStage();
 }
@@ -564,18 +709,41 @@ async function settingsView() {
     resettable("ritualStrength", "肩袖力量（在地上做）", 6),
     resettable("ritualFloor", "最后在地上做的拉伸", 6),
     h("div", { class: "hint", style: { color: "var(--text-2)", fontSize: "12px", lineHeight: 1.5 } }, "泡完热水澡先喝点水，从地上站起来慢一点。夜里疼醒、抬手没力气、手发麻，或不舒服超过 6 周，请去看医生或理疗师。"),
+    ...voiceSection(),
   );
+}
+
+/** このパソコンに入っている声(听写の英式・日课の中文)。無ければ入れ方を書く */
+function voiceSection() {
+  if (!("speechSynthesis" in window) || !speechSynthesis.getVoices().length) return [];
+  const gb = voiceFor(["en-GB"]);
+  const zh = voiceFor(["zh-CN", "zh-TW", "zh-HK"]);
+  const style = { color: "var(--text-2)", fontSize: "12px", lineHeight: 1.5 };
+  const how = "Windows 设置 → 时间和语言 → 语音 → 管理语音 → 添加语音";
+  return [
+    h("h3", {}, "语音"),
+    h("div", { class: "hint", style }, gb ? `听写：${gb.name}` : `听写：没装英式英语语音，现在用美式代替。${how} →「English (United Kingdom)」`),
+    h("div", { class: "hint", style }, zh ? `日课播报：${zh.name}` : `日课播报：没装中文语音，现在只计时不播报。${how} →「中文(简体，中国)」`),
+  ];
 }
 
 // MARK: 键盘
 
 function bindKeys() {
   document.addEventListener("keydown", (e) => {
-    if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
-    if (e.key === "Escape") {
+    // Ctrl+R / F5 で画面を読み直さない(WebView2 の既定の動き)。听写では Ctrl+R が「播放」
+    if (e.key === "F5" || (e.ctrlKey && e.key.toLowerCase() === "r")) {
+      e.preventDefault();
+      if (e.key !== "F5" && state.tab === "english" && state.card?.kind === "spell") playSpell();
+      return;
+    }
+    const typing = e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement;
+    // 設定の入力中は Esc で閉じない(書きかけを失わない)。听写の入力欄からは閉じてよい
+    if (e.key === "Escape" && (!typing || e.target.id === "spell-input")) {
       closeWindow();
       return;
     }
+    if (typing) return;
     if (state.tab !== "english" || !state.card) return;
     if (e.ctrlKey && e.key.toLowerCase() === "z") {
       if (state.undoable) undo();
@@ -589,6 +757,11 @@ function bindKeys() {
       } else if (state.revealed && ["1", "2", "3", "4"].includes(e.key)) {
         rate(ratings[Number(e.key) - 1][0]);
       }
+    } else if (state.card.kind === "spell") {
+      if (e.key === "Enter" && state.graded) {
+        e.preventDefault();
+        submitSpell();
+      }
     } else if (state.card.kind === "para") {
       if (["1", "2", "3", "4"].includes(e.key)) choose(Number(e.key) - 1);
       else if ((e.key === " " || e.key === "Enter") && state.picked != null) {
@@ -600,7 +773,7 @@ function bindKeys() {
 }
 
 async function init() {
-  await Promise.all([loadMaterial(), loadIcons()]);
+  await Promise.all([loadMaterial(), loadIcons(), voicesReady()]);
   paintWall();
   renderWeekday();
   await refresh();

@@ -59,7 +59,17 @@ const handlers = {
     ritualStreak: 5,
   }),
   english_card: ({ kind }) =>
-    kind === "para"
+    kind === "spell"
+      ? {
+          kind: "spell",
+          id: "spell:accommodation",
+          isNew: q.get("new") === "1",
+          vocab: null,
+          question: null,
+          spell: { w: "accommodation", ipa: "əˌkɒməˈdeɪʃn", zh: "住宿", set: "住宿租房" },
+          history: ["forgot", "fuzzy", "current"],
+        }
+      : kind === "para"
       ? {
           kind: "para",
           id: "para:listening:reserve",
@@ -77,6 +87,17 @@ const handlers = {
   english_known: () => {
     answered += 1;
     return stats();
+  },
+  english_spell: ({ input }) => {
+    answered += 1;
+    const typed = (input ?? "").trim().toLowerCase();
+    const answer = "accommodation";
+    const result = typed === answer ? "correct" : typed === "acommodation" ? "almost" : "wrong";
+    const marks =
+      typed === "acommodation"
+        ? { typed, typedMarks: Array(12).fill(false), answer, answerMarks: answer.split("").map((_, i) => i === 2) }
+        : { typed, typedMarks: Array.from(typed, (c, i) => c !== answer[i]), answer, answerMarks: Array.from(answer, (c, i) => typed !== answer && (typed[i] ?? "") !== c) };
+    return { result, marks, stats: stats() };
   },
   english_undo: () => "vocab",
   english_more: () => null,

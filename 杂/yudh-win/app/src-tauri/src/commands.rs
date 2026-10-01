@@ -9,11 +9,13 @@ use tauri::{AppHandle, Manager, State};
 use yudh_core::agenda::{self, Tomorrow};
 use yudh_core::english::{Stats, VocabCard};
 use yudh_core::habits::Habits;
+use yudh_core::library::DictationWord;
 use yudh_core::posture::{self, Posture, Prompt, Step, Stretch};
 use yudh_core::quiz::Question;
 use yudh_core::replay::Kind;
 use yudh_core::ritual;
 use yudh_core::round::RoundMark;
+use yudh_core::spell::{self, SpellMarks, SpellResult};
 use yudh_core::srs::Rating;
 use yudh_core::sync::SyncFolder;
 use yudh_core::{English, Zone};
@@ -134,6 +136,7 @@ pub struct CardView {
     is_new: bool,
     vocab: Option<VocabCard>,
     question: Option<Question>,
+    spell: Option<DictationWord>,
     history: Vec<RoundMark>,
 }
 
@@ -157,6 +160,9 @@ pub fn english_card(state: State<'_, AppState>, kind: String) -> Result<Option<C
             .flatten(),
         question: (kind == Kind::Para)
             .then(|| e.para_question(&id, &mut rng))
+            .flatten(),
+        spell: (kind == Kind::Spell)
+            .then(|| e.spell_word(&id).cloned())
             .flatten(),
         id,
         is_new,
@@ -182,6 +188,52 @@ pub fn english_rate(
     let stats = e.stats(now, true);
     inner.undo = Some((point, kind));
     Ok(stats)
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SpellGraded {
+    result: SpellResult,
+    marks: SpellMarks,
+    stats: Stats,
+}
+
+/// 聴写の採点(Mac と同じ:正确 = 记住了、差一个字母 = 模糊、错 = 忘了)。
+/// input が None なら「不知道」:答えを見せて、今日もう一度
+#[tauri::command]
+pub fn english_spell(
+    state: State<'_, AppState>,
+    id: String,
+    input: Option<String>,
+) -> Result<SpellGraded, String> {
+    let mut inner = state.inner.lock().expect("state");
+    let now = Utc::now();
+    let e = english(&mut inner).ok_or("no sync folder")?;
+    let answer = e
+        .spell_word(&id)
+        .map(|w| w.w.clone())
+        .ok_or("unknown word")?;
+    let typed = input.unwrap_or_default();
+    let result = if typed.trim().is_empty() {
+        SpellResult::Wrong
+    } else {
+        spell::check(&typed, &answer)
+    };
+    let rating = match result {
+        SpellResult::Correct => Rating::Good,
+        SpellResult::Almost => Rating::Hard,
+        SpellResult::Wrong => Rating::Again,
+    };
+    let point = e
+        .rate(&id, Kind::Spell, rating, now)
+        .map_err(|err| err.to_string())?;
+    let stats = e.stats(now, true);
+    inner.undo = Some((point, Kind::Spell));
+    Ok(SpellGraded {
+        result,
+        marks: spell::marks(&typed, &answer),
+        stats,
+    })
 }
 
 /// 「已经会了」:もう出さない

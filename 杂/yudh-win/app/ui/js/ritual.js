@@ -2,7 +2,7 @@
 // 拉伸は 1 歩ずつ:声で読み終えて 1.5 秒(声なしなら 3 秒)してから数え、終われば鳴らして次へ
 import { loadMaterial, slice, sprite, stencil, tile, h, button, first } from "./baked.js";
 import { call, openUrl, closeWindow } from "./api.js";
-import { loadIcons, icon, clock, speak, stopSpeaking, chime, clear } from "./common.js";
+import { loadIcons, icon, clock, speak, stopSpeaking, chime, clear, voicesReady } from "./common.js";
 
 const $ = (id) => document.getElementById(id);
 
@@ -54,9 +54,8 @@ function prepare(step) {
   s.preparing = true;
   const mine = s.token;
   const text = step.stepNumber === 0 ? `${step.heading}。${step.text}` : step.text;
-  if (s.plan.voice) {
-    speak(text, { lang: "zh-CN", rate: 0.9, done: () => startAfter(1500, mine, step.duration) });
-    // 声が出ない環境でも止まらないように:1 字 0.35 秒 + 3 秒
+  if (s.plan.voice && speak(text, { lang: "zh-CN", rate: 0.9, done: () => startAfter(1500, mine, step.duration) })) {
+    // 読み終わりの知らせが来ない環境でも止まらないように:1 字 0.35 秒 + 3 秒
     startAfter(text.length * 350 + 3000, mine, step.duration);
   } else {
     startAfter(3000, mine, step.duration);
@@ -289,7 +288,7 @@ function bindKeys() {
 }
 
 async function init() {
-  await Promise.all([loadMaterial(), loadIcons()]);
+  await Promise.all([loadMaterial(), loadIcons(), voicesReady()]);
   tile(document.body, "concrete-night");
   build(await call("ritual_plan", { short: false }));
   s.streak = s.plan.streak;

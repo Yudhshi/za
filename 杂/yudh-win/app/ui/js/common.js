@@ -43,29 +43,46 @@ export function clock(ms) {
   return `${String(Math.floor(s / 60)).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`;
 }
 
-function bestVoice(langs) {
+const ZH = ["zh-CN", "zh-TW", "zh-HK"];
+
+/** langs の順で、入っている声を探す(Windows の自然な声 Natural / Online を先に)。無ければ null */
+export function voiceFor(langs) {
+  if (!("speechSynthesis" in window)) return null;
   const voices = speechSynthesis.getVoices();
   for (const lang of langs) {
     const found = voices.filter((v) => v.lang.replace("_", "-").toLowerCase() === lang.toLowerCase());
-    // Windows の自然な声(Natural / Online)を先に
     found.sort((a, b) => /natural|online/i.test(b.name) - /natural|online/i.test(a.name));
     if (found[0]) return found[0];
   }
   return null;
 }
 
-/** 読み上げ。done は読み終えたときだけ(止めた・次を読んだときは呼ばない) */
+/** 声の一覧が読み込まれるのを待つ(WebView2 では開いた直後は空のことがある。最長 1.5 秒)。一覧が取れたら true */
+export function voicesReady() {
+  if (!("speechSynthesis" in window)) return Promise.resolve(false);
+  if (speechSynthesis.getVoices().length) return Promise.resolve(true);
+  return new Promise((resolve) => {
+    const done = () => resolve(speechSynthesis.getVoices().length > 0);
+    speechSynthesis.addEventListener("voiceschanged", done, { once: true });
+    setTimeout(done, 1500);
+  });
+}
+
+/** 読み上げ。done は読み終えたときだけ(止めた・次を読んだときは呼ばない)。
+ *  中文の声が入っていなければ読まない(別の言語の声で中文を読むと聞き取れない)。読んだら true */
 export function speak(text, { lang = "en-GB", rate = 1, done } = {}) {
-  if (!("speechSynthesis" in window)) return;
+  if (!("speechSynthesis" in window)) return false;
   speechSynthesis.cancel();
+  const zh = lang.startsWith("zh");
+  const voice = voiceFor(zh ? ZH : [lang, "en-US", "en-AU"]);
+  if (zh && !voice) return false;
   const u = new SpeechSynthesisUtterance(text);
-  const langs = lang.startsWith("zh") ? ["zh-CN", "zh-TW", "zh-HK"] : [lang, "en-US", "en-AU"];
-  const voice = bestVoice(langs);
   if (voice) u.voice = voice;
   u.lang = voice?.lang ?? lang;
   u.rate = rate;
   if (done) u.onend = done;
   speechSynthesis.speak(u);
+  return true;
 }
 
 export function stopSpeaking() {

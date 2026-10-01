@@ -369,6 +369,171 @@
   font-weight: 900;
 }
 
+/* 听写(Mac の EngSpell と同じ寸法:再生 44、入力枠 52 高、字の格 20 × 32) */
+
+.play {
+  gap: 12px;
+  margin-top: 14px;
+  padding: 0;
+  color: var(--card-text);
+  text-align: left;
+}
+
+.play-disc {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  flex: none;
+  color: var(--black);
+}
+
+.play-disc > .sprite {
+  position: absolute;
+  inset: 0;
+}
+
+.play-disc .disc {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: var(--orange);
+}
+
+.play-disc .icon {
+  position: relative;
+}
+
+.play-text {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.play-title {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 20px;
+  font-weight: 700;
+}
+
+.play-note {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--card-text-2);
+}
+
+.keycap {
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 600;
+  padding: 1px 5px;
+  border: 1px solid currentColor;
+  color: var(--card-text-2);
+}
+
+.keycap.on-wall {
+  color: var(--text-2);
+}
+
+.spell-label {
+  margin-top: 16px;
+  font-size: 12.5px;
+  font-weight: 600;
+}
+
+.spell-box {
+  display: flex;
+  align-items: center;
+  min-height: 52px;
+  margin-top: 8px;
+  padding: 10px;
+  opacity: 0.6;
+}
+
+.spell-box:focus-within,
+.spell-box.graded {
+  opacity: 1;
+}
+
+.spell-box.fallback {
+  box-shadow: inset 0 0 0 2px var(--card-text);
+}
+
+.spell-box input {
+  width: 100%;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--card-text);
+  font-family: "Archivo", sans-serif;
+  font-size: 20px;
+  font-weight: 600;
+}
+
+.spell-box input::placeholder {
+  color: rgba(42, 41, 38, 0.6);
+  font-family: var(--mixed);
+  font-size: 15px;
+}
+
+.spell-box .dash {
+  font-family: "Archivo", sans-serif;
+  font-size: 20px;
+  color: var(--card-text-2);
+}
+
+.letters {
+  display: flex;
+  flex-wrap: wrap;
+  row-gap: 4px;
+}
+
+.letter {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  font-family: "Archivo", sans-serif;
+  font-weight: 600;
+  line-height: 1;
+  color: var(--card-text);
+}
+
+.letter.under-orange {
+  text-decoration: underline 2px var(--orange);
+}
+
+.letter.under-teal {
+  text-decoration: underline 2px var(--teal);
+}
+
+.spell-answer {
+  margin-top: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.spell-answer .label {
+  font-size: 12.5px;
+  font-weight: 600;
+}
+
+.spell-answer .answer-row {
+  padding-left: 10px;
+  user-select: text;
+}
+
+.spell-answer .gloss {
+  font-size: 13px;
+  font-weight: 600;
+  user-select: text;
+}
+
 /* 明天 */
 
 .meeting {
