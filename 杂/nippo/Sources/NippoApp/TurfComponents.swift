@@ -96,7 +96,8 @@ private struct SprayButtonBody: View {
             .frame(maxWidth: wide ? .infinity : nil, minHeight: height, maxHeight: height)
             .background {
                 MaterialSlice(id: kind.asset, fallback: kind.fallback)
-                    .overlay(Palette.white.opacity(hovering && !pressed ? 0.08 : 0).blendMode(.screen))
+                    // 閉包にして View の blendMode に決める(ShapeStyle 版と取り合わない)
+                    .overlay { Palette.white.opacity(hovering && !pressed ? 0.08 : 0).blendMode(.screen) }
             }
             .contentShape(Rectangle())
             .offset(y: pressed ? 2 : 0)
@@ -234,7 +235,7 @@ private struct BlockButtonBody: View {
             .frame(maxWidth: wide ? .infinity : nil, minHeight: height, maxHeight: height)
             .background {
                 MaterialSlice(id: asset, fallback: fallback)
-                    .overlay(Palette.white.opacity(hovering && state == .idle && !pressed ? 0.06 : 0))
+                    .overlay { Palette.white.opacity(hovering && state == .idle && !pressed ? 0.06 : 0) }
             }
             .overlay(alignment: .trailing) {
                 if state == .wrong {

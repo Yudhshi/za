@@ -95,11 +95,12 @@ private struct CardStage<Card: View>: View {
     @ObservedObject var english: EnglishCoordinator
     /// いま出ている問題にまだ答えていない(盤面の次のマスを橙の破線にする)
     let pending: Bool
-    @ViewBuilder var card: () -> Card
+    /// 卡の中身(View 拡張の card(padding:) と名前がぶつからないように content)
+    @ViewBuilder var content: () -> Card
 
     var body: some View {
         HStack(alignment: .top, spacing: 16) {
-            card()
+            content()
                 .wordCardSurface()
                 .overlay(alignment: .bottom) { CardDrips(english: english) }
             VStack(spacing: 12) {
@@ -705,8 +706,8 @@ private struct ExampleLine: View {
     private var highlighted: AttributedString {
         var text = AttributedString(example)
         if let range = text.range(of: word, options: .caseInsensitive) {
-            let teal: Color = Palette.teal
-            text[range].backgroundColor = teal
+            // AppKit の backgroundColor(NSColor)と取り合わないよう、SwiftUI の属性を型で指定する
+            text[range][AttributeScopes.SwiftUIAttributes.BackgroundColorAttribute.self] = Palette.teal
         }
         return text
     }
@@ -1160,7 +1161,7 @@ private func markedText(_ characters: [Character], _ marks: [Bool], color: Color
     for (index, character) in characters.enumerated() {
         var run = AttributedString(String(character))
         if index < marks.count, marks[index] {
-            run.backgroundColor = color
+            run[AttributeScopes.SwiftUIAttributes.BackgroundColorAttribute.self] = color
         }
         text.append(run)
     }
