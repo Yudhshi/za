@@ -183,10 +183,15 @@ final class AppCoordinator: ObservableObject {
             standingGuideDismissed = false
             posturePromptPinned = false
             meetingAsk = nil
-            meetingAskAnswered = []
+            // 答えた会議は日付が変わったときだけ忘れる(昼休みに合盖しても、同じ会議をもう一度聞かない)
+            if DayKey.key(for: last) != DayKey.key(for: now) { meetingAskAnswered = [] }
             lastBusyAt = nil
             busySince = nil
             lastCall = nil
+            // 通話の途中で眠ったら、その通話は無かったことにする(朝起きて「夜通しの通話が終わった」と数えない)
+            callTicks = 0
+            callStartedAt = nil
+            if inCall { inCall = false }
             promptAfterMeeting = false
             if posturePrompt != nil { posturePrompt = nil }
         }
