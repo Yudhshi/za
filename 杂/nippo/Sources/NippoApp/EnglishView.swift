@@ -406,10 +406,26 @@ private struct EngHeadWord: View {
     }
 }
 
-/// 卡の上の小さな札:黒い遮块に白字(B1 / 考点词 / 听写 / 词典 / 本轮)/ 橙の札に黒字(NEW)/ 黒い遮喷の枠に黒字(名词 / 听力)。
-/// 欧文は Archivo 900 の幅広、中文は直立のまま
+/// 卡の上の小さな札(どれも白い卡に焼いた素材、高さ 22):黒い遮块に白字(B1 / 考点词 / 听写 / 词典 / 本轮)/
+/// 橙の札に黒字(NEW)/ 黒い遮喷の枠に黒字(名词 / 听力)/ 長い枠(听写の小節名・明日の一言)。
+/// 焼いた幅の 0.8 倍より細くしない。欧文は Archivo 900 の幅広、中文は直立のまま
 private struct EngTag: View {
-    enum Style { case black, orange, frame, longFrame }
+    enum Style {
+        case black, orange, frame, longFrame
+
+        /// 白い卡に焼いた専用の素材が先、代わりの素材が後(混凝土に焼いた素材は使わない)
+        var assets: [String] {
+            switch self {
+            case .black: return ["tag-black-card", "band-black-night"]
+            case .orange: return ["tag-orange-card"]
+            case .frame: return ["frame-black-night"]
+            case .longFrame: return ["frame-black-long-night", "frame-black-night"]
+            }
+        }
+    }
+
+    /// tag-black-card / tag-orange-card / frame-black-long-night の配置の高さ
+    static let height: CGFloat = 22
 
     let text: String
     var style: Style = .black
@@ -422,23 +438,26 @@ private struct EngTag: View {
             .foregroundStyle(style == .black ? Palette.white : Palette.black)
             .lineLimit(1)
             .padding(.horizontal, 8)
-            .frame(minWidth: 40)
-            .frame(height: 24)
+            .frame(minWidth: minWidth)
+            .frame(height: Self.height)
             .background { paint }
+    }
+
+    /// 専用の素材が焼けていれば、その配置の幅の 0.8 倍(九宮格を −20% より潰さない)。なければ前と同じ 40
+    @MainActor private var minWidth: CGFloat {
+        guard let id = style.assets.first, Baked.has(id), let asset = Baked.asset(id) else { return 40 }
+        return asset.layoutSize.width * 0.8
     }
 
     @ViewBuilder
     private var paint: some View {
         switch style {
         case .black:
-            BakedSlice(id: engFirstBaked(["tag-black-card", "band-black-night"]) ?? "tag-black-card",
-                       fallback: Palette.black)
+            BakedSlice(id: engFirstBaked(style.assets) ?? "tag-black-card", fallback: Palette.black)
         case .orange:
-            BakedSlice(id: "tag-orange-night", fallback: Palette.orange)
-        case .frame:
-            EngFrame(ids: ["frame-black-night"])
-        case .longFrame:
-            EngFrame(ids: ["frame-black-long-night", "frame-black-night"])
+            BakedSlice(id: "tag-orange-card", fallback: Palette.orange)
+        case .frame, .longFrame:
+            EngFrame(ids: style.assets)
         }
     }
 }
@@ -609,12 +628,13 @@ private func engVisibleUndo(_ english: EnglishCoordinator) -> EnglishCoordinator
     return action
 }
 
-/// 評分ボタンの見本の格:黒い遮块の小さな台(白卡用の素材)に 14pt の格。台の素材がなければ格だけ(黒の平塗りは使わない)
+/// 評分ボタンの見本の格:黒い遮块の小さな台(swatch-black-card)に、黒い台用に焼いた 14pt の格。
+/// 台の素材がなければ格だけ(黒の平塗りは使わない)
 private struct EngSwatch: View {
     let kind: RoundMark
 
     var body: some View {
-        RatingCell(kind: kind, size: 14)
+        RatingCell(kind: kind, size: 14, dark: true)
             .padding(3)
             .background {
                 if let id = engFirstBaked(["swatch-black-card", "tag-black-card"]) {
@@ -1171,7 +1191,8 @@ private struct EngSpell: View {
         VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: 8) {
                 EngTag(text: "听写")
-                EngTag(text: item.word.set, style: .frame)
+                // 小節名(特别名词 など)は長い枠
+                EngTag(text: item.word.set, style: .longFrame)
                 if item.isNew {
                     EngTag(text: "NEW", style: .orange)
                 }
@@ -1657,8 +1678,9 @@ private struct EngWordRow: View {
 
 // MARK: - 做完了・没有素材
 
-/// 今日の分が終わった:広い白卡(四隅に橙の对位角标)。左 = 黒い台に本轮の地盘・连续 N 天・明日の一言、
-/// 右 = 本轮 + CLEAR、模板の 20/20、凡例、20 問そろったら奖章(神兽、説明なし)
+/// 今日の分が終わった:広い白卡。左 = 黒い台に本轮の地盘・连续 N 天・明日の一言、右 = 本轮、模板の 12/20、凡例。
+/// 今日の合計が目標(20 問)に届いたときだけ通关:CLEAR の札・四隅の橙の对位角标・奖章(神兽、説明なし)。
+/// 1 種類だけ終わって目標に届いていないときは静かなまま(「今天的单词做完了」の一言だけ)
 private struct EngStageClear: View {
     @ObservedObject var english: EnglishCoordinator
     let message: String
@@ -1687,7 +1709,9 @@ private struct EngStageClear: View {
                 VStack(alignment: .leading, spacing: 0) {
                     HStack(spacing: 8) {
                         EngTag(text: "本轮")
-                        PaintTag(text: "CLEAR", asset: "tag-teal-night", fallback: Palette.teal)
+                        if full {
+                            PaintTag(text: "CLEAR", asset: "tag-teal-night", fallback: Palette.teal, height: 22)
+                        }
                     }
                     StencilText(text: "\(count)/\(goal)", set: "count-black", fallbackSize: 44,
                                 fallbackColor: Palette.cardText)
@@ -1712,7 +1736,15 @@ private struct EngStageClear: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
             .engCardSurface(.wide)
-            .regMarks()
+            // 对位角标は通关の日だけ(重ねる側で出し分けて、卡そのものの作りは変えない)
+            .overlay {
+                if full {
+                    Color.clear
+                        .regMarks()
+                        .allowsHitTesting(false)
+                        .accessibilityHidden(true)
+                }
+            }
             .zIndex(1)
 
             EngGap()
@@ -1782,7 +1814,7 @@ private struct EngLegend: View {
     }
 }
 
-/// 黒い遮块(白卡用の小牌)に 橙の炎 + 连续 N 天
+/// 黒い遮块(白卡用の小牌)に 橙の炎 + 连续 N 天。焼いた幅の 0.8 倍より細くしない
 private struct EngStreakChip: View {
     let streak: Int
 
@@ -1795,6 +1827,7 @@ private struct EngStreakChip: View {
                 .foregroundStyle(Palette.white)
         }
         .padding(.horizontal, 12)
+        .frame(minWidth: minWidth)
         .frame(height: 30)
         .background {
             BakedSlice(id: engFirstBaked(["chip-black-card", "plate-black-night"]) ?? "chip-black-card",
@@ -1802,12 +1835,21 @@ private struct EngStreakChip: View {
         }
         .accessibilityElement(children: .combine)
     }
+
+    /// 専用の小牌が焼けていれば、その配置の幅の 0.8 倍(なければ縛らない)
+    @MainActor private var minWidth: CGFloat? {
+        guard Baked.has("chip-black-card"), let asset = Baked.asset("chip-black-card") else { return nil }
+        return asset.layoutSize.width * 0.8
+    }
 }
 
 /// 20/20 の奖章:切り角の黒い底板 + 曜日の神兽(青漆)。どちらも −2° で焼いてあるので回さない。文字は付けない。
-/// 出たときに 1 回(⑤ 650ms):底板が喷かれ(badge-mask の 4 枚)→ 神兽がふっと出る。減らす動きでは最後の絵
+/// 出たときに 1 回(⑤ 650ms):0–340ms 底板が喷かれ(badge-mask の 4 枚、焼いた長さのまま)→ 340–650ms 神兽の模板纸を
+/// 持ち上げる(神兽が (−6, +4) のずれから元の位置へ戻りながら 0 → 1 で出る)。減らす動きでは最後の絵
 private struct EngClearBadge: View {
     private static let total: Double = 650
+    /// badge-mask の焼いた長さ(manifest の durationMs が読めないときの値)
+    private static let sprayDefault: Double = 340
     /// 奖章を喷いた日(通关したその日の最初の 1 回だけ動かす。面板を開き直すたびには喷かない)
     @AppStorage("englishBadgeDay") private var playedDay = ""
     @State private var playNow = false
@@ -1828,12 +1870,16 @@ private struct EngClearBadge: View {
 
     @ViewBuilder
     private func badge(_ progress: Double) -> some View {
-        let spray = motionPhase(progress, totalMs: Self.total, from: 0, to: 420)
-        let reveal = motionPhase(progress, totalMs: Self.total, from: 420, to: Self.total)
+        let sprayMs: Double = min(Self.total, max(0, Baked.asset("badge-mask-0")?.durationMs ?? Self.sprayDefault))
+        let spray = motionPhase(progress, totalMs: Self.total, from: 0, to: sprayMs)
+        let reveal = motionPhase(progress, totalMs: Self.total, from: sprayMs, to: Self.total)
+        let lift = 1 - reveal
         ZStack {
             plate
                 .mask { plateMask(spray) }
+            // 模板纸を持ち上げる:少しずれた所から元の位置へ、淡く出る(回さない。−2° は焼いてある)
             BakedSprite(id: Myth.badgeCreature(for: Date()))
+                .offset(x: -6 * lift, y: 4 * lift)
                 .opacity(reveal)
         }
     }
