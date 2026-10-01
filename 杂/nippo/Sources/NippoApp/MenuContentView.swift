@@ -33,8 +33,16 @@ struct MenuContentView: View {
                 .padding(.trailing, Turf.panelPadding.trailing)
                 .padding(.top, Turf.panelPadding.top)
 
-            // 主角卡の飛沫(bleed:上 14・左 14・右 24 まで)は、この内側の余白(上 18・左右 24)に収まる。
-            // ScrollView の切り抜きはそのまま(スクロールしたとき表头・底栏に重ならないように)
+            // 表头の下の模板の継ぎ目。表头と ScrollView のあいだの動かない隙間に置く(スクロールした字はここを通らない)。
+            // 素材が無くても隙間は残す
+            Color.clear
+                .frame(height: TodayLayout.headerGap)
+                .overlay { ConcreteSeam() }
+                .allowsHitTesting(false)
+                .accessibilityHidden(true)
+
+            // 主角卡の飛沫(bleed:上 14・左 14・右 24 まで)は、この内側の余白(上 14・左右 24)に収まる。
+            // ScrollView の切り抜きはそのまま(スクロールしたとき表头・継ぎ目・底栏に重ならないように)
             ScrollView {
                 Group {
                     switch tab {
@@ -49,7 +57,7 @@ struct MenuContentView: View {
                 }
                 .padding(.leading, Turf.panelPadding.leading)
                 .padding(.trailing, Turf.panelPadding.trailing)
-                .padding(.top, TodayLayout.headerGap)
+                .padding(.top, TodayLayout.heroBleedTop)
                 .padding(.bottom, 24)
                 .background(GeometryReader { geo in
                     Color.clear.preference(key: TodayContentHeightKey.self, value: geo.size.height)
@@ -57,11 +65,6 @@ struct MenuContentView: View {
             }
             .scrollIndicators(.automatic)
             .frame(height: min(contentHeight, maxHeight))
-            // 表头の下の模板の継ぎ目(表头と主角卡のあいだの 18pt の隙間の中。中身はこの上を流れる)
-            .background(alignment: .top) {
-                ConcreteSeam()
-                    .frame(height: TodayLayout.headerGap)
-            }
             // 初回レイアウト前の 0 は無視(高さ 0 に潰れないように)
             // perform は SDK によって @Sendable なので、State へは捕まえた Binding 経由で書く
             .onPreferenceChange(TodayContentHeightKey.self) { [height = $contentHeight] value in
@@ -100,8 +103,12 @@ private struct TodayContentHeightKey: PreferenceKey {
 // MARK: - 寸法・字・動きの段取り
 
 private enum TodayLayout {
-    /// 表头と主角卡のあいだ(継ぎ目はこの中)
+    /// 表头と ScrollView のあいだの動かない隙間(継ぎ目はこの中)
     static let headerGap: CGFloat = 18
+    /// ScrollView の中の上の余白 = 動・00 の喷块の上の飛沫(bleed 14)。ScrollView の切り抜きで欠けないように
+    static let heroBleedTop: CGFloat = 14
+    /// 会議の主角卡(静・動・00・明日)の高さの下限。472×270 に焼いた喷块を 0.92 より縮めず、神兽の場所も残す
+    static let meetingHeroHeight: CGFloat = 248
     /// 主角卡と盤面のあいだ(静)
     static let boardGap: CGFloat = 34
     /// 動・00 は垂れのぶん盤面との間を 48 に広げる(主角卡の側で足す)
@@ -172,10 +179,11 @@ private struct TodayHeader: View {
         let name = Date().formatted(Self.weekday)
         // 今日の 20 問が終わったら、数の代わりに模板の ✓
         let englishDone = english.loaded && english.todayCount >= EnglishCoordinator.dailyGoal
+        let dayStencil = weekdayStencil(name)
         VStack(alignment: .leading, spacing: 6) {
             HStack(alignment: .center, spacing: 14) {
-                StencilWord(id: "day-\(name.lowercased())-white-night", fallback: name.uppercased(),
-                            fallbackSize: 31, fallbackColor: Palette.white, scale: weekdayScale(name))
+                StencilWord(id: dayStencil.id, fallback: name.uppercased(),
+                            fallbackSize: 31, fallbackColor: Palette.white, scale: dayStencil.scale)
                     .padding(.vertical, 4)
                     // ここを掴むと窓が動く
                     .background(WindowDragArea())
@@ -208,8 +216,10 @@ private struct TodayHeader: View {
         }
     }
 
-    /// 曜日の倍率。WEDNESDAY や入力欄で 1 行に入らないときだけ縮める(0.7 まで)
-    private func weekdayScale(_ name: String) -> CGFloat {
+    /// 曜日の模板字と倍率。WEDNESDAY や入力欄で 1 行に入らないときだけ縮める。
+    /// 0.85 より縮めるなら 0.8 倍に焼いた -s を 0.85〜1 倍で使う(喷粒を潰さない。基線は StencilWord が倍率ごと合わせる)。
+    /// -s が無ければ元の字を 0.7 まで縮める
+    private func weekdayStencil(_ name: String) -> (id: String, scale: CGFloat) {
         let id = "day-\(name.lowercased())-white-night"
         let natural = Baked.asset(id)?.layoutSize.width ?? CGFloat(name.count) * 28
         let work: CGFloat
@@ -220,8 +230,13 @@ private struct TodayHeader: View {
         }
         // 間隔 14 × 2 と標籤(数字 3 桁まで)を引いた残り
         let budget = Turf.contentWidth - 28 - 136 - work
-        guard natural > 0 else { return 1 }
-        return max(0.7, min(1, budget / natural))
+        guard natural > 0 else { return (id, 1) }
+        let fitted = min(1, budget / natural)
+        let small = "\(id)-s"
+        if fitted < 0.85, let smallWidth = Baked.asset(small)?.layoutSize.width, smallWidth > 0, Baked.has(small) {
+            return (small, max(0.85, min(1, budget / smallWidth)))
+        }
+        return (id, max(0.7, fitted))
     }
 }
 
@@ -327,16 +342,21 @@ private struct TodayView: View {
         let next = NextEventPolicy.currentOrNext(events: events, now: now)
         // 選んだ会議が終わったら既定(次の会議)に戻す
         let selected = events.first { $0.id == selectedMeetingID && $0.end > now } ?? next
-        // 明日の予定は AppCoordinator が今日の分と一緒に読んである(開いたときに主角卡が後から変わらない)
-        let tomorrowFirst = selected == nil
+        // 明日の予定は AppCoordinator が今日の分と一緒に読んである(開いたときに主角卡が後から変わらない)。
+        // 日付が変わって読み直す前(読んだ日が今日でない)は明日の分を空とみなす(昨日読んだ「明日」= 今日の会議を明日と見せない)
+        let eventsFresh = coordinator.eventsDay == DayKey.key(for: now)
+        let tomorrowFirst = selected == nil && eventsFresh
             ? NextEventPolicy.currentOrNext(events: coordinator.tomorrowEvents, now: now) : nil
         let hadMeetings = events.contains { !$0.isAllDay }
         let dayNote = hadMeetings ? "今天的会都结束了" : "今天没有会议"
         let reminderHint = "工作日会在会议开始前 \(coordinator.settings.reminderLeadMinutes) 分钟提醒你"
         let showsNote = selected == nil && tomorrowFirst != nil
         let settings = coordinator.settings
-        let span = TodayBoardSpan(start: settings.timeComponents(settings.workStartTime, fallback: (9, 0)),
-                                  end: settings.timeComponents(settings.workEndTime, fallback: (18, 0)))
+        let workStart = settings.timeComponents(settings.workStartTime, fallback: (9, 0))
+        let workEnd = settings.timeComponents(settings.workEndTime, fallback: (18, 0))
+        let span = BoardSpan(startMinutes: workStart.hour * 60 + workStart.minute,
+                             endMinutes: workEnd.hour * 60 + workEnd.minute,
+                             totalWidth: Double(Turf.contentWidth))
 
         VStack(alignment: .leading, spacing: 0) {
             // 主役:選んだ会議(既定は次の会議)。今日もう無ければ明日の最初の会議
@@ -409,26 +429,62 @@ private struct TodayHeroCard<Content: View>: View {
     var body: some View {
         content
             .padding(Turf.heroPadding)
-            .frame(maxWidth: .infinity, minHeight: minHeight, alignment: .leading)
-            // 重なり順(奥 → 手前):喷块 → 神兽 → 漫ってくる次の喷块 → 文字
-            .background { floodLayer }
+            .frame(maxWidth: .infinity, minHeight: minHeight, alignment: .topLeading)
+            // 重なり順(奥 → 手前):喷块 → 神兽 → 漫ってくる次の喷块 → 文字。
+            // 漫りの遮罩は大数字から漫るように焼いてあるので、測った数字の枠(TodayNumeralBoxKey)に縦だけ合わせる
+            .backgroundPreferenceValue(TodayNumeralBoxKey.self) { numeral in
+                GeometryReader { geo in
+                    floodLayer(numeral: numeral.map { geo[$0] }, card: geo.size)
+                }
+                .allowsHitTesting(false)
+            }
             .creatureLayer(creature ?? "", enabled: creature != nil)
             .background { BakedSlice(id: slab, fallback: fallback) }
     }
 
     @ViewBuilder
-    private var floodLayer: some View {
+    private func floodLayer(numeral: CGRect?, card: CGSize) -> some View {
         if let flood {
             if Baked.hasFrames(flood.mask, count: 8) {
-                // 卡と同じ枠(bleed 込み)に伸ばした遮罩のコマ
+                // 卡と同じ枠(bleed 込み)に伸ばした遮罩のコマ。始めのコマほど数字に寄せ、最後のコマ(全面)は元の位置
+                let aligned = TodayFloodAlign.shift(mask: flood.mask, numeral: numeral, card: card)
+                let shift = aligned * CGFloat(1 - flood.progress)
                 BakedSlice(id: flood.slab, fallback: flood.fallback)
-                    .mask { BakedFrame(prefix: flood.mask, count: 8, progress: flood.progress) }
+                    .mask {
+                        BakedFrame(prefix: flood.mask, count: 8, progress: flood.progress)
+                            .offset(y: shift)
+                    }
             } else {
                 // 遮罩の帯が無いときは淡く重ねるだけ
                 BakedSlice(id: flood.slab, fallback: flood.fallback)
                     .opacity(flood.progress)
             }
         }
+    }
+}
+
+/// 主角卡の大数字の枠(漫りの遮罩を数字に合わせるため。会議の卡の TodayNumeral だけが出す)
+private struct TodayNumeralBoxKey: PreferenceKey {
+    static var defaultValue: Anchor<CGRect>? { nil }
+    static func reduce(value: inout Anchor<CGRect>?, nextValue: () -> Anchor<CGRect>?) {
+        value = value ?? nextValue()
+    }
+}
+
+/// 漫りの遮罩の帯は、焼いたときの大数字の箱(1 枚目の numeralBox、卡の pt:x, y, w, h)から漫る。
+/// 帯は bleed ごと卡の枠に伸ばして使うので、伸ばした後の箱の中心と、測った数字の枠の中心の縦の差を返す
+@MainActor
+private enum TodayFloodAlign {
+    /// ずらしすぎない(遮罩の端の飛沫が欠けないように)
+    static let limit: CGFloat = 40
+
+    static func shift(mask: String, numeral: CGRect?, card: CGSize) -> CGFloat {
+        guard let numeral, let asset = Baked.asset("\(mask)0"), let box = asset.numeralBox, box.count == 4,
+              asset.height > 0, card.height > 0 else { return 0 }
+        let bleed = asset.bleedInsets
+        let stretch = (card.height + bleed.top + bleed.bottom) / asset.height
+        let baked = -bleed.top + (bleed.top + box[1] + box[3] / 2) * stretch
+        return min(limit, max(-limit, numeral.midY - baked))
     }
 }
 
@@ -610,6 +666,10 @@ private struct TodayNumeral: View {
     var body: some View {
         TodayStencilNumber(text: display.value, ink: ink)
             .creatureAvoid()
+            // 漫りの遮罩を数字の字身の箱に合わせる
+            .anchorPreference(key: TodayNumeralBoxKey.self, value: .bounds) { (anchor: Anchor<CGRect>) -> Anchor<CGRect>? in
+                anchor
+            }
             .overlay(alignment: .bottomTrailing) {
                 unit
                     .fixedSize()
@@ -731,6 +791,8 @@ private struct TodayZeroJoin: View {
 private struct TodayMeetingHero: View {
     let event: MeetingEvent
     let isNext: Bool
+    /// 先に解いた動きの帯(会議 id + 帯の名前。会議ごとに 1 回だけ)
+    @State private var preloaded: Set<String> = []
 
     var body: some View {
         let opened = Date()
@@ -738,13 +800,45 @@ private struct TodayMeetingHero: View {
         if ticks.isEmpty {
             // もう変わる時刻が無い(終わった会議):30 秒ごと
             TimelineView(.periodic(from: opened, by: 30)) { context in
-                TodayMeetingHeroFace(event: event, isNext: isNext, now: max(context.date, Date()))
+                face(now: max(context.date, Date()))
             }
         } else {
             // 最初の 1 枚はいまの時刻で描く
             TimelineView(.explicit([opened] + ticks)) { context in
-                TodayMeetingHeroFace(event: event, isNext: isNext, now: max(context.date, Date()))
+                face(now: max(context.date, Date()))
             }
+        }
+    }
+
+    private func face(now: Date) -> some View {
+        TodayMeetingHeroFace(event: event, isNext: isNext, now: now)
+            // 動き出す前に漫りの帯を解いておく(最初のコマで止まらないように)
+            .onChange(of: TodayFloodPreload.prefix(for: event, now: now), initial: true) { _, prefix in
+                preload(prefix)
+            }
+    }
+
+    private func preload(_ prefix: String?) {
+        guard let prefix else { return }
+        let key = "\(event.id)|\(prefix)"
+        guard !preloaded.contains(key) else { return }
+        preloaded.insert(key)
+        Baked.preload(prefix, count: 8)
+    }
+}
+
+/// 先に解いておく動きの帯:静で開始 15 分前から = 青の漫り(会前 10 分に流れる)、
+/// 動で開始 2 分前から = 橙の漫り(00 で流れる)。それ以外は nil
+private enum TodayFloodPreload {
+    static func prefix(for event: MeetingEvent, now: Date) -> String? {
+        let until = event.start.timeIntervalSince(now)
+        switch HeroPolicy.phase(for: event, now: now) {
+        case .calm:
+            return until <= 15 * 60 ? "flood-teal-" : nil
+        case .event:
+            return until > 0 && until <= 2 * 60 ? "flood-orange-" : nil
+        case .zero, .ended:
+            return nil
         }
     }
 }
@@ -769,7 +863,8 @@ private struct TodayMeetingHeroFace: View {
 
     private func card(_ look: TodayHeroLook) -> some View {
         TodayHeroCard(slab: look.slab, fallback: look.slabFallback, flood: look.flood,
-                      creature: look.showsCreature ? Myth.heroCreature(for: now) : nil) {
+                      creature: look.showsCreature ? Myth.heroCreature(for: now) : nil,
+                      minHeight: TodayLayout.meetingHeroHeight) {
             VStack(alignment: .leading, spacing: 0) {
                 topRow(look)
                 title(look)
@@ -798,13 +893,19 @@ private struct TodayMeetingHeroFace: View {
                 .creatureAvoid()
             Spacer(minLength: 8)
             if let link {
-                // 白い模板の摄像机(静)/ 黒(動)。主機名は help に
-                StencilIconView(icon: .camera, size: 18)
-                    .foregroundStyle(todayPanelBlend(Palette.white, Palette.black, look.ink))
-                    .frame(width: 22, height: 22)
-                    .contentShape(Rectangle())
-                    .help(link.host ?? "线上会议")
-                    .creatureAvoid()
+                // 白い模板の摄像机(静)/ 黒(動)。押すと加入(⏎ と同じ)。主機名は help に
+                Button {
+                    NSWorkspace.shared.open(link)
+                } label: {
+                    StencilIconView(icon: .camera, size: 18)
+                        .foregroundStyle(todayPanelBlend(Palette.white, Palette.black, look.ink))
+                        .frame(width: 22, height: 22)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .help("\(link.host ?? "线上会议")（⏎ 加入）")
+                .accessibilityLabel("加入会议")
+                .creatureAvoid()
             }
         }
         .background {
@@ -824,7 +925,8 @@ private struct TodayMeetingHeroFace: View {
             .typesetting(for: event.title)
             .textSelection(.enabled)
             .creatureAvoid()
-            .frame(maxWidth: look.showsCreature ? TodayLayout.calmTitleWidth : nil, alignment: .leading)
+            // 268pt の幅は静(と終わった会議)の卡だけ。静 → 動の漫りの最初のコマから動の幅にする(神兽の有無では決めない)
+            .frame(maxWidth: look.calm ? TodayLayout.calmTitleWidth : nil, alignment: .leading)
     }
 
     private func numeralRow(_ look: TodayHeroLook) -> some View {
@@ -933,7 +1035,7 @@ private struct TodayTomorrowHero: View {
         let minutes = max(1, Int((event.end.timeIntervalSince(event.start) / 60).rounded()))
         let count = HeroPolicy.durationCells(for: event, now: event.start).count
         TodayHeroCard(slab: "hero-calm-night", fallback: Palette.black,
-                      creature: Myth.heroCreature(for: event.start)) {
+                      creature: Myth.heroCreature(for: event.start), minHeight: TodayLayout.meetingHeroHeight) {
             VStack(alignment: .leading, spacing: 0) {
                 HStack(alignment: .firstTextBaseline, spacing: 14) {
                     TodayShout(word: "TOMORROW")
@@ -1050,124 +1152,17 @@ private struct TodayCalendarAccessHero: View {
 
 // MARK: - 盤面(設定の上下班時間、15 分 × n 格。幅は 472 のまま)
 
-/// 盤面の時間割り:上班〜下班を 15 分(格が 9pt より細くなるなら 30 分)の格に切り、472pt に並べる。
-/// 時の境目(xx:00)の前だけ少し広く空ける
-private struct TodayBoardSpan {
-    static let gap: CGFloat = 2
-    static let hourGap: CGFloat = 5
-
-    /// 0 時からの分
-    let start: Int
-    let end: Int
-    /// 1 格の分(15 / 30)
-    let slot: Int
-    let count: Int
-    let cellWidth: CGFloat
-
-    init(start begin: (hour: Int, minute: Int), end finish: (hour: Int, minute: Int)) {
-        var s = begin.hour * 60 + begin.minute
-        var e = finish.hour * 60 + finish.minute
-        // 夜をまたぐ・1 時間に満たない設定は 9:00–18:00 で描く
-        if e - s < 60 {
-            s = 9 * 60
-            e = 18 * 60
-        }
-        var chosen = 15
-        var n = (e - s) / chosen
-        var width = Self.widthOfCell(start: s, slot: chosen, count: n)
-        if width < 9 {
-            chosen = 30
-            n = (e - s) / chosen
-            width = Self.widthOfCell(start: s, slot: chosen, count: n)
-        }
-        start = s
-        end = e
-        slot = chosen
-        count = n
-        cellWidth = width
-    }
-
-    private static func hourBreaks(start: Int, slot: Int, through index: Int) -> Int {
-        guard index >= 1 else { return 0 }
-        return (1...index).filter { (start + $0 * slot) % 60 == 0 }.count
-    }
-
-    private static func widthOfCell(start: Int, slot: Int, count: Int) -> CGFloat {
-        guard count > 0 else { return 0 }
-        let hours = hourBreaks(start: start, slot: slot, through: count - 1)
-        let gaps = CGFloat(count - 1) * gap + CGFloat(hours) * (hourGap - gap)
-        return (Turf.contentWidth - gaps) / CGFloat(count)
-    }
-
-    /// i 番目の格の前が時の境目か
-    func hourBreak(before index: Int) -> Bool {
-        index > 0 && (start + index * slot) % 60 == 0
-    }
-
-    /// i 番目の格の左端
-    func cellX(_ index: Int) -> CGFloat {
-        CGFloat(index) * (cellWidth + Self.gap)
-            + CGFloat(Self.hourBreaks(start: start, slot: slot, through: index)) * (Self.hourGap - Self.gap)
-    }
-
-    /// 0 時からの分 → x(格の中は割合で)
-    private func x(minutes: Double) -> CGFloat {
-        let offset = minutes - Double(start)
-        guard offset > 0 else { return 0 }
-        guard offset < Double(count * slot) else { return Turf.contentWidth }
-        let index = Int(offset / Double(slot))
-        let fraction = CGFloat((offset - Double(index * slot)) / Double(slot))
-        return cellX(index) + fraction * cellWidth
-    }
-
-    /// 時の境目の x(格のあいだの隙間の真ん中。両端は 0 / 472)
-    private func boundaryX(minute: Int) -> CGFloat {
-        let offset = minute - start
-        if offset <= 0 { return 0 }
-        if offset >= count * slot { return Turf.contentWidth }
-        guard offset % slot == 0 else { return x(minutes: Double(minute)) }
-        let index = offset / slot
-        return cellX(index) - (hourBreak(before: index) ? Self.hourGap : Self.gap) / 2
-    }
-
-    /// 盤面の下の時刻(整点だけ)
-    var hourMarks: [TodayHourMark] {
-        let last = start + count * slot
-        return stride(from: (start + 59) / 60, through: last / 60, by: 1).map { hour in
-            TodayHourMark(hour: hour, x: boundaryX(minute: hour * 60))
-        }
-    }
-
-    /// 0 時からの分(秒まで)
-    private func minutes(of date: Date) -> Double {
-        let c = Calendar.current.dateComponents([.hour, .minute, .second], from: date)
-        return Double((c.hour ?? 0) * 60 + (c.minute ?? 0)) + Double(c.second ?? 0) / 60
-    }
-
-    /// いまの x(盤面の外は nil)
-    func nowX(_ now: Date) -> CGFloat? {
-        let m = minutes(of: now)
-        guard m >= Double(start), m < Double(start + count * slot) else { return nil }
-        return x(minutes: m)
-    }
-
-    /// いまの時(盤面の中のときだけ。下の時刻をその時だけ太字に)
-    func currentHour(_ now: Date) -> Int? {
-        let m = minutes(of: now)
-        guard m >= Double(start), m < Double(start + count * slot) else { return nil }
-        return Int(m) / 60
-    }
-
-    /// 格の状態(会議・選択・経過は DayTimeline のまま。進行中の選択だけ満 / 点に分ける)
+/// 盤面の格の状態(割り付けは NippoCore の BoardSpan。会議・選択・経過は DayTimeline のまま、進行中の選択だけ満 / 点に分ける)
+private extension BoardSpan {
     func kinds(events: [MeetingEvent], selectedID: String?, now: Date) -> [TurfCell.Kind] {
         let slots = DayTimeline.slots(events: events,
                                       start: (hour: start / 60, minute: start % 60),
                                       end: (hour: end / 60, minute: end % 60),
-                                      now: now, selectedID: selectedID, slotMinutes: slot)
+                                      now: now, selectedID: selectedID, slotMinutes: slotMinutes)
         let selected = events.first { $0.id == selectedID }
         let live = selected.map { $0.start <= now && now < $0.end } ?? false
         let from = Calendar.current.date(bySettingHour: start / 60, minute: start % 60, second: 0, of: now) ?? now
-        let length = Double(slot * 60)
+        let length = Double(slotMinutes * 60)
         return slots.enumerated().map { pair -> TurfCell.Kind in
             let cell = pair.element
             if cell.selected {
@@ -1180,16 +1175,6 @@ private struct TodayBoardSpan {
             return cell.past ? .past : .empty
         }
     }
-
-    /// 「9:00–18:00」
-    var text: String {
-        String(format: "%d:%02d–%d:%02d", start / 60, start % 60, end / 60, end % 60)
-    }
-}
-
-private struct TodayHourMark: Hashable {
-    let hour: Int
-    let x: CGFloat
 }
 
 /// 今日の盤面。灰 = 会議(過ぎたら暗く)、青 = 選んだ会議(進行中は過ぎた分が満・残りが点)、橙の刻み = いま。
@@ -1197,19 +1182,20 @@ private struct TodayHourMark: Hashable {
 private struct TodayDayBoard: View {
     let events: [MeetingEvent]
     let selectedID: String?
-    let span: TodayBoardSpan
+    let span: BoardSpan
     /// 盤面の纹理带(上の 34pt + 格の行)。明日の予告の一行があるときは字の下に纹理を敷かない
     let band: Bool
 
     var body: some View {
         TimelineView(.periodic(from: .now, by: 30)) { context in
             let now = context.date
+            let minute = BoardSpan.minute(of: now)
             let kinds = span.kinds(events: events, selectedID: selectedID, now: now)
             VStack(alignment: .leading, spacing: 6) {
                 cells(kinds)
                     .overlay(alignment: .topLeading) {
-                        if let x = span.nowX(now) {
-                            TodayNowNotch(x: x)
+                        if let x = span.nowX(minute: minute) {
+                            TodayNowNotch(x: CGFloat(x))
                         }
                     }
                     .background(alignment: .bottom) {
@@ -1219,20 +1205,26 @@ private struct TodayDayBoard: View {
                                 .boardBand()
                         }
                     }
-                hourLabels(current: span.currentHour(now))
+                hourLabels(current: span.currentHour(minute: minute))
             }
         }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("今天 \(span.text) 的会议")
-        .help("\(span.text)，每格 \(span.slot) 分钟。灰格是会议，青色的格是选中的会议")
+        .help(helpText)
     }
 
+    /// 設定が使えず 9:00–18:00 で描いているときは、そのことも書く
+    private var helpText: String {
+        let range = span.isFallback ? "上下班时间跨夜或不足 1 小时，先按 \(span.text) 显示" : span.text
+        return "\(range)，每格 \(span.slotMinutes) 分钟。灰格是会议，青色的格是选中的会议"
+    }
+
+    /// 格の幅は BoardSpan が決める(14pt より太ければ TurfCell が 30 分用の太い格を選ぶ)
     private func cells(_ kinds: [TurfCell.Kind]) -> some View {
         HStack(spacing: 0) {
             ForEach(0..<kinds.count, id: \.self) { i in
-                TurfCell(kind: kinds[i], width: span.cellWidth)
-                    .padding(.leading, i == 0 ? 0 : (span.hourBreak(before: i) ? TodayBoardSpan.hourGap
-                                                                               : TodayBoardSpan.gap))
+                TurfCell(kind: kinds[i], width: CGFloat(span.cellWidth))
+                    .padding(.leading, CGFloat(span.gapBefore(i)))
             }
         }
         .frame(width: Turf.contentWidth, height: 20, alignment: .leading)
@@ -1248,23 +1240,21 @@ private struct TodayDayBoard: View {
                     .font(mark.hour == current ? TypeRole.boardLabelNow : TypeRole.boardLabel)
                     .foregroundStyle(mark.hour == current ? Palette.text : Palette.textSecondary)
                     .fixedSize()
-                    .position(x: min(max(mark.x, half), Turf.contentWidth - half), y: 8)
+                    .position(x: min(max(CGFloat(mark.x), half), Turf.contentWidth - half), y: 8)
             }
         }
         .frame(width: Turf.contentWidth, height: 16)
     }
 }
 
-/// いまの刻み(焼いた橙 2pt + 上の三角、黒漆の縁)。下へ 4pt はみ出す
+/// いまの刻み(焼いた橙 2pt + 上の三角、黒漆の縁)。配置の枠 = 格の行(2 × 20)。下へ 4pt のはみ出しは素材の bleed に焼いてある
 private struct TodayNowNotch: View {
     let x: CGFloat
 
     var body: some View {
         if let asset = Baked.asset("now-notch-night"), Baked.has("now-notch-night") {
-            let size = asset.layoutSize
-            // 配置の枠の下端 = 格の下 + 4pt
             BakedSprite(id: "now-notch-night")
-                .offset(x: x - size.width / 2, y: 24 - size.height)
+                .offset(x: x - asset.layoutSize.width / 2)
         } else {
             Rectangle()
                 .fill(Palette.orange)
@@ -1490,7 +1480,7 @@ private struct TodayTaskList: View {
                     }
                     .padding(.horizontal, TodayLayout.captionInset)
                     .frame(height: TodayLayout.captionRow)
-                    .background { HoverPlate(active: captionHovering, small: true) }
+                    .background { HoverPlate(active: captionHovering, title: true) }
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
@@ -1622,8 +1612,9 @@ private struct TodayMeetingStrip: View {
                         .typesetting(for: event.title)
                     Spacer(minLength: 8)
                     if let url = event.joinURL {
+                        // 黒漆の条の上の小さな橙の喷块
                         Button("加入会议") { NSWorkspace.shared.open(url) }
-                            .buttonStyle(FrameButtonStyle(height: 34))
+                            .buttonStyle(SprayButtonStyle(kind: .orangeSmall, height: 34))
                             .help(url.host ?? "加入会议")
                     }
                 }
