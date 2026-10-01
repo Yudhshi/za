@@ -47,7 +47,7 @@ public enum HeroPolicy {
         return event.start.timeIntervalSince(now) <= eventLead ? .event : .calm
     }
 
-    /// 大数字と単位。分は切り上げ(NextEventPolicy.heroCountdown と同じ数え方)で 2 桁にそろえる
+    /// 大数字と単位。分は切り上げ(0 分にはならない)で 2 桁にそろえる
     public static func display(for event: MeetingEvent, now: Date, calendar: Calendar = .current) -> Display {
         switch phase(for: event, now: now) {
         case .ended:

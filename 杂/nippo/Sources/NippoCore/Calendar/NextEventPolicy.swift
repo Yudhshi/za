@@ -16,25 +16,6 @@ public enum NextEventPolicy {
             .min(by: { $0.start < $1.start })
     }
 
-    /// ヒーローカードの大きな数字と単位。分は切り上げ。
-    /// 開始前 60 分未満「12 / 分後」、それ以上「15:37 / 開始」、開催中「23 / 分で終了」
-    public static func heroCountdown(for event: MeetingEvent, now: Date,
-                                     calendar: Calendar = .current) -> (value: String, unit: String) {
-        func ceilMinutes(_ interval: TimeInterval) -> Int {
-            max(1, Int(ceil(interval / 60)))
-        }
-        guard event.start > now else {
-            let left = ceilMinutes(event.end.timeIntervalSince(now))
-            if left < 60 { return ("\(left)", "分钟后结束") }
-            let c = calendar.dateComponents([.hour, .minute], from: event.end)
-            return (String(format: "%d:%02d", c.hour!, c.minute!), "结束")
-        }
-        let minutes = ceilMinutes(event.start.timeIntervalSince(now))
-        if minutes < 60 { return ("\(minutes)", "分钟后") }
-        let c = calendar.dateComponents([.hour, .minute], from: event.start)
-        return (String(format: "%d:%02d", c.hour!, c.minute!), "开始")
-    }
-
     /// 件名にキーワードのどれかを含む、まだ終わっていない最初の予定(全角/半角・大小文字は区別しない)
     public static func nextMatching(_ keywords: [String], in events: [MeetingEvent],
                                     now: Date) -> MeetingEvent? {

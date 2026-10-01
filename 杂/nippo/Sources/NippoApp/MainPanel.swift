@@ -13,7 +13,9 @@ final class MainPanelController: NSObject, NSWindowDelegate {
     /// この窓の中の mouseDown は「外を押した」扱いにしない(状態バーの項目)
     weak var ignoredWindow: NSWindow?
 
-    private static let topLeftKey = "panelTopLeft"
+    /// 見えている面板の左上。v12 までは窓(影の余白込み)の左上を panelTopLeft に覚えていた
+    private static let topLeftKey = "panelVisibleTopLeft"
+    private static let legacyTopLeftKey = "panelTopLeft"
 
     init(coordinator: AppCoordinator) {
         self.coordinator = coordinator
@@ -75,10 +77,17 @@ final class MainPanelController: NSObject, NSWindowDelegate {
                       width: frame.width - b.leading - b.trailing, height: frame.height - b.top - b.bottom)
     }
 
-    /// 動かした位置(見えている面板の左上。影を足す前の版の値もそのまま使える)。画面の外なら忘れる
+    /// 動かした位置(見えている面板の左上)。画面の外なら忘れる。
+    /// 旧い値(窓の左上)は一度だけ影の余白の分ずらして移す
     private var savedTopLeft: CGPoint? {
         get {
-            guard let a = UserDefaults.standard.array(forKey: Self.topLeftKey) as? [Double], a.count == 2 else { return nil }
+            let defaults = UserDefaults.standard
+            if defaults.array(forKey: Self.topLeftKey) == nil,
+               let old = defaults.array(forKey: Self.legacyTopLeftKey) as? [Double], old.count == 2 {
+                defaults.set([old[0] + Double(bleed.leading), old[1] - Double(bleed.top)], forKey: Self.topLeftKey)
+                defaults.removeObject(forKey: Self.legacyTopLeftKey)
+            }
+            guard let a = defaults.array(forKey: Self.topLeftKey) as? [Double], a.count == 2 else { return nil }
             let p = CGPoint(x: a[0], y: a[1])
             return NSScreen.screens.contains { $0.visibleFrame.insetBy(dx: -20, dy: -20).contains(p) } ? p : nil
         }

@@ -56,19 +56,6 @@ func runNextEventTests() {
         T.expectEqual(NextEventPolicy.statusTitle(events: [], now: now1), nil)
     }
 
-    T.run("heroCountdown: minutes before, start time when 60+ min away, minutes left when running") {
-        let e = ev("x", "定例", startH: 16, startM: 30)   // 16:30–17:30
-        func at(_ h: Int, _ m: Int, _ s: Int = 0) -> Date { tokyoDate(2026, 7, 10, h, m, s) }
-        let soon = NextEventPolicy.heroCountdown(for: e, now: at(16, 18, 30), calendar: tokyoCalendar)
-        T.expectEqual(soon.value, "12"); T.expectEqual(soon.unit, "分钟后")   // 11:30 → 切り上げ 12
-        let later = NextEventPolicy.heroCountdown(for: e, now: at(15, 0), calendar: tokyoCalendar)
-        T.expectEqual(later.value, "16:30"); T.expectEqual(later.unit, "开始")
-        let running = NextEventPolicy.heroCountdown(for: e, now: at(17, 7), calendar: tokyoCalendar)
-        T.expectEqual(running.value, "23"); T.expectEqual(running.unit, "分钟后结束")
-        let lastSecond = NextEventPolicy.heroCountdown(for: e, now: at(17, 29, 50), calendar: tokyoCalendar)
-        T.expectEqual(lastSecond.value, "1", "never shows 0")
-    }
-
     T.run("nextMatching: first unfinished event containing a keyword, width-insensitive") {
         let now = tokyoDate(2026, 7, 10, 12, 0)
         func day(_ d: Int, _ title: String, _ h: Int = 14) -> MeetingEvent {

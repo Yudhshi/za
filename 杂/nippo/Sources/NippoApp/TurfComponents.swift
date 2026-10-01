@@ -3,62 +3,83 @@ import SwiftUI
 
 // MARK: - 墙(面板)と牛皮纸
 
-/// 今日 / 英語の面板 = 浇筑した混凝土の墙:安静な平铺(±3%)を 20pt の角丸で切り、左右の縁に纹理の帯、
-/// いちばん上に縁の九宮格(対拉孔・欠け・接地影は bleed に焼いてある)。毎日最初に開いたときだけ遮盖纸を揭がす
+/// 今日 / 英語の面板 = 浇筑した混凝土の墙:安静な平铺(±3%)を 20pt の角丸で切り、左右の縁に纹理、
+/// いちばん上に縁の九宮格(対拉孔・欠け・接地影は bleed に焼いてある)。
+/// 開くとき:その日の最初の 1 回は遮盖纸を揭がして(520ms、漆はあとから淡く出る)、ほかは漆が 120ms で淡く出るだけ
 struct PanelSurface: ViewModifier {
+    @State private var opening = PanelOpening.current()
+
     func body(content: Content) -> some View {
-        content
-            .background {
-                ZStack {
-                    BakedTile(id: "concrete-night")
-                    PanelEdgeTexture()
+        MotionPlayer(trigger: 0, durationMs: opening.durationMs, playOnAppear: true) { progress in
+            content
+                .opacity(opening.paintOpacity(progress))
+                .background {
+                    ZStack {
+                        BakedTile(id: "concrete-night")
+                        if Baked.has("concrete-edge-night") {
+                            // 両端の帯だけ焼いてあり中央は透明。面板いっぱいに敷き、縦は 512pt で繰り返す
+                            BakedSlice(id: "concrete-edge-night", fallback: .clear, tile: true)
+                        }
+                    }
+                    .clipShape(RoundedRectangle(cornerRadius: Turf.panelRadius, style: .continuous))
                 }
-                .clipShape(RoundedRectangle(cornerRadius: Turf.panelRadius, style: .continuous))
-            }
-            .overlay { BakedSlice(id: "panel-frame-night") }
-            .overlay { PanelCover() }
-    }
-}
-
-/// 左右の縁の纹理(concrete-edge-night:両端の帯だけ焼いてあり、中央は透明。面板いっぱいに敷き、縦は 512pt で繰り返す)
-private struct PanelEdgeTexture: View {
-    var body: some View {
-        if Baked.has("concrete-edge-night") {
-            BakedSlice(id: "concrete-edge-night", fallback: .clear, tile: true)
+                .overlay { BakedSlice(id: "panel-frame-night") }
+                .overlay {
+                    if opening == .cover && progress < 1 {
+                        PanelCoverSheet(progress: progress)
+                    }
+                }
         }
     }
 }
 
-/// 遮盖纸:その日に初めて面板を開いたとき、右上の角が揭がって飛んでいく(520ms)。2 回目からは出ない
-private struct PanelCover: View {
-    @AppStorage("panelCoverDay") private var coverDay = ""
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @State private var playing = false
+/// 面板の開き方(その日の最初の 1 回だけ遮盖纸。決めた日は覚えておく)
+enum PanelOpening: Equatable {
+    case fade, cover
 
-    private static let total: Double = 520
+    static func current() -> PanelOpening {
+        let today = DayKey.key(for: Date())
+        let defaults = UserDefaults.standard
+        guard defaults.string(forKey: "panelCoverDay") != today else { return .fade }
+        defaults.set(today, forKey: "panelCoverDay")
+        return .cover
+    }
+
+    var durationMs: Double { self == .cover ? 520 : 120 }
+
+    /// 漆(中身)の不透明度:遮盖纸のときは紙が飛んだあと 320–520ms で、ふだんは 0–120ms で出る
+    func paintOpacity(_ progress: Double) -> Double {
+        switch self {
+        case .fade: return progress
+        case .cover: return motionPhase(progress, totalMs: 520, from: 320, to: 520)
+        }
+    }
+}
+
+/// 遮盖纸:右上の角が掀起(100–160ms で掀起した絵へ溶けながら 0.96 → 1)、左下を軸に甩って(160–320ms)、
+/// 窓の外へ出る前に消える(180–260ms)
+private struct PanelCoverSheet: View {
+    let progress: Double
 
     var body: some View {
-        MotionPlayer(trigger: playing, durationMs: Self.total) { progress in
-            if playing && progress < 1 {
-                let peel = motionPhase(progress, totalMs: Self.total, from: 0, to: 160)
-                let fling = motionPhase(progress, totalMs: Self.total, from: 160, to: 320)
-                let corner = peel > 0.4 && Baked.has("cover-sheet-corner-night")
-                // 遮盖纸の中央の帯は敷き詰める(伸ばすと紙の皺が流れる)。左下を軸に甩って、最後の 60ms で消える
-                let fade = motionPhase(progress, totalMs: Self.total, from: 260, to: 320)
-                BakedSlice(id: corner ? "cover-sheet-corner-night" : "cover-sheet-night", fallback: .clear, tile: true)
-                    .rotationEffect(.degrees(9 * fling), anchor: .bottomLeading)
-                    .offset(x: 150 * fling, y: -240 * fling)
-                    .opacity(1 - fade)
+        let total: Double = 520
+        let peel = motionPhase(progress, totalMs: total, from: 100, to: 160)
+        let fling = motionPhase(progress, totalMs: total, from: 160, to: 320)
+        let fade = motionPhase(progress, totalMs: total, from: 180, to: 260)
+        ZStack {
+            BakedSlice(id: "cover-sheet-night", fallback: .clear, tile: true)
+                .opacity(1 - peel)
+            if Baked.has("cover-sheet-corner-night") {
+                BakedSlice(id: "cover-sheet-corner-night", fallback: .clear, tile: true)
+                    .scaleEffect(0.96 + 0.04 * peel)
+                    .opacity(peel)
             }
         }
+        .rotationEffect(.degrees(6 * fling), anchor: .bottomLeading)
+        .offset(x: 60 * fling, y: -90 * fling)
+        .opacity(1 - fade)
         .allowsHitTesting(false)
         .accessibilityHidden(true)
-        .onAppear {
-            let today = DayKey.key(for: Date())
-            guard coverDay != today else { return }
-            coverDay = today
-            if !reduceMotion && Baked.has("cover-sheet-night") { playing = true }
-        }
     }
 }
 
@@ -78,11 +99,16 @@ struct ConcreteSeam: View {
 
 /// 坐站の小窓:牛皮纸の台紙(九宮格、角 10pt は焼いてある)。神兽の残影は小窓の側で台紙の上に置く
 struct KraftSurface: ViewModifier {
+    /// 站立中に壁画带まで並ぶ縦長の台紙(360×500 に焼いた紙。纤维を縦に伸ばさない)
+    var tall = false
+
     func body(content: Content) -> some View {
+        let id = tall ? (Baked.first(["kraft-sheet-tall-night", "kraft-sheet-night"]) ?? "kraft-sheet-night")
+                      : "kraft-sheet-night"
         content
             .background {
-                if Baked.has("kraft-sheet-night") {
-                    BakedSlice(id: "kraft-sheet-night")
+                if Baked.has(id) {
+                    BakedSlice(id: id)
                 } else {
                     RoundedRectangle(cornerRadius: 10, style: .continuous).fill(Palette.kraft)
                 }
@@ -92,7 +118,7 @@ struct KraftSurface: ViewModifier {
 
 extension View {
     func panelSurface() -> some View { modifier(PanelSurface()) }
-    func kraftSurface() -> some View { modifier(KraftSurface()) }
+    func kraftSurface(tall: Bool = false) -> some View { modifier(KraftSurface(tall: tall)) }
 
     /// 盤面の後ろの纹理の帯(気孔・骨材。両端は混凝土に溶ける)。配置には影響しない
     func boardBand() -> some View {
@@ -157,6 +183,8 @@ private struct SprayButtonBody: View {
 
     var body: some View {
         let pressed = configuration.isPressed
+        // 短い文字でも焼いた块を 0.8 倍より細くしない(喷粒が横に潰れる)
+        let minWidth = width == nil ? (Baked.asset(kind.asset)?.layoutSize.width ?? 0) * 0.8 : nil
         configuration.label
             .font(height < 40 ? Typeface.mixed(14, weight: 900) : TypeRole.button)
             .tracking(height < 40 ? 0.4 : 0.68)
@@ -164,7 +192,7 @@ private struct SprayButtonBody: View {
             .lineLimit(1)
             .padding(.horizontal, width == nil ? padding : 0)
             .frame(width: width, height: height)
-            .frame(maxWidth: wide ? .infinity : nil)
+            .frame(minWidth: minWidth, maxWidth: wide ? .infinity : nil)
             .background {
                 BakedSlice(id: kind.asset, fallback: kind.fallback)
                     // 閉包にして View の blendMode に決める(ShapeStyle 版と取り合わない)
@@ -201,6 +229,9 @@ private struct FrameButtonBody: View {
 
     var body: some View {
         let pressed = configuration.isPressed
+        // 牛皮纸の上は牛皮纸に焼いた白漆の枠(地面の違う素材を流用しない)
+        let frame = onKraft && Baked.has("frame-white-kraft") ? "frame-white-kraft" : "frame-white-night"
+        let minWidth = width == nil ? (Baked.asset(frame)?.layoutSize.width ?? 0) * 0.8 : nil
         configuration.label
             .font(height < 40 ? Typeface.mixed(14, weight: 900) : TypeRole.button)
             .tracking(height < 40 ? 0.4 : 0.68)
@@ -208,20 +239,17 @@ private struct FrameButtonBody: View {
             .lineLimit(1)
             .padding(.horizontal, width == nil ? 18 : 0)
             .frame(width: width, height: height)
-            .frame(maxWidth: wide ? .infinity : nil)
+            .frame(minWidth: minWidth, maxWidth: wide ? .infinity : nil)
             .background {
-                ZStack {
-                    if !onKraft {
-                        HoverPlate(active: hovering && !pressed && isEnabled)
-                    }
-                    // 牛皮纸の上は牛皮纸に焼いた白漆の枠(地面の違う素材を流用しない)
-                    let frame = onKraft && Baked.has("frame-white-kraft") ? "frame-white-kraft" : "frame-white-night"
+                // 悬停は枠の白漆が少し明るくなるだけ(枠の中に矩形を敷かない)
+                Group {
                     if Baked.has(frame) {
                         BakedSlice(id: frame)
                     } else {
                         Rectangle().strokeBorder(Palette.white, lineWidth: 2)
                     }
                 }
+                .brightness(hovering && !pressed && isEnabled ? 0.08 : 0)
             }
             .contentShape(Rectangle())
             .offset(y: pressed ? 2 : 0)
@@ -233,24 +261,27 @@ private struct FrameButtonBody: View {
 /// 文字だけのボタン(底栏・取り消し・小さな操作)。ホバーで下に遮喷の薄い块、押せないときは暗く
 struct BareButtonStyle: ButtonStyle {
     var color: Color = Palette.textSecondary
+    /// 悬停の文字色(牛皮纸の上は Palette.kraftText)
+    var hoverColor: Color = Palette.text
 
     func makeBody(configuration: Configuration) -> some View {
-        BareButtonBody(configuration: configuration, color: color)
+        BareButtonBody(configuration: configuration, color: color, hoverColor: hoverColor)
     }
 }
 
 private struct BareButtonBody: View {
     let configuration: ButtonStyleConfiguration
     let color: Color
+    let hoverColor: Color
     @Environment(\.isEnabled) private var isEnabled
     @State private var hovering = false
 
     var body: some View {
+        // 文字だけのボタンは悬停で文字が明るくなるだけ(下に块を敷くと、焼いた块が細く潰れる)
         configuration.label
-            .foregroundStyle(hovering && isEnabled ? Palette.text : color)
+            .foregroundStyle(hovering && isEnabled ? hoverColor : color)
             .padding(.horizontal, 6)
             .padding(.vertical, 4)
-            .background { HoverPlate(active: hovering && isEnabled) }
             .contentShape(Rectangle())
             .offset(y: configuration.isPressed ? 1 : 0)
             .opacity(isEnabled ? 1 : 0.45)
@@ -346,13 +377,16 @@ private struct BlockButtonBody: View {
 }
 
 /// 悬停:遮喷の薄い块がふっと出る(混凝土の上の行・文字ボタン)。素材が無ければ何も出さない(単色の矩形は使わない)。
-/// small = 高さ 24pt ほどの行(「任务 N」など)用に焼いた块
+/// 行の幅と高さに合わせて焼いた块を選ぶ:title = 面板幅で高さ 24(「任务 N」の行)、small = 120×24、ふだん = 472×40
 struct HoverPlate: View {
     let active: Bool
     var small = false
+    var title = false
 
     var body: some View {
-        BakedSlice(id: small && Baked.has("row-hover-small-night") ? "row-hover-small-night" : "row-hover-night")
+        let id = title ? Baked.first(["row-hover-title-night", "row-hover-night"])
+            : (small ? Baked.first(["row-hover-small-night", "row-hover-night"]) : "row-hover-night")
+        BakedSlice(id: id ?? "row-hover-night")
             .opacity(active ? 1 : 0)
             .animation(.easeOut(duration: 0.12), value: active)
             .allowsHitTesting(false)
@@ -404,7 +438,11 @@ struct StencilTabs<Value: Hashable>: View {
             .frame(height: Turf.tabHeight)
             .background {
                 if selected {
-                    BakedSlice(id: "tab-chip-night", fallback: Palette.white)
+                    // 「学习中 120」のような長い札は幅広に焼いた块
+                    let long = item.title.count + (item.badge.map { String($0).count + 1 } ?? 0) >= 5
+                    BakedSlice(id: long ? (Baked.first(["tab-chip-wide-night", "tab-chip-night"]) ?? "tab-chip-night")
+                                        : "tab-chip-night",
+                               fallback: Palette.white)
                         .matchedGeometryEffect(id: "chip", in: chip)
                 }
             }
@@ -462,12 +500,14 @@ struct PaintTag: View {
 
     var body: some View {
         let latin = text.unicodeScalars.allSatisfy { $0.isASCII }
+        let minWidth = (Baked.asset(asset)?.layoutSize.width ?? 0) * 0.8
         Text(text)
             .font(latin ? TypeRole.tagLatin : Typeface.mixed(12.5, weight: 900))
             .tracking(latin ? 0.8 : 0.2)
             .foregroundStyle(foreground)
             .lineLimit(1)
             .padding(.horizontal, 8)
+            .frame(minWidth: minWidth)
             .frame(height: height)
             .background { BakedSlice(id: asset, fallback: fallback) }
     }
@@ -485,7 +525,9 @@ struct TurfCell: View {
     var height: CGFloat = 20
 
     var body: some View {
-        let id = "cell-\(kind.rawValue)-night"
+        // 30 分の盤面の太い格(約 18pt)は、それ用に焼いた格
+        let narrow = "cell-\(kind.rawValue)-night"
+        let id = width > 14 ? (Baked.first(["cell-\(kind.rawValue)-wide-night", narrow]) ?? narrow) : narrow
         Group {
             if Baked.has(id) {
                 BakedSlice(id: id)
@@ -523,6 +565,8 @@ struct RatingCell: View {
     var size: CGFloat = 30
     /// 塗られたときに喷く動き(本轮の地盘だけ。复习记录・凡例・見本は動かさない)
     var animated = false
+    /// 黒い小さな台の上の 14pt(評分ボタンの見本)。黒い台に焼いた格を使う
+    var dark = false
 
     var body: some View {
         Group {
@@ -554,7 +598,8 @@ struct RatingCell: View {
 
     @ViewBuilder
     private var finalCell: some View {
-        let id = "rate-\(Int(size))-\(kind.rawValue)"
+        let plain = "rate-\(Int(size))-\(kind.rawValue)"
+        let id = dark ? (Baked.first(["\(plain)-dark", plain]) ?? plain) : plain
         if Baked.has(id) {
             BakedSprite(id: id)
         } else {
@@ -669,23 +714,37 @@ struct TurfStamp: View {
         let spray = motionPhase(progress, totalMs: total, from: nice ? 90 : 110, to: nice ? 220 : 270)
         let lift = motionPhase(progress, totalMs: total, from: nice ? 220 : 270, to: nice ? 320 : 420)
         let sheet = nice ? "stamp-nice-sheet" : "stamp-miss-sheet"
+        let grow = motionPhase(progress, totalMs: total, from: 320, to: 600)
         ZStack {
-            if nice && (progress >= 1 || motionPhase(progress, totalMs: total, from: 320, to: 600) > 0) {
-                Drips(paint: .orange, xs: [0.62], seed: 1, maxLength: 34,
-                      grow: motionPhase(progress, totalMs: total, from: 320, to: 600))
-            }
+            // 章の垂れは章の素材に焼いてある:喷く間は遮罩で隠し、纸を揭がしてから dripBox の中で伸ばす
             BakedSprite(id: id)
-                .mask {
-                    if spray < 1 && Baked.hasFrames("stamp-mask-", count: 4) {
-                        BakedFrame(prefix: "stamp-mask-", count: 4, progress: spray)
-                    } else {
-                        Rectangle().opacity(progress < 1 ? spray : 1).padding(-40)
-                    }
-                }
+                .mask { stampMask(nice: nice, progress: progress, spray: spray, grow: grow) }
             if progress < 1 && lift < 1 && Baked.has(sheet) {
                 BakedSprite(id: sheet)
                     .offset(x: 18 * lift, y: -8 * (1 - place) - 26 * lift)
                     .opacity(place * (1 - lift))
+            }
+        }
+    }
+}
+
+extension TurfStamp {
+    @ViewBuilder
+    @MainActor fileprivate func stampMask(nice: Bool, progress: Double, spray: Double, grow: Double) -> some View {
+        if progress >= 1 || !Baked.hasFrames("stamp-mask-", count: 4) {
+            Rectangle().opacity(progress >= 1 ? 1 : spray).padding(-40)
+        } else if spray < 1 {
+            BakedFrame(prefix: "stamp-mask-", count: 4, progress: spray)
+        } else if !nice {
+            Rectangle().padding(-40)
+        } else {
+            ZStack(alignment: .topLeading) {
+                BakedFrame(prefix: "stamp-mask-", count: 4, progress: 1)
+                if let box = Baked.asset("stamp-mask-0")?.dripBox, box.count == 4 {
+                    BakedFrame(prefix: "drip-grow-", count: 4, progress: grow)
+                        .frame(width: box[2], height: box[3])
+                        .offset(x: box[0], y: box[1])
+                }
             }
         }
     }
@@ -705,15 +764,16 @@ struct StampSlotMark: View {
     }
 }
 
-/// 坐站小窗の手順の点:做完 = 黒、いま = 青 + 黒い輪、これから = 模板の浅い印(牛皮纸の上、10pt)
+/// 坐站小窗の手順の点:做完 = 黒、いま = 青 + 黒い輪(16pt)、これから = 模板の浅い印(10pt)。牛皮纸の上、間 6pt
 struct StepDots: View {
     let count: Int
     let index: Int
 
     var body: some View {
-        HStack(spacing: 8) {
+        HStack(alignment: .center, spacing: 6) {
             ForEach(0..<max(count, 0), id: \.self) { i in
                 let state = i < index ? "done" : (i == index ? "current" : "future")
+                let size: CGFloat = i == index ? 16 : 10
                 Group {
                     if Baked.has("dot-\(state)-kraft") {
                         BakedSprite(id: "dot-\(state)-kraft")
@@ -723,7 +783,7 @@ struct StepDots: View {
                             .overlay { Circle().strokeBorder(Palette.kraftText.opacity(i > index ? 0.35 : 1), lineWidth: 1.5) }
                     }
                 }
-                .frame(width: 10, height: 10)
+                .frame(width: size, height: size)
             }
         }
         .accessibilityHidden(true)

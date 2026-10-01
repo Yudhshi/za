@@ -53,6 +53,10 @@ struct BakedManifest: Decodable {
         let durationMs: Double?
         let frameStartsMs: [Double]?
         let numeralBox: [CGFloat]?
+        /// 遮罩の帯(8bit の灰色・1×。白 = 漆がある)。luminanceToAlpha して使う
+        let mask: Bool?
+        /// 章の垂れの箱(配置の枠の pt:x, y, w, h)。喷く間は遮罩で 0、揭がしてから伸ばす
+        let dripBox: [CGFloat]?
     }
 
     struct GlyphSet: Decodable {
@@ -73,6 +77,8 @@ struct BakedManifest: Decodable {
         let advance: CGFloat
         /// 筆の位置から切り抜きの左端まで
         let bearing: CGFloat
+        /// 筆の位置から墨の右端まで(飛沫を除く)。最後の字の後ろの空きを数えないため
+        let inkRight: CGFloat?
     }
 
     let version: Int
@@ -366,12 +372,15 @@ struct StencilText: View {
         guard !text.isEmpty else { return nil }
         var pen: CGFloat = 0
         var items: [Item] = []
+        var right: CGFloat = 0
         for character in text {
             guard let hit = Baked.glyph(set, character) else { return nil }
             items.append(Item(image: hit.image, x: pen + hit.glyph.bearing * scale))
+            // 幅は最後の字の墨の右端まで(送り幅の余りは単位との間に入れない)
+            right = pen + (hit.glyph.inkRight ?? hit.glyph.advance) * scale
             pen += hit.glyph.advance * scale
         }
-        return (items, pen)
+        return (items, right)
     }
 }
 
@@ -427,17 +436,39 @@ extension View {
     func creatureLayer(_ id: String, enabled: Bool) -> some View {
         backgroundPreferenceValue(CreatureAvoidKey.self) { anchors in
             GeometryReader { geo in
-                if enabled, let asset = Baked.asset(id), let art = asset.creatureArt, Baked.has(id),
-                   // 墨の高さは卡の 0.76 から、入らなければ 0.44 まで縮める(曜日の神兽は毎日出す。大数字は縮めない)
-                   let fit = CreatureFit.place(art: art, card: geo.size, avoid: anchors.map { geo[$0] }, minimum: 0.44) {
-                    BakedSprite(id: id, scale: fit.scale)
-                        .position(x: fit.origin.x + art.box.width * fit.scale / 2,
-                                  y: fit.origin.y + art.box.height * fit.scale / 2)
+                if enabled, let placed = CreatureTier.place(id, card: geo.size, avoid: anchors.map { geo[$0] }) {
+                    BakedSprite(id: placed.id, scale: placed.fit.scale)
+                        .position(x: placed.fit.origin.x + placed.art.box.width * placed.fit.scale / 2,
+                                  y: placed.fit.origin.y + placed.art.box.height * placed.fit.scale / 2)
                 }
             }
             .allowsHitTesting(false)
             .accessibilityHidden(true)
         }
+    }
+}
+
+/// 神兽は大・中・小の 3 段に焼いてある(墨の高さ ≈ 180 / 145 / 114pt)。どの段も 0.85〜1.15 倍の間でしか伸び縮みさせず、
+/// 大きい段から順に、卡の 0.76 の高さを目指して文字・数字と 9pt 離れるところを探す。卡の 0.44 より小さくなるなら出さない
+@MainActor
+enum CreatureTier {
+    struct Placed {
+        let id: String
+        let art: CreatureFit.Art
+        let fit: CreatureFit.Placement
+    }
+
+    static func place(_ base: String, card: CGSize, avoid: [CGRect]) -> Placed? {
+        guard card.height > 0 else { return nil }
+        for id in [base, "\(base)-m", "\(base)-s"] {
+            guard let asset = Baked.asset(id), let art = asset.creatureArt, art.ink.height > 0, Baked.has(id) else { continue }
+            let target = min(0.76, art.ink.height * 1.15 / card.height)
+            let minimum = max(0.44, art.ink.height * 0.85 / card.height)
+            guard minimum <= target,
+                  let fit = CreatureFit.place(art: art, card: card, avoid: avoid, target: target, minimum: minimum) else { continue }
+            return Placed(id: id, art: art, fit: fit)
+        }
+        return nil
     }
 }
 
@@ -493,12 +524,22 @@ struct BakedFrame: View {
         let id = "\(prefix)\(Self.index(prefix: prefix, count: count, progress: progress))"
         if let asset = Baked.asset(id), let image = Baked.image(id) {
             let b = asset.bleedInsets
-            Image(nsImage: image)
-                .resizable()
-                .interpolation(.high)
-                .padding(EdgeInsets(top: -b.top, leading: -b.leading, bottom: -b.bottom, trailing: -b.trailing))
-                .allowsHitTesting(false)
-                .accessibilityHidden(true)
+            Group {
+                if asset.mask == true {
+                    // 灰色の遮罩:明るさをそのまま不透明度に
+                    Image(nsImage: image)
+                        .resizable()
+                        .interpolation(.high)
+                        .luminanceToAlpha()
+                } else {
+                    Image(nsImage: image)
+                        .resizable()
+                        .interpolation(.high)
+                }
+            }
+            .padding(EdgeInsets(top: -b.top, leading: -b.leading, bottom: -b.bottom, trailing: -b.trailing))
+            .allowsHitTesting(false)
+            .accessibilityHidden(true)
         } else {
             // 帯が無いときは全面(遮罩に使っても中身を消さない)
             Rectangle()

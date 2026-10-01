@@ -202,12 +202,9 @@ final class EnglishCoordinator: ObservableObject {
 
     /// 素材の置き場所:.app の Resources/English(swift run のときはリポジトリの Resources/English)
     static func dataDirectory() -> URL {
-        if let url = Bundle.main.url(forResource: "English", withExtension: nil) { return url }
-        return URL(fileURLWithPath: #filePath)
-            .deletingLastPathComponent()   // NippoApp
-            .deletingLastPathComponent()   // Sources
-            .deletingLastPathComponent()
-            .appendingPathComponent("Resources/English")
+        // .app の中 → 開発中(swift run、.app の外)だけリポジトリの Resources/English。.app で欠けていれば欠けたまま(素材なしの表示)
+        if let url = BundledResource.url("English") { return url }
+        return (Bundle.main.resourceURL ?? URL(fileURLWithPath: NSTemporaryDirectory())).appendingPathComponent("English")
     }
 
     /// パネルを閉じた:次に開いたときの最初の 1 問は、また自分で「播放」を押す(職場でいきなり音を出さない)
@@ -332,29 +329,46 @@ final class EnglishCoordinator: ObservableObject {
 
     // MARK: - 一覧(まとまり)→ カード(1 つ)
 
+    /// 一覧の控え(画面を描くたびに DB を読まない)。答えた・取り消した・取り込んだあと(refreshStats)と日付が変わったときに作り直す
+    private var listVersion = 0
+    private var listCardsCache: (key: String, cards: [EnglishCard])?
+    private var listRowsCache: (key: String, rows: [ListRow])?
+
+    private func listCards(_ kind: EnglishKind, today: String) -> [EnglishCard] {
+        let key = "\(kind.rawValue)|\(today)|\(listVersion)"
+        if let cache = listCardsCache, cache.key == key { return cache.cards }
+        let cards = ((try? store.cards(kind: kind)) ?? []).filter { isResolvable($0.id) }
+        listCardsCache = (key, cards)
+        return cards
+    }
+
     /// 一覧の行:今日 = 今日の復習、学習中 = 出題中のもの全部、知ってる = 出題から外したもの
     func listRows() -> [ListRow] {
         guard let kind = mode.kind, loaded else { return [] }
         let today = DayKey.key(for: Date())
-        let cards = ((try? store.cards(kind: kind)) ?? []).filter { isResolvable($0.id) }
+        let key = "\(kind.rawValue)|\(today)|\(listVersion)|\(listFilter)"
+        if let cache = listRowsCache, cache.key == key { return cache.rows }
+        let cards = listCards(kind, today: today)
         let chosen: [EnglishCard]
         switch listFilter {
         case .today: chosen = cards.filter { !$0.known && $0.due <= today }
         case .learning: chosen = cards.filter { !$0.known }
         case .known: chosen = cards.filter(\.known)
         }
-        return chosen.prefix(200).map { card in
+        let rows = chosen.prefix(200).map { card in
             let (title, gloss) = describe(card.id)
             return ListRow(id: card.id, title: title, gloss: gloss,
                            dueLabel: card.known ? "已掌握" : Self.dueLabel(card.due, today: today))
         }
+        listRowsCache = (key, rows)
+        return rows
     }
 
     /// 一覧で数を出す(絞り込みの横)
     func listCount(_ filter: ListFilter) -> Int {
         guard let kind = mode.kind, loaded else { return 0 }
         let today = DayKey.key(for: Date())
-        let cards = ((try? store.cards(kind: kind)) ?? []).filter { isResolvable($0.id) }
+        let cards = listCards(kind, today: today)
         switch filter {
         case .today: return cards.filter { !$0.known && $0.due <= today }.count
         case .learning: return cards.filter { !$0.known }.count
@@ -394,11 +408,17 @@ final class EnglishCoordinator: ObservableObject {
     }
 
     /// 「今天」「明天」「3天后」「10/12」
-    static func dueLabel(_ due: String, today: String) -> String {
+    /// "yyyy-MM-dd" を読む(一覧の行ごとに作らない)
+    private static let dayParser: DateFormatter = {
         let f = DateFormatter()
         f.calendar = Calendar(identifier: .gregorian)
         f.locale = Locale(identifier: "en_US_POSIX")
         f.dateFormat = "yyyy-MM-dd"
+        return f
+    }()
+
+    static func dueLabel(_ due: String, today: String) -> String {
+        let f = dayParser
         guard let d = f.date(from: due), let t = f.date(from: today) else { return due }
         let days = Calendar(identifier: .gregorian).dateComponents([.day], from: t, to: d).day ?? 0
         switch days {
@@ -591,8 +611,14 @@ final class EnglishCoordinator: ObservableObject {
 
     var dictHit: DictHit? { library.lookup(dictQuery) }
 
+    /// 词典で引いた語がもう単語カードにあるか(打鍵のたびに読まないよう、同じ語・同じ版なら控えを返す)
+    private var deckCheck: (word: String, version: Int, value: Bool)?
+
     func isInDeck(_ hit: DictHit) -> Bool {
-        (try? store.card("dict:" + hit.word)) != nil
+        if let check = deckCheck, check.word == hit.word, check.version == listVersion { return check.value }
+        let value = (try? store.card("dict:" + hit.word)) != nil
+        deckCheck = (hit.word, listVersion, value)
+        return value
     }
 
     func addToDeck(_ hit: DictHit) {
@@ -714,6 +740,7 @@ final class EnglishCoordinator: ObservableObject {
         todayCount = (try? store.answeredCount(day: today)) ?? 0
         todayResults = (try? store.results(day: today)) ?? []
         refreshHistories()
+        listVersion += 1
         streak = (try? store.streak(today: now)) ?? 0
         guard loaded else { return }
         resetExtraIfNewDay()

@@ -14,8 +14,6 @@ enum Palette {
     static let meetingGrey = Theme.rgb(0xC3C6C7)
     static let tape = Theme.rgb(0xE6D9B0)
     static let kraft = Theme.rgb(0xC49C69)
-    static let creatureGrey = Theme.rgb(0x42464A)
-    static let page = Theme.rgb(0x161719)
 
     // 夜の混凝土
     static let surface = Theme.rgb(0x2A2D30)
@@ -24,10 +22,8 @@ enum Palette {
     static let meetingCellPast = Theme.rgb(0x7E8286)
     static let cellEmptyStroke = Theme.rgb(0x80858A)
     static let cellPastFill = Theme.rgb(0x1F2124)
-    static let rowHover = Theme.rgb(0x3A3E42)
     static let disabledFill = Theme.rgb(0x45494D)
     static let disabledText = Theme.rgb(0xA3A7AA)
-    static let rule = Theme.rgb(0xF4F3EE).opacity(0.30)
 
     // 白漆の単語卡の上
     static let cardText = Theme.rgb(0x161615)
@@ -37,12 +33,6 @@ enum Palette {
     static let kraftText = Theme.rgb(0x161615)
     static let kraftTextSecondary = Theme.rgb(0x3E2F1C)
     static let kraftRule = Theme.rgb(0x281A0A).opacity(0.35)
-
-    // 押した・乗せた
-    static let orangeHover = Theme.rgb(0xFF7A2E)
-    static let orangePressed = Theme.rgb(0xE4560A)
-    static let tealHover = Theme.rgb(0x3DF0DD)
-    static let tealPressed = Theme.rgb(0x0FC9B6)
 }
 
 /// 余白と寸法(pt)
@@ -56,15 +46,7 @@ enum Turf {
     static let heroPadding = EdgeInsets(top: 16, leading: 20, bottom: 18, trailing: 20)
     static let panelRadius: CGFloat = 20
 
-    static let xxs: CGFloat = 4
-    static let xs: CGFloat = 6
-    static let s: CGFloat = 8
-    static let m: CGFloat = 12
-    static let l: CGFloat = 14
-    static let xl: CGFloat = 18
     static let xxl: CGFloat = 22
-    static let section: CGFloat = 30
-    static let block: CGFloat = 40
 
     static let topRow: CGFloat = 40
     static let tabHeight: CGFloat = 32
@@ -76,7 +58,6 @@ enum Turf {
     static let ratingButton: CGFloat = 52
     static let optionButton: CGFloat = 56
     static let popupButton: CGFloat = 50
-    static let input: CGFloat = 52
     static let checkbox: CGFloat = 17
 }
 
