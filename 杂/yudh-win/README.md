@@ -4,7 +4,7 @@ Mac 版 Yudh（`../nippo`）的 Windows 伴随程序。电脑主要用来打游�
 
 1. **英语**：单词卡 / 考点词 / 听写，和 Mac 共用同一份进度（同步文件夹里的 `english-events-*.jsonl`）。
 2. **明天的会**：只读 Mac 写的 `agenda.json`，不碰日历。
-3. **坐站提醒**：和 Mac 同样的计时与拉伸手顺；**全屏游戏时不弹**。
+3. **坐站提醒**：和 Mac 同样的计时与拉伸步骤。全屏游戏时不弹，但**连续玩 60 分钟以上，退出全屏就马上问一次「站起来了吗？」**（手臂前伸、身体前倾的长时间正是斜角肌最容易绷紧的时候）。
 
 格式以 `../nippo/docs/sync-format.md` 为准。
 
@@ -28,7 +28,7 @@ core/      yudh-core：没有界面的 Rust 库（这里的逻辑全部有测试
 ## 开发
 
 ```
-cargo test            # 28 个测试
+cargo test            # 29 个测试
 cargo clippy --all-targets -- -D warnings
 ```
 

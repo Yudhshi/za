@@ -41,7 +41,7 @@ func runSettingsTests() {
         T.expectEqual(s.loginItemMovedToYudh, false)
 
         T.expectEqual(s.postureEnabled, true)
-        T.expectEqual(s.sitMinutes, 45)
+        T.expectEqual(s.sitMinutes, 40)
         T.expectEqual(s.standMinutes, 15)
         T.expectEqual(s.stretches, BreakReminder.defaultStretches)
         s.sitMinutes = 30

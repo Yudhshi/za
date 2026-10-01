@@ -96,7 +96,9 @@ public final class AppSettings: ObservableObject {
     }
 
     public var sitMinutes: Int {
-        get { d.object(forKey: "sitMinutes") as? Int ?? 45 }
+        // 40 分:同じ姿勢を長く続けない(斜角肌は頭が前に出た姿勢・腕を前に浮かせた姿勢で張る)。
+        // 坐 40 / 站 15 で 1 日に立つ・動く時間はおよそ 2 時間(Buckley 2015 の最初の目標)
+        get { d.object(forKey: "sitMinutes") as? Int ?? 40 }
         set { d.set(newValue, forKey: "sitMinutes"); objectWillChange.send() }
     }
 
