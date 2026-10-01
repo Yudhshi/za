@@ -21,6 +21,29 @@ final class Speaker {
         synthesizer.stopSpeaking(at: .immediate)
     }
 
+    /// 日课の拉伸の読み上げ(中文の声。少しゆっくり)
+    func guide(_ text: String) {
+        synthesizer.stopSpeaking(at: .immediate)
+        let utterance = AVSpeechUtterance(string: text)
+        utterance.voice = guideVoice
+        utterance.rate = AVSpeechUtteranceDefaultSpeechRate * 0.9
+        synthesizer.speak(utterance)
+    }
+
+    private lazy var guideVoice: AVSpeechSynthesisVoice? = Self.bestVoice(languages: ["zh-CN", "zh-TW", "zh-HK"])
+
+    private static func bestVoice(languages: [String]) -> AVSpeechSynthesisVoice? {
+        let voices = AVSpeechSynthesisVoice.speechVoices().filter {
+            !$0.identifier.contains("eloquence") && !$0.voiceTraits.contains(.isNoveltyVoice)
+        }
+        for language in languages {
+            if let best = voices.filter({ $0.language == language }).max(by: { $0.quality.rawValue < $1.quality.rawValue }) {
+                return best
+            }
+        }
+        return AVSpeechSynthesisVoice(language: languages.first ?? "zh-CN")
+    }
+
     /// 声の名前(画面の注記用。英語の声が無ければ nil)
     var voiceName: String? { voice?.name }
 

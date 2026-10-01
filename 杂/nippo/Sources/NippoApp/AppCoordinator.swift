@@ -42,8 +42,13 @@ final class AppCoordinator: ObservableObject {
     @Published var stretchStep = 0 {
         didSet { posturePanel.update() }
     }
+    /// 立ってすぐの腹式呼吸 3 回を始めた時刻(終わる・飛ばすと nil。そのあとが拉伸の手順)
+    @Published var breathStartedAt: Date? {
+        didSet { posturePanel.update() }
+    }
     lazy var posturePanel = PosturePanelController(coordinator: self)
     private lazy var settingsWindow = SettingsWindowController(coordinator: self)
+    private lazy var ritualWindow = RitualWindowController(coordinator: self)
     /// 英語タブ(すきま時間の英語)
     lazy var english: EnglishCoordinator = {
         let english = EnglishCoordinator(db: db)
@@ -248,6 +253,33 @@ final class AppCoordinator: ObservableObject {
         settingsWindow.show()
     }
 
+    /// 泡完澡了:日课の窓を開く(跟练の動画 → 拉伸 → 腹式呼吸)
+    func openRitual() {
+        ritualWindow.show()
+    }
+
+    /// 日课をやり終えた(最後が仰向けの腹式呼吸なので、呼吸の 1 回にも数える)
+    func recordRitual() {
+        let today = DayKey.key(for: Date())
+        settings.ritualLog = BreathLog.recording(settings.ritualLog, day: today)
+        settings.breathLog = BreathLog.recording(settings.breathLog, day: today)
+        objectWillChange.send()
+    }
+
+    /// 今日の腹式呼吸の回数
+    var breathToday: Int {
+        settings.breathLog[DayKey.key(for: Date())] ?? 0
+    }
+
+    /// 腹式呼吸 3 回が終わった(飛ばしたときは数えない)。そのまま拉伸の手順へ
+    func finishBreath(counted: Bool) {
+        guard breathStartedAt != nil else { return }
+        if counted {
+            settings.breathLog = BreathLog.recording(settings.breathLog, day: DayKey.key(for: Date()))
+        }
+        breathStartedAt = nil
+    }
+
     func saveTaskMemo(_ text: String) {
         settings.taskMemo = text
         lastCompletedTask = nil
@@ -303,8 +335,10 @@ final class AppCoordinator: ObservableObject {
                                now.addingTimeInterval(2))
             let id = "nippo-meet-\(e.id)-\(Int(e.start.timeIntervalSince1970))-\(lead)"
             let title = "即将开会：\(e.title)"
+            // 会議の前の数分も碎片時間:腹式呼吸を 3 回(习惯にする)
             let body = "\(f.string(from: e.start)) 开始"
                 + (e.joinURL != nil ? "。点击加入会议" : "")
+                + (settings.breathHabit ? "。开会前先做 3 次腹式呼吸" : "")
             let signature = [title, body, e.joinURL?.absoluteString ?? ""]
                 .joined(separator: "\n")
             next[id] = signature

@@ -118,6 +118,41 @@ public final class AppSettings: ObservableObject {
         set { d.set(newValue, forKey: "lastStretchIndex") }
     }
 
+    /// 泡澡のあとの日课:動画(1 行 1 本「名前 URL」)と、そのあとの拉伸(空行区切り)
+    public var ritualVideos: String {
+        get { d.string(forKey: "ritualVideos") ?? Ritual.defaultVideos }
+        set { d.set(newValue, forKey: "ritualVideos"); objectWillChange.send() }
+    }
+
+    public var ritualStretches: String {
+        get { d.string(forKey: "ritualStretches") ?? Ritual.defaultStretches }
+        set { d.set(newValue, forKey: "ritualStretches"); objectWillChange.send() }
+    }
+
+    /// 日课の拉伸を声で読む(床で拉伸しているあいだ画面を見なくていいように)
+    public var ritualVoice: Bool {
+        get { d.object(forKey: "ritualVoice") as? Bool ?? true }
+        set { d.set(newValue, forKey: "ritualVoice"); objectWillChange.send() }
+    }
+
+    /// 日课をやり終えた日("yyyy-MM-dd" → 回数)
+    public var ritualLog: [String: Int] {
+        get { d.dictionary(forKey: "ritualLog") as? [String: Int] ?? [:] }
+        set { d.set(newValue, forKey: "ritualLog"); objectWillChange.send() }
+    }
+
+    /// 立つたびに、拉伸の前に腹式呼吸を 3 回(习惯にする)
+    public var breathHabit: Bool {
+        get { d.object(forKey: "breathHabit") as? Bool ?? true }
+        set { d.set(newValue, forKey: "breathHabit"); objectWillChange.send() }
+    }
+
+    /// 腹式呼吸をした回数("yyyy-MM-dd" → 回数)
+    public var breathLog: [String: Int] {
+        get { d.dictionary(forKey: "breathLog") as? [String: Int] ?? [:] }
+        set { d.set(newValue, forKey: "breathLog"); objectWillChange.send() }
+    }
+
     /// 英語の進捗を共有するフォルダ(OneDrive / iCloud Drive の中など)。nil = 同期しない
     public var syncRoot: String? {
         get {

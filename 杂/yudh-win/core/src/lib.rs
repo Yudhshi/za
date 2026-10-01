@@ -6,6 +6,7 @@
 //! - 素材(語表)は同期フォルダの `english-library/` から読む(`library`)。語表は git に入れない
 //! - 会議:Mac が書く `agenda.json` を読むだけ(`agenda`)
 //! - 坐站の切り替え:計時と小窓の判定だけ(`posture`)。全画面のゲーム中は出さない
+//! - 泡澡のあとの日课と腹式呼吸の習慣(`ritual`)
 //!
 //! 書式は Mac 側の `docs/sync-format.md` が正本。数字はどちらのテストでも同じになるようにしてある
 
@@ -18,6 +19,7 @@ pub mod posture;
 pub mod queue;
 pub mod quiz;
 pub mod replay;
+pub mod ritual;
 pub mod round;
 pub mod spell;
 pub mod srs;

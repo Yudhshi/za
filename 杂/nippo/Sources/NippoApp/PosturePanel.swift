@@ -27,7 +27,8 @@ final class PosturePanelController {
         self.panel = panel
         // 牛皮纸の接地影は素材の bleed に焼いてある(窓はその分広げてある)。いま敷く台紙の素材が無いときだけシステムの影
         panel.hasShadow = !Self.shadowIsBaked(
-            tall: PosturePromptView.usesTallSheet(prompt, stretch: coordinator.promptStretch))
+            tall: PosturePromptView.usesTallSheet(prompt, stretch: coordinator.promptStretch,
+                                                  breathing: coordinator.breathStartedAt != nil))
         // SwiftUI の再レイアウト後に測る
         DispatchQueue.main.async { [weak self] in
             // 出すと決めたあとに閉じられていたら、空の窓を出し直さない
@@ -152,7 +153,8 @@ struct PosturePromptView: View {
     /// 壁画带まで並ぶ站立中だけ縦長の台紙(360×500。ふつうの 400pt の台紙を縦に伸ばさない)。
     /// 神兽の残影は紙の上・文字の下。素材の指定どおり(台紙の (0, 84)、台紙で切る)にここで置く(09 / 11 のふつうの台紙だけ)
     private func sheet(_ prompt: BreakReminder.Prompt) -> some View {
-        let tall = Self.usesTallSheet(prompt, stretch: coordinator.promptStretch)
+        let tall = Self.usesTallSheet(prompt, stretch: coordinator.promptStretch,
+                                      breathing: coordinator.breathStartedAt != nil)
         return ZStack(alignment: .top) {
             content(prompt)
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -170,10 +172,12 @@ struct PosturePromptView: View {
         .padding(Self.outerInsets(tall: tall))
     }
 
-    /// 縦長の台紙にするか:站立中で、手順が壁画带になるとき(PostureStandingGuide と同じ判定)
+    /// 縦長の台紙にするか:站立中で、手順が壁画带になるとき(PostureStandingGuide と同じ判定)。
+    /// 立ってすぐの腹式呼吸のあいだは壁画带を出さないので、ふつうの台紙
     @MainActor
-    static func usesTallSheet(_ prompt: BreakReminder.Prompt, stretch: BreakReminder.Stretch) -> Bool {
-        prompt == .standing && PostureStandingGuide.showsFrieze(StretchGuide.steps(of: stretch))
+    static func usesTallSheet(_ prompt: BreakReminder.Prompt, stretch: BreakReminder.Stretch,
+                              breathing: Bool = false) -> Bool {
+        prompt == .standing && !breathing && PostureStandingGuide.showsFrieze(StretchGuide.steps(of: stretch))
     }
 
     @ViewBuilder
@@ -343,6 +347,16 @@ private struct PostureStandingGuide: View {
         let step = min(max(0, coordinator.stretchStep), count)
         let done = step >= count
         let showsFrieze = Self.showsFrieze(steps)
+        if let start = coordinator.breathStartedAt {
+            // 立ってすぐ:拉伸の前に腹式呼吸を 3 回
+            PostureBreath(coordinator: coordinator, start: start)
+        } else {
+            guide(stretch: stretch, steps: steps, count: count, step: step, done: done, showsFrieze: showsFrieze)
+        }
+    }
+
+    private func guide(stretch: BreakReminder.Stretch, steps: [StretchGuide.Step], count: Int, step: Int,
+                       done: Bool, showsFrieze: Bool) -> some View {
         VStack(alignment: .leading, spacing: 0) {
             header(count: count, step: step, done: done)
             HStack(alignment: .center, spacing: 14) {
@@ -509,9 +523,67 @@ private struct PostureStandingGuide: View {
     }
 }
 
+/// 立ってすぐの腹式呼吸 3 回(吸う 4 秒・吐く 6 秒、30 秒)。拉伸の前に毎回挟んで、腹式呼吸を習慣にする。
+/// 吸う / 吐くの字 + 模板字の残り秒 + 回数の点。終われば数えて拉伸へ、跳过なら数えない
+private struct PostureBreath: View {
+    @ObservedObject var coordinator: AppCoordinator
+    let start: Date
+
+    var body: some View {
+        TimelineView(.periodic(from: start, by: 0.25)) { context in
+            let state = BreathPacer.state(elapsed: context.date.timeIntervalSince(start))
+            VStack(alignment: .leading, spacing: 0) {
+                HStack(alignment: .center, spacing: 8) {
+                    Text("先做 3 次腹式呼吸")
+                        .font(Typeface.cjk(15, weight: .black))
+                        .foregroundStyle(Palette.kraftText)
+                    Spacer(minLength: 8)
+                    StepDots(count: BreathPacer.breaths, index: state.breath)
+                }
+                .background(WindowDragArea())
+                HStack(alignment: .center, spacing: 14) {
+                    PosturePose(name: "belly-breathing", height: PostureMetrics.questionPose, symbol: "wind")
+                    VStack(alignment: .leading, spacing: 8) {
+                        HStack(alignment: .firstTextBaseline, spacing: 10) {
+                            Text(state.inhaling ? "吸" : "呼")
+                                .font(TypeRole.titleZh)
+                                .foregroundStyle(Palette.kraftText)
+                            PostureTimer(text: "\(state.remaining)")
+                        }
+                        Text(state.inhaling ? "用鼻子吸，只让肚子鼓起来" : "用嘴慢慢呼，肚子瘪下去")
+                            .font(Typeface.mixed(14, weight: 700))
+                            .foregroundStyle(Palette.kraftText)
+                            .fixedSize(horizontal: false, vertical: true)
+                        Text("一只手放在肚子上，胸口和肩膀不动")
+                            .font(Typeface.cjk(12, weight: .medium))
+                            .foregroundStyle(Palette.kraftTextSecondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .background(WindowDragArea())
+                .padding(.top, 6)
+                HStack(spacing: 12) {
+                    Text("今天第 \(coordinator.breathToday + 1) 次")
+                        .font(TypeRole.caption)
+                        .foregroundStyle(Palette.kraftTextSecondary)
+                    Spacer(minLength: 0)
+                    Button("跳过") { coordinator.finishBreath(counted: false) }
+                        .buttonStyle(BareButtonStyle(color: Palette.kraftTextSecondary, hoverColor: Palette.kraftText))
+                        .font(Typeface.mixed(12.5, weight: 700))
+                }
+                .padding(.top, PostureMetrics.buttonGap)
+            }
+            .onChange(of: state.finished, initial: true) { _, finished in
+                if finished { coordinator.finishBreath(counted: true) }
+            }
+        }
+    }
+}
+
 /// 残り時間の模板字(timer-black)。数字ごとに送り幅が違うので、いちばん広い数字の幅で枠を取る
 /// (毎秒・毎分で枠の幅が変わらず、横の手順の点が揺れない)。図集が無ければ Archivo の等幅数字
-private struct PostureTimer: View {
+struct PostureTimer: View {
     let text: String
 
     var body: some View {
@@ -710,7 +782,7 @@ private struct PostureQuestion<Detail: View>: View {
 
 /// 姿勢の剪影。表示の大きさで焼いた素材をほぼ 1 倍で置く(pose-<name> = 132pt、small なら pose-<name>-s = 96pt)。
 /// 小さい版が無ければ pose-<name> を、古い 240pt の母版しか無ければそれを縮める。素材が無ければ SF Symbols の人形
-private struct PosturePose: View {
+struct PosturePose: View {
     let name: String
     let height: CGFloat
     var small = false

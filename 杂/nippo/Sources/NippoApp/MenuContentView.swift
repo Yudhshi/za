@@ -1643,6 +1643,20 @@ private struct TodayFooter: View {
                     .layoutPriority(-1)
             }
             Spacer(minLength: 0)
+            // 勤務時間の外(夜・休みの日)だけ:泡澡のあとの日课を始める
+            if !coordinator.isWorkingNow {
+                Button {
+                    coordinator.openRitual()
+                } label: {
+                    HStack(spacing: 6) {
+                        StencilIconView(icon: .play, size: 13)
+                        Text("泡完澡了")
+                            .font(TypeRole.caption)
+                    }
+                }
+                .buttonStyle(BareButtonStyle())
+                .help("开始泡完澡后的日课：跟练视频 → 肩颈拉伸 → 躺着做腹式呼吸")
+            }
             // 設定ボタンは置かない(使うときは ⌘,)。⌘Q はすぐ終了
             Group {
                 Button("设置") { coordinator.openSettings() }

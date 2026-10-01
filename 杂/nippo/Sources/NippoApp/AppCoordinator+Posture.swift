@@ -58,12 +58,15 @@ extension AppCoordinator {
         resetPostureTimer(now: Date())
         standingGuideDismissed = false
         posturePromptPinned = false
+        // 立ったらまず腹式呼吸を 3 回(习惯にする。拉伸はそのあと)
+        breathStartedAt = settings.breathHabit ? Date() : nil
         posturePrompt = .standing
         AppLog.shared.log("posture", "stood")
     }
 
     /// 「座った」(小窓・メニュー)
     func confirmSat() {
+        breathStartedAt = nil
         posture = .sitting
         resetPostureTimer(now: Date())
         standingGuideDismissed = false
@@ -74,6 +77,7 @@ extension AppCoordinator {
 
     /// 「15分後」「あと5分」:小窓を閉じて、その分だけ後にもう一度尋ねる
     func snoozePosture(minutes: Int) {
+        breathStartedAt = nil
         postureRemindAt = Date().addingTimeInterval(TimeInterval(minutes * 60))
         posturePromptPinned = false
         posturePrompt = nil
@@ -95,6 +99,7 @@ extension AppCoordinator {
     }
 
     func closePosturePrompt() {
+        breathStartedAt = nil
         standingGuideDismissed = posture == .standing
         posturePromptPinned = false
         posturePrompt = nil

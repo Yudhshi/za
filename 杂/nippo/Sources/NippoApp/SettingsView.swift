@@ -65,6 +65,43 @@ struct SettingsView: View {
                 Text("默认动作针对斜角肌（脖子侧面）发紧，手臂不举过头顶。有拉伸感可以，发麻或刺痛传到手上就停；医生或理疗师给过方案的话换成那个。打字时手肘有支撑、键盘鼠标靠近身体，比拉伸更能让斜角肌放松；站着工作时桌子调到手肘 90° 的高度")
                     .font(.caption)
                     .foregroundStyle(.secondary)
+                Toggle("站起来时先做 3 次腹式呼吸（吸 4 秒、呼 6 秒）", isOn: binding(\.breathHabit))
+                Text("用碎片时间养成腹式呼吸：每次站起来、每次开会前（会议提醒里会提示）、泡完澡的日课最后各做几次。"
+                     + "今天 \(coordinator.breathToday) 次，连续 \(BreathLog.streak(settings.breathLog, today: Date())) 天")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            Section("泡完澡后的日课") {
+                HStack {
+                    Text("跟练视频（每行一个：名字 + 链接，按顺序播放）")
+                    Spacer()
+                    Button("恢复默认") { settings.ritualVideos = Ritual.defaultVideos }
+                        .disabled(settings.ritualVideos == Ritual.defaultVideos)
+                }
+                TextEditor(text: binding(\.ritualVideos))
+                    .font(.body)
+                    .frame(height: 90)
+                Text("支持 bilibili 和 YouTube 链接，用官方播放器在 app 里播放（不下载）；其他网站会在浏览器里打开")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                HStack {
+                    Text("跟练之后的拉伸（写法和上面的拉伸一样）")
+                    Spacer()
+                    Button("恢复默认") { settings.ritualStretches = Ritual.defaultStretches }
+                        .disabled(settings.ritualStretches == Ritual.defaultStretches)
+                }
+                TextEditor(text: binding(\.ritualStretches))
+                    .font(.body)
+                    .frame(height: 200)
+                Toggle("拉伸时语音播报每一步（到时间自动进入下一步）", isOn: binding(\.ritualVoice))
+                HStack {
+                    Text("晚上和休息日，面板底部会出现「泡完澡了」。已连续 \(BreathLog.streak(settings.ritualLog, today: Date())) 天")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                    Button("现在开始") { coordinator.openRitual() }
+                }
             }
 
             Section("休息日（暂停会议提醒和站立提醒）") {

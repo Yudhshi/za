@@ -54,6 +54,16 @@ func runSettingsTests() {
         s.agendaExport = false
         T.expectEqual(AppSettings(defaults: d).agendaExport, false)
         T.expectEqual(s.libraryExport, true, "the word lists are copied for Windows by default")
+
+        T.expectEqual(s.ritualVideos, Ritual.defaultVideos)
+        T.expectEqual(s.ritualStretches, Ritual.defaultStretches)
+        T.expectEqual(s.ritualVoice, true)
+        T.expectEqual(s.breathHabit, true)
+        T.expectEqual(s.breathLog, [:])
+        s.breathLog = BreathLog.recording(s.breathLog, day: "2026-10-01")
+        T.expectEqual(AppSettings(defaults: d).breathLog, ["2026-10-01": 1], "the breath log survives a restart")
+        s.ritualLog = ["2026-10-01": 1]
+        T.expectEqual(AppSettings(defaults: d).ritualLog["2026-10-01"], 1)
     }
 
     T.run("time parsing with fallback") {
