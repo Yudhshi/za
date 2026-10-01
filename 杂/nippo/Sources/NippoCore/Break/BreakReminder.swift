@@ -138,13 +138,17 @@ public enum BreakReminder {
     /// 水を持って入るほど長い会議
     public static let longMeeting: TimeInterval = 45 * 60
 
-    /// 予定より早く終わった会議を除く:5 分以上続いた通話が会議の開始後に終わっていれば(いまは通話していない前提)、
-    /// その会議は終わったとみなし、予定の終わりまで待たずに聞く。短いマイク(音声入力など)では終わらせない
-    /// (電話で出ている会議の最中に音声入力しても、会議は続いている)。通話を見張っていないときは lastCall = nil
+    /// 予定より早く終わった会議を除く:その会議の通話(開始の 5 分前より後に始まり、5 分以上続いた)が
+    /// 終わっていれば(いまは通話していない前提)、その会議は終わったとみなし、予定の終わりまで待たずに聞く。
+    /// 短いマイク(音声入力など)では終わらせない(電話で出ている会議の最中に音声入力しても、会議は続いている)。
+    /// 前の会議の通話が次の会議の開始に食い込んだだけなら、次の会議は終わらせない(連続した会議)。
+    /// 通話を見張っていないときは lastCall = nil
     public static func excludingEndedEarly(_ events: [MeetingEvent], now: Date,
                                            lastCall: DateInterval?) -> [MeetingEvent] {
         guard let call = lastCall, call.end <= now, call.duration >= afterMeetingMinimum else { return events }
-        return events.filter { !($0.start < call.end && now < $0.end) }
+        return events.filter { e in
+            !(call.start >= e.start.addingTimeInterval(-5 * 60) && e.start < call.end && now < e.end)
+        }
     }
 
     /// 問いに「开完会了」と添えるか:busySince〜lastBusyAt の会議・通話が 5 分以上続き、終わって 10 分以内

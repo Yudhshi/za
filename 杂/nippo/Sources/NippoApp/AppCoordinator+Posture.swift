@@ -27,16 +27,27 @@ extension AppCoordinator {
                                                 eventType: CGEventType(rawValue: ~0)!)
     }
 
+    /// 坐站の判定に使う今日の会議:通話を見張っていれば、その会議の通話(5 分以上)が終わった会議は「もう終わった」
+    /// (予定の終わりまで待たない)。通話中は日历のまま
+    func postureEvents(now: Date) -> [MeetingEvent] {
+        guard !inCall else { return todayEvents }
+        return BreakReminder.excludingEndedEarly(todayEvents, now: now,
+                                                 lastCall: settings.callDetection ? lastCall : nil)
+    }
+
+    /// 問いに「开完会」と添えるか:もう会議・通話の最中ではなく、5 分以上の会議・通話が終わって 10 分以内
+    func saysAfterMeeting(events: [MeetingEvent], now: Date) -> Bool {
+        !inCall && !BreakReminder.isInMeeting(events: events, now: now, lead: 0)
+            && BreakReminder.saysAfterMeeting(now: now, busySince: busySince, lastBusyAt: lastBusyAt)
+    }
+
     func checkPosture(now: Date) {
         guard settings.postureEnabled, isWorkingNow else {
             if posturePrompt != nil { posturePrompt = nil }
             if meetingAsk != nil { meetingAsk = nil }
             return
         }
-        // 通話を見張っていれば、5 分以上の通話が会議の途中で終わった会議は「もう終わった」(予定の終わりまで待たない)
-        let events = inCall ? todayEvents
-            : BreakReminder.excludingEndedEarly(todayEvents, now: now,
-                                                lastCall: settings.callDetection ? lastCall : nil)
+        let events = postureEvents(now: now)
         // 「坐着开」で待たせていた会議が取り消された・早く終わったら、待たせるのをやめる(ふつうの切り替え時刻に戻す)
         if let id = postureHoldMeetingID, !events.contains(where: { $0.id == id }) {
             postureHoldMeetingID = nil
@@ -49,9 +60,13 @@ extension AppCoordinator {
             lastBusyAt = now
         }
         // 座りっぱなしの計測だけ離席でリセット(立ち作業の残り時間は巻き戻さない)。
-        // 会議・通話のあいだの無操作は「座って会議中」(終わった直後にまとめて離席と数えない)。小窓を出しているあいだは判定しない
-        if posture == .sitting, posturePrompt == nil, !inMeeting, !inCall,
-           BreakReminder.awayIdle(idle: Self.idleSeconds(), now: now, lastBusyAt: lastBusyAt) >= 180 {
+        // 会議・通話のあいだの無操作は「座って会議中」(終わった直後にまとめて離席と数えない)。
+        // 自動で出た「站起来了吗？」に 10 分答えず何も触らなければ、席を外したとみなして閉じる(会議のあと席を立った人に、
+        // 戻ってから水増しした分数を見せない)。自分で開いた小窓・ほかの小窓のあいだは判定しない
+        let awayAfter: TimeInterval? = posturePrompt == nil ? 180
+            : (posturePrompt == .askStand && !posturePromptPinned ? 600 : nil)
+        if posture == .sitting, let awayAfter, !inMeeting, !inCall,
+           BreakReminder.awayIdle(idle: Self.idleSeconds(), now: now, lastBusyAt: lastBusyAt) >= awayAfter {
             resetPostureTimer(now: now)
         }
         // 座っていて 10 分以内に会議:「站着开会？」(答えた会議・自分で「15 分钟后」と後回しにしているあいだは聞かない)
@@ -66,16 +81,20 @@ extension AppCoordinator {
             inMeeting: inMeeting, guideDismissed: standingGuideDismissed,
             inCall: inCall, standForMeeting: ask != nil,
             quietUntil: lastBusyAt?.addingTimeInterval(BreakReminder.afterMeetingGrace))
-        // メニューから自分で開いた「站起来了吗?」は、時間前でも閉じない。会議・通話の最中に開いたものはそのまま、
+        // 出ている問いの「开完会」を今に合わせる(会議の最中には添えない・10 分たったら外す)
+        if posturePrompt == .askStand || posturePrompt == .askSit {
+            let says = saysAfterMeeting(events: events, now: now)
+            if says != promptAfterMeeting { promptAfterMeeting = says }
+        }
+        // メニューから自分で開いた「站起来了吗?」・拉伸の手順は、時間前でも閉じない。会議・通話の最中に開いたものはそのまま、
         // 開いたあとで会議・通話に入ったら閉じる
-        if desired == nil, posturePromptPinned, posturePrompt == .askStand,
+        if desired == nil, posturePromptPinned, posturePrompt == .askStand || posturePrompt == .standing,
            posturePinnedWhileBusy || (!inMeeting && !inCall) { return }
         guard desired != posturePrompt else { return }
         posturePromptPinned = false
         if desired == .askStand { pickStretch() }
-        // 5 分以上の会議・通話が終わって 10 分以内に出た問いには「开完会了」と添える
-        promptAfterMeeting = (desired == .askStand || desired == .askSit)
-            && BreakReminder.saysAfterMeeting(now: now, busySince: busySince, lastBusyAt: lastBusyAt)
+        // 5 分以上の会議・通話が終わって 10 分以内に出た問いには「开完会」と添える
+        promptAfterMeeting = (desired == .askStand || desired == .askSit) && saysAfterMeeting(events: events, now: now)
         posturePrompt = desired
         AppLog.shared.log("posture", "prompt \(String(describing: desired))")
     }
@@ -118,7 +137,8 @@ extension AppCoordinator {
         posture = .standing
         resetPostureTimer(now: Date())
         standingGuideDismissed = false
-        posturePromptPinned = false
+        // 会議・通話の最中にメニューから開いた問いで立ったなら、手順も会議中に閉じない
+        posturePromptPinned = posturePromptPinned && posturePinnedWhileBusy
         // 立ったらまず腹式呼吸を 3 回(习惯にする。拉伸はそのあと)
         breathStartedAt = settings.breathHabit ? Date() : nil
         posturePrompt = .standing
@@ -150,18 +170,19 @@ extension AppCoordinator {
     /// メニューの姿勢チップから小窓を開く:立ち作業中は手順、座り作業中は「立ちましたか?」。
     /// 座り作業中は切り替え時刻を今にする(次の判定で小窓が閉じないように)
     func openPosturePrompt() {
+        let now = Date()
+        let events = postureEvents(now: now)
+        // 会議・通話の最中に自分で開いたら(立って会議に出たい・会議中に拉伸を見たい)、通話中でも閉じない
+        posturePinnedWhileBusy = inCall || BreakReminder.isInMeeting(events: events, now: now)
         switch posture {
         case .standing:
             standingGuideDismissed = false
+            posturePromptPinned = true
             posturePrompt = .standing
         case .sitting:
-            // 切り替え時刻は変えない(見るだけ)。次の判定で閉じられないように pin する。
-            // 会議・通話の最中に開いたら(立って会議に出たい)、通話中でも閉じない
-            let now = Date()
+            // 切り替え時刻は変えない(見るだけ)。次の判定で閉じられないように pin する
             posturePromptPinned = true
-            posturePinnedWhileBusy = inCall || BreakReminder.isInMeeting(events: todayEvents, now: now)
-            promptAfterMeeting = BreakReminder.saysAfterMeeting(now: now, busySince: busySince,
-                                                                lastBusyAt: lastBusyAt)
+            promptAfterMeeting = saysAfterMeeting(events: events, now: now)
             if posturePrompt != .askStand { pickStretch() }
             posturePrompt = .askStand
         }

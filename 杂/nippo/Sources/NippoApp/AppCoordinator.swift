@@ -39,8 +39,11 @@ final class AppCoordinator: ObservableObject {
     var meetingAskAnswered: Set<String> = []
     /// マイクかカメラが使われている(通話中)。2 回続けて(30 秒以上)見えたら通話とみなす(音声入力の一瞬は数えない)
     @Published var inCall = false
-    /// マイク・カメラが続けて見えた tick の数
+    /// マイク・カメラが続けて見えた / 見えなかった tick の数(始まりも終わりも 2 回続けて見えたら)
     private var callTicks = 0
+    private var callMissTicks = 0
+    /// ログに残した、いまマイク・カメラを使っているもの(変わったら残し直す)
+    private var loggedCallSources: Set<String> = []
     /// いまの通話が始まった時刻と、最後に終わった通話(早く終わった会議を見分ける)
     private var callStartedAt: Date?
     var lastCall: DateInterval?
@@ -89,7 +92,9 @@ final class AppCoordinator: ObservableObject {
         // Meet の会議中・通話中は語料を自動再生しない(通話にマイクで拾われないように)
         english.isInMeeting = { [weak self] in
             guard let self else { return false }
-            return self.inCall || BreakReminder.isInMeeting(events: self.todayEvents, now: Date())
+            // 音を出さないためなので、通話の判定(30 秒待つ)より早く、マイクが使われた時点で止める
+            return self.inCall || self.callTicks > 0
+                || BreakReminder.isInMeeting(events: self.todayEvents, now: Date())
         }
         // 同期(設定でフォルダを選んだときだけ)
         english.deviceName = { [weak self] in self?.settings.deviceName ?? "Mac" }
@@ -190,7 +195,9 @@ final class AppCoordinator: ObservableObject {
             lastCall = nil
             // 通話の途中で眠ったら、その通話は無かったことにする(朝起きて「夜通しの通話が終わった」と数えない)
             callTicks = 0
+            callMissTicks = 0
             callStartedAt = nil
+            loggedCallSources = []
             if inCall { inCall = false }
             promptAfterMeeting = false
             if posturePrompt != nil { posturePrompt = nil }
@@ -212,23 +219,37 @@ final class AppCoordinator: ObservableObject {
         }
         wasWorking = working
 
-        // 通話中か(マイク・カメラ)。坐站の判定と語料の自動再生に使う。2 回続けて見えたら通話(音声入力の一瞬は数えない)
+        // 通話中か(マイク・カメラ)。坐站の判定と語料の自動再生に使う。
+        // 始まりも終わりも 2 回続けて(30 秒以上)見えたら変える(音声入力の一瞬・通話中の一瞬の途切れは数えない)
         let sources = settings.callDetection ? CallDetector.activeSources() : []
-        callTicks = sources.isEmpty ? 0 : callTicks + 1
-        let call = callTicks >= 2
+        if sources.isEmpty {
+            callTicks = 0
+            callMissTicks += 1
+        } else {
+            callTicks += 1
+            callMissTicks = 0
+        }
+        let call = settings.callDetection && (inCall ? callMissTicks < 2 : callTicks >= 2)
         if call != inCall {
             inCall = call
             if call {
                 callStartedAt = now
             } else if let start = callStartedAt {
-                lastCall = DateInterval(start: start, end: max(start, now))
+                // 会議を早く終わらせるのは 5 分以上の通話だけ(短い通話で、その前の通話の記録を上書きしない)
+                if now.timeIntervalSince(start) >= BreakReminder.afterMeetingMinimum {
+                    lastCall = DateInterval(start: start, end: now)
+                }
                 callStartedAt = nil
             }
-            // 何がマイク・カメラを使っているかも残す(一日中開けっぱなしのアプリで提醒が止まったときの手がかり)。勤務時間だけ
-            if working {
-                AppLog.shared.log("posture", call ? "call started (\(sources.joined(separator: ", ")))" : "call ended")
-            }
+            if working, !call { AppLog.shared.log("posture", "call ended") }
         }
+        // 何がマイク・カメラを使っているかを、変わるたびに残す(一日中開けっぱなしのアプリで提醒が止まったときの手がかり)。勤務時間だけ
+        let current = Set(sources)
+        if call, working, !current.isEmpty, current != loggedCallSources {
+            loggedCallSources = current
+            AppLog.shared.log("posture", "in call (\(current.sorted().joined(separator: ", ")))")
+        }
+        if !call { loggedCallSources = [] }
 
         // Google のアカウントは押し通知が無いので、勤務時間は 5 分ごとに日历へ取りに行かせる(臨時の会議を早く拾う)
         if calendarAuthorized, working, lastSourceRefreshAt.map({ now.timeIntervalSince($0) >= 300 }) ?? true {

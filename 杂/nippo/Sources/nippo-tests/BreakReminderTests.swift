@@ -190,6 +190,11 @@ func runBreakReminderTests() {
         T.expectEqual(left(dictation), ["定例", "午後"], "a minute of voice typing does not end a meeting")
         let before = DateInterval(start: tokyoDate(2026, 10, 1, 9, 0), end: tokyoDate(2026, 10, 1, 10, 0))
         T.expectEqual(left(before), ["定例", "午後"], "a call that ended before the meeting started")
+        let overran = DateInterval(start: tokyoDate(2026, 10, 1, 10, 0), end: tokyoDate(2026, 10, 1, 10, 35))
+        T.expectEqual(left(overran), ["定例", "午後"],
+                      "the previous meeting's call ran into this one: this meeting goes on")
+        let early = DateInterval(start: tokyoDate(2026, 10, 1, 10, 26), end: tokyoDate(2026, 10, 1, 11, 5))
+        T.expectEqual(left(early), ["午後"], "joined in the 5 minutes before start: still this meeting's call")
         T.expect(BreakReminder.isInMeeting(events: [meeting], now: now), "the calendar alone still says in meeting")
         T.expect(!BreakReminder.isInMeeting(events: BreakReminder.excludingEndedEarly([meeting], now: now,
                                                                                     lastCall: call), now: now),
