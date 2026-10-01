@@ -1,0 +1,40 @@
+# Yudh for Windows
+
+Mac 版 Yudh（`../nippo`）的 Windows 伴随程序。电脑主要用来打游戏，所以只做三件事、尽量不占资源：
+
+1. **英语**：单词卡 / 考点词 / 听写，和 Mac 共用同一份进度（同步文件夹里的 `english-events-*.jsonl`）。
+2. **明天的会**：只读 Mac 写的 `agenda.json`，不碰日历。
+3. **坐站提醒**：和 Mac 同样的计时与拉伸手顺；**全屏游戏时不弹**。
+
+格式以 `../nippo/docs/sync-format.md` 为准。
+
+## 结构
+
+```
+core/      yudh-core：没有界面的 Rust 库（这里的逻辑全部有测试，在 Linux 上也能跑）
+  event    同步事件一行（键按字母序、空字段不写、时间 UTC 毫秒）
+  replay   去重 → 排除撤销 → 按 (at, id) 重放 → 卡片 + 答题记录
+  srs      SM-2（和 Swift 的 SRSState.applying 同一组用例）
+  queue    出题顺序（复习优先 → 当天新词额度）
+  english  给界面用的入口：出题、评分、知道了、加词、恢复、撤销、统计
+  sync     同步文件夹：只写自己的文件（临时文件 + 替换，内容没变不写）
+  library  词表（同步文件夹的 english-library/）
+  agenda   明天的会：没有文件 / Mac 还没更新 / 没有会 / 会议列表
+  posture  坐站计时与小窗判断（Mac 的 BreakReminder + StretchGuide）
+```
+
+没有本地数据库：自己的 `english-events-<设备名>.jsonl` 就是自己的正本，状态每次从所有设备的事件重放出来（几千行，毫秒级）。
+
+## 开发
+
+```
+cargo test            # 28 个测试
+cargo clippy --all-targets -- -D warnings
+```
+
+## 接下来
+
+- `app/`：Tauri 2 外壳。常驻的只有托盘进程（计时、读文件）；面板窗口点开才创建、关掉就销毁。
+  视觉沿用 Mac 夜版烤好的素材 PNG 和字体（Archivo / JetBrains Mono）。
+- 全屏游戏判定：`SHQueryUserNotificationState`（QUNS_BUSY / QUNS_RUNNING_D3D_FULL_SCREEN / QUNS_PRESENTATION_MODE）。
+- 安装包：GitHub Actions 在 windows-latest 上打包。
