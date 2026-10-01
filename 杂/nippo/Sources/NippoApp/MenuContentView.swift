@@ -419,7 +419,7 @@ private struct TodayHeroCard<Content: View>: View {
     @ViewBuilder
     private var floodLayer: some View {
         if let flood {
-            if Baked.frames(flood.mask, count: 8) != nil {
+            if Baked.hasFrames(flood.mask, count: 8) {
                 // 卡と同じ枠(bleed 込み)に伸ばした遮罩のコマ
                 BakedSlice(id: flood.slab, fallback: flood.fallback)
                     .mask { BakedFrame(prefix: flood.mask, count: 8, progress: flood.progress) }

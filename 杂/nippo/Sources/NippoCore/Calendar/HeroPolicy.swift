@@ -81,15 +81,24 @@ public enum HeroPolicy {
         return (count, min(count, Int((fraction * Double(count)).rounded())))
     }
 
-    /// 画面が変わる時刻(now より後、古い順):数字が切り替わる 1 分ごと(開始・終了から逆算、最後の 1 時間だけ。
-    /// それより前は「16:30 开始」のまま変わらない)、動になる瞬間、00 の始まりと終わり、終了。TimelineView(.explicit(...)) に渡す
+    /// 画面が変わる時刻(now より後、古い順):数字が切り替わる 1 分ごと(開始前の最後の 1 時間と、開催中ずっと。
+    /// 開催中は「已进行 N 分钟」と過ぎた格が毎分変わる)、動になる瞬間、00 の始まりと終わり、終了。
+    /// それより前は「16:30 开始」のまま変わらない。TimelineView(.explicit(...)) に渡す
     public static func ticks(for event: MeetingEvent, after now: Date) -> [Date] {
         var dates: Set<Date> = [event.start.addingTimeInterval(-eventLead), event.start,
                                 event.start.addingTimeInterval(zeroSpan), event.end]
         for k in 1...59 {
             dates.insert(event.start.addingTimeInterval(-60 * Double(k)))
-            let left = event.end.addingTimeInterval(-60 * Double(k))
-            if left > event.start { dates.insert(left) }
+        }
+        // 開催中:開始から 1 分ごと + 終了の k 分前ごと(残り分の切り上げが変わる瞬間)。長い会議でも 1 日分まで
+        let minutes = min(24 * 60, max(0, Int(event.end.timeIntervalSince(event.start) / 60)))
+        if minutes > 0 {
+            for k in 1...minutes {
+                let elapsed = event.start.addingTimeInterval(60 * Double(k))
+                if elapsed < event.end { dates.insert(elapsed) }
+                let left = event.end.addingTimeInterval(-60 * Double(k))
+                if left > event.start { dates.insert(left) }
+            }
         }
         return dates.filter { $0 > now }.sorted()
     }

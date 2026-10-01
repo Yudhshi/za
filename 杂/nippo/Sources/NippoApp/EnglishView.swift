@@ -116,7 +116,7 @@ private enum EngMetrics {
 /// 焼けている最初の素材(新しい素材がまだ無いときは前からある素材で代える)
 @MainActor
 private func engFirstBaked(_ ids: [String]) -> String? {
-    ids.first { Baked.has($0) }
+    Baked.first(ids)
 }
 
 /// 白漆の卡の種類:単語卡(280×380 焼き)/ 広い卡(472×340:通关・词典の結果)/ 短い卡(472×160:词典の空・素材なし)
@@ -275,7 +275,8 @@ private struct EngRoundBoard: View {
                     HStack(spacing: EngMetrics.boardGap) {
                         ForEach(0..<columns, id: \.self) { column in
                             let index = row * columns + column
-                            RatingCell(kind: index < marks.count ? marks[index] : .empty, size: EngMetrics.boardCell)
+                            RatingCell(kind: index < marks.count ? marks[index] : .empty, size: EngMetrics.boardCell,
+                                       animated: true)
                         }
                     }
                 }
@@ -752,9 +753,11 @@ private struct EngVocab: View {
             HStack(spacing: 8) {
                 rateButton("忘了", key: "1", rating: .again)
                 rateButton("模糊", key: "2", rating: .hard)
-                rateButton("记住了", key: "3", rating: .good)
+                // Space も「记住了」:見本の横に「3 ␣」と書いて分かるようにする
+                rateButton("记住了", key: "3", rating: .good, keyLabel: "3 ␣")
                 rateButton("太简单", key: "4", rating: .easy)
             }
+            .help("按 1–4 评分；Space = 记住了")
             // 空格 = 记住了(1 問 1 キー:空格で見て、空格で次へ)
             .background {
                 Button("") { press(.good) }
@@ -783,14 +786,14 @@ private struct EngVocab: View {
     }
 
     /// 評分:平時は 4 つとも灰の遮块。押したものだけ少しのあいだ青(見本の格 + キー + 文字)
-    private func rateButton(_ title: String, key: KeyEquivalent, rating: SRSRating) -> some View {
+    private func rateButton(_ title: String, key: KeyEquivalent, rating: SRSRating, keyLabel: String? = nil) -> some View {
         let lit = pressed == rating
         return Button {
             press(rating)
         } label: {
             HStack(spacing: 5) {
                 EngSwatch(kind: EnglishRound.mark(rating: rating))
-                Text(String(key.character))
+                Text(keyLabel ?? String(key.character))
                     .font(TypeRole.keycap)
                     .foregroundStyle(lit ? Palette.cardTextSecondary : Palette.textSecondary)
                     .accessibilityHidden(true)
@@ -1805,13 +1808,22 @@ private struct EngStreakChip: View {
 /// 出たときに 1 回(⑤ 650ms):底板が喷かれ(badge-mask の 4 枚)→ 神兽がふっと出る。減らす動きでは最後の絵
 private struct EngClearBadge: View {
     private static let total: Double = 650
+    /// 奖章を喷いた日(通关したその日の最初の 1 回だけ動かす。面板を開き直すたびには喷かない)
+    @AppStorage("englishBadgeDay") private var playedDay = ""
+    @State private var playNow = false
 
     var body: some View {
-        MotionPlayer(trigger: 0, durationMs: Self.total, playOnAppear: true) { progress in
+        MotionPlayer(trigger: playNow, durationMs: Self.total) { progress in
             badge(progress)
         }
         .frame(width: 142, height: 105)
         .accessibilityHidden(true)
+        .onAppear {
+            let today = DayKey.key(for: Date())
+            guard playedDay != today else { return }
+            playedDay = today
+            playNow = true
+        }
     }
 
     @ViewBuilder
@@ -1839,7 +1851,7 @@ private struct EngClearBadge: View {
 
     @ViewBuilder
     private func plateMask(_ spray: Double) -> some View {
-        if spray < 1 && Baked.frames("badge-mask-", count: 4) != nil {
+        if spray < 1 && Baked.hasFrames("badge-mask-", count: 4) {
             BakedFrame(prefix: "badge-mask-", count: 4, progress: spray)
         } else {
             Rectangle()

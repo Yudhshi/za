@@ -142,4 +142,14 @@ func runHeroPolicyTests() {
         T.expect(ticks.contains(base.addingTimeInterval(3600 - 60)), "last running minute")
         T.expectEqual(ticks, ticks.sorted(), "sorted")
     }
+
+    T.run("ticks keep coming every minute through a long meeting") {
+        let long = MeetingEvent(id: "l", title: "Workshop", start: base, end: base.addingTimeInterval(2 * 3600),
+                                attendees: [], isAllDay: false)
+        let now = base.addingTimeInterval(40 * 60 + 5)
+        let ticks = HeroPolicy.ticks(for: long, after: now)
+        T.expectEqual(ticks.first, base.addingTimeInterval(41 * 60), "the next elapsed minute, not 11:01")
+        T.expect(ticks.contains(base.addingTimeInterval(61 * 60)), "an hour in")
+        T.expectEqual(ticks.last, long.end, "ends at the end")
+    }
 }

@@ -133,7 +133,7 @@ enum Baked {
 
     private static let cache: NSCache<NSString, NSImage> = {
         let cache = NSCache<NSString, NSImage>()
-        cache.totalCostLimit = 96 * 1024 * 1024
+        cache.totalCostLimit = 128 * 1024 * 1024
         return cache
     }()
     /// 読めなかった素材(毎回ファイルを探しに行かない)
@@ -147,6 +147,26 @@ enum Baked {
 
     /// 画像が本当に読めるか(目録にあるだけでは true にしない)
     static func has(_ id: String) -> Bool { image(id) != nil }
+
+    /// 並べた候補のうち、読める最初の素材(専用の素材 → 汎用の素材の順に書く)
+    static func first(_ ids: [String]) -> String? {
+        ids.first { has($0) }
+    }
+
+    /// 動きの帯が目録にそろっているか(1 枚目の frames を見るだけで、絵は解かない)
+    static func hasFrames(_ prefix: String, count: Int) -> Bool {
+        (asset("\(prefix)0")?.frames ?? 0) >= count || (0..<count).allSatisfy { asset("\(prefix)\($0)") != nil }
+    }
+
+    /// 動きの帯を先に解いておく(動き出した最初のコマで止まらないように)。1 枚ずつ間を空けて解く
+    static func preload(_ prefix: String, count: Int) {
+        Task { @MainActor in
+            for index in 0..<count {
+                _ = image("\(prefix)\(index)")
+                await Task.yield()
+            }
+        }
+    }
 
     /// 画像(大きさは pt にそろえてある)
     static func image(_ id: String) -> NSImage? {
@@ -446,7 +466,12 @@ struct MotionPlayer<Trigger: Equatable, Content: View>: View {
         }
         .task(id: startedAt) {
             guard startedAt != nil else { return }
-            try? await Task.sleep(for: .milliseconds(Int(durationMs) + 20))
+            // 途中で次が始まった(task が取り消された)ときは、新しい始まりを消さない
+            do {
+                try await Task.sleep(for: .milliseconds(Int(durationMs) + 20))
+            } catch {
+                return
+            }
             startedAt = nil
         }
     }

@@ -521,10 +521,18 @@ struct RatingCell: View {
     let kind: Kind
     /// 30(本轮の 4×5)/ 20(复习记录)/ 14(凡例)
     var size: CGFloat = 30
+    /// 塗られたときに喷く動き(本轮の地盘だけ。复习记录・凡例・見本は動かさない)
+    var animated = false
 
     var body: some View {
-        MotionPlayer(trigger: kind, durationMs: 200) { progress in
-            cell(progress)
+        Group {
+            if animated {
+                MotionPlayer(trigger: kind, durationMs: 200) { progress in
+                    cell(progress)
+                }
+            } else {
+                cell(1)
+            }
         }
         .frame(width: size, height: size)
         .accessibilityHidden(true)
@@ -607,7 +615,7 @@ struct Drips: View {
     private func growMask(_ asset: BakedManifest.Asset) -> some View {
         if grow >= 1 {
             Rectangle()
-        } else if Baked.frames("drip-grow-", count: 4) != nil {
+        } else if Baked.hasFrames("drip-grow-", count: 4) {
             BakedFrame(prefix: "drip-grow-", count: 4, progress: grow)
                 .frame(width: asset.width, height: asset.height)
         } else {
@@ -668,7 +676,7 @@ struct TurfStamp: View {
             }
             BakedSprite(id: id)
                 .mask {
-                    if spray < 1 && Baked.frames("stamp-mask-", count: 4) != nil {
+                    if spray < 1 && Baked.hasFrames("stamp-mask-", count: 4) {
                         BakedFrame(prefix: "stamp-mask-", count: 4, progress: spray)
                     } else {
                         Rectangle().opacity(progress < 1 ? spray : 1).padding(-40)
