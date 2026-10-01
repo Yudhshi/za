@@ -2,9 +2,9 @@
 
 Mac 版 Yudh（`../nippo`）的 Windows 伴随程序。电脑主要用来打游戏，所以只做这几件事、尽量不占资源：
 
-1. **英语**：单词卡 / 考点词 / 听写，和 Mac 共用同一份进度（同步文件夹里的 `english-events-*.jsonl`）。
+1. **英语**：单词卡 / 考点词，和 Mac 共用同一份进度（同步文件夹里的 `english-events-*.jsonl`）。听写要放音频，只在 Mac 上做（Windows 的角标也不算它）。
 2. **明天的会**：只读 Mac 写的 `agenda.json`，不碰日历。
-3. **泡完澡后的日课**：和 Mac 同一套（跟练视频用官方播放器 → 肩颈拉伸 → 躺着做腹式呼吸），以及站起来时的 3 次腹式呼吸。
+3. **泡完澡后的日课**：和 Mac 同一套（跟练视频用官方播放器 → 肩颈拉伸 → 躺着做腹式呼吸），以及站起来时的 3 次腹式呼吸。连续天数和隔天力量按两台设备加起来算（`habits-<设备名>.json`；Mac 端还没接上）。
 4. **坐站提醒**：和 Mac 同样的计时与拉伸步骤。全屏游戏时不弹，但**连续玩 60 分钟以上，退出全屏就马上问一次「站起来了吗？」**（手臂前伸、身体前倾的长时间正是斜角肌最容易绷紧的时候）。
 
 格式以 `../nippo/docs/sync-format.md` 为准。
@@ -23,6 +23,7 @@ core/      yudh-core：没有界面的 Rust 库（这里的逻辑全部有测试
   agenda   明天的会：没有文件 / Mac 还没更新 / 没有会 / 会议列表
   posture  坐站计时与小窗判断（Mac 的 BreakReminder + StretchGuide）
   ritual   日课：视频链接解析与嵌入地址、拉伸每一步的秒数、腹式呼吸节拍与记录
+  habits   日课 / 呼吸记录的跨设备合计（只写自己的 habits-<设备名>.json，读时把别的设备加上）
 ```
 
 没有本地数据库：自己的 `english-events-<设备名>.jsonl` 就是自己的正本，状态每次从所有设备的事件重放出来（几千行，毫秒级）。
@@ -30,7 +31,7 @@ core/      yudh-core：没有界面的 Rust 库（这里的逻辑全部有测试
 ## 开发
 
 ```
-cargo test            # 核心 33 个 + app 1 个
+cargo test            # 核心 35 个 + app 1 个
 cargo clippy --all-targets -- -D warnings
 ```
 
@@ -45,7 +46,8 @@ app/
 ```
 
 - 常驻的只有托盘。面板、坐站小窗、日课窗口都是要用时才创建，关掉就销毁；面板关掉时连词表一起释放内存。
-- 面板：点托盘图标打开，失去焦点就关（选文件夹时除外）。Esc 关闭。
+- 面板：点托盘图标打开，出现在鼠标所在屏幕的可用区域右下角（任务栏在哪条边都不会挡住），失去焦点就关（选文件夹时除外）。Esc 关闭。
+- 默认开机自启（只进托盘）；设置里可以关。重复双击启动时不会再开一个，只会把面板打开。
 - 视觉沿用 Mac 夜版烤好的素材：九宫格用 CSS `border-image`（`bleed` 用外扩，`insets` 对应切片），模板字用字形图集。
 - 在浏览器里预览界面：`cd app/ui && python3 -m http.server`，打开 `index.html` / `posture.html?prompt=askStand` / `ritual.html`
   （不在 Tauri 里时，`js/mock.js` 提供示例数据）。
@@ -63,3 +65,10 @@ npm install
 npm run dev      # 开发
 npm run build    # 安装包：target/release/bundle/nsis/
 ```
+
+## 第一次使用
+
+1. 安装包没有代码签名，Windows 会弹 SmartScreen「已保护你的电脑」：点「更多信息」→「仍要运行」。只有第一次。
+2. 打开面板 → 设置 → 同步文件夹：选和 Mac 设置里同一个文件夹（OneDrive 等）。
+3. 这台电脑的名字：默认是计算机名，不要和 Mac 同名。
+4. Mac 设置里要打开「把今天和明天的会议写给 Windows」和「把词表复制一份给 Windows」，Windows 才有明天的会和单词。

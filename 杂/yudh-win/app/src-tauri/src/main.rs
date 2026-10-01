@@ -67,16 +67,19 @@ fn main() {
             let settings_path = dir.join("settings.json");
             let settings = Settings::load(&settings_path);
             let posture = PostureClock::new(Utc::now(), settings.stretch_index);
+            let inner = Inner {
+                settings,
+                english: None,
+                undo: None,
+                posture,
+                breath_started: None,
+                rng: Rng::from_time(),
+                picking: false,
+            };
+            // 手元の記録を同期フォルダへ(Mac から日课や呼吸の続きが見えるように)
+            commands::publish_habits(&inner);
             app.manage(AppState {
-                inner: Mutex::new(Inner {
-                    settings,
-                    english: None,
-                    undo: None,
-                    posture,
-                    breath_started: None,
-                    rng: Rng::from_time(),
-                    picking: false,
-                }),
+                inner: Mutex::new(inner),
                 settings_path,
             });
             apply_autostart(app.handle());

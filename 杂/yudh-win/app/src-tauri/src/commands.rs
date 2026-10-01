@@ -8,12 +8,14 @@ use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Manager, State};
 use yudh_core::agenda::{self, Tomorrow};
 use yudh_core::english::{Stats, VocabCard};
+use yudh_core::habits::Habits;
 use yudh_core::posture::{self, Posture, Prompt, Step, Stretch};
 use yudh_core::quiz::Question;
 use yudh_core::replay::Kind;
 use yudh_core::ritual;
 use yudh_core::round::RoundMark;
 use yudh_core::srs::Rating;
+use yudh_core::sync::SyncFolder;
 use yudh_core::{English, Zone};
 
 use crate::settings::SettingsPatch;
@@ -34,6 +36,41 @@ fn english(inner: &mut Inner) -> Option<&mut English> {
         ));
     }
     inner.english.as_mut()
+}
+
+fn folder(inner: &Inner) -> Option<SyncFolder> {
+    let root = inner.settings.sync_root.as_deref()?;
+    Some(SyncFolder::new(root, &inner.settings.device))
+}
+
+/// このパソコンでの習慣の記録(設定の中)
+fn own_habits(inner: &Inner) -> Habits {
+    let s = &inner.settings;
+    Habits {
+        ritual: s.ritual_log.clone(),
+        ritual_strength: s.ritual_strength_log.clone(),
+        breath: s.breath_log.clone(),
+    }
+}
+
+/// Mac の分も足した記録(連続日数・隔天・今日の呼吸の回数はこれで数える)。同期フォルダが無ければ自分の分だけ
+fn habits(inner: &Inner) -> Habits {
+    let own = own_habits(inner);
+    match folder(inner) {
+        Some(f) => f.combined_habits(&own),
+        None => own,
+    }
+}
+
+/// 自分の記録を同期フォルダに書く(記録が増えたとき・起動時・設定を保存したとき。同じ中身なら書かない)
+pub fn publish_habits(inner: &Inner) {
+    if let Some(f) = folder(inner) {
+        let _ = f.write_habits(&own_habits(inner));
+    }
+}
+
+fn today_breaths(all: &Habits) -> u32 {
+    all.breath.get(&today()).copied().unwrap_or(0)
 }
 
 fn kind(text: &str) -> Result<Kind, String> {
@@ -72,6 +109,7 @@ pub fn panel_state(state: State<'_, AppState>) -> PanelState {
         }
         None => (None, false),
     };
+    let all = habits(&inner);
     PanelState {
         configured: root.is_some(),
         sync_root: root,
@@ -81,13 +119,8 @@ pub fn panel_state(state: State<'_, AppState>) -> PanelState {
         posture: inner.posture.posture,
         minutes_in_posture: (now - inner.posture.since).num_minutes(),
         prompt: inner.posture.prompt,
-        breath_today: inner
-            .settings
-            .breath_log
-            .get(&today())
-            .copied()
-            .unwrap_or(0),
-        ritual_streak: ritual::streak(&inner.settings.ritual_log, now, Zone::Local),
+        breath_today: today_breaths(&all),
+        ritual_streak: ritual::streak(&all.ritual, now, Zone::Local),
     }
 }
 
@@ -222,12 +255,7 @@ fn posture_view(inner: &Inner) -> PostureView {
         steps,
         step,
         breath_started_at: inner.breath_started.map(|t| t.timestamp_millis()),
-        breath_today: inner
-            .settings
-            .breath_log
-            .get(&today())
-            .copied()
-            .unwrap_or(0),
+        breath_today: today_breaths(&habits(inner)),
         next_stretch: posture::display_name(&clock.next_stretch(&inner.settings.posture).name),
         caution: posture::CAUTION,
     }
@@ -276,6 +304,7 @@ pub fn apply_posture(app: &AppHandle, action: &str) -> PostureView {
                 if inner.breath_started.take().is_some() {
                     ritual::record(&mut inner.settings.breath_log, &today());
                     state.save(&inner);
+                    publish_habits(&inner);
                 }
             }
             "breathSkip" => inner.breath_started = None,
@@ -335,9 +364,10 @@ pub fn ritual_plan(state: State<'_, AppState>, short: bool) -> RitualPlan {
     let inner = state.inner.lock().expect("state");
     let s = &inner.settings;
     let now = Utc::now();
+    let all = habits(&inner);
     let has_strength = !short
         && s.ritual_strength_on
-        && ritual::includes_strength(&s.ritual_strength_log, now, Zone::Local);
+        && ritual::includes_strength(&all.ritual_strength, now, Zone::Local);
     let stretches = ritual::plan(
         &s.ritual_stretches,
         has_strength.then_some(s.ritual_strength.as_str()),
@@ -378,7 +408,7 @@ pub fn ritual_plan(state: State<'_, AppState>, short: bool) -> RitualPlan {
         has_strength,
         short,
         voice: s.ritual_voice,
-        streak: ritual::streak(&s.ritual_log, now, Zone::Local),
+        streak: ritual::streak(&all.ritual, now, Zone::Local),
         caution: posture::CAUTION,
     }
 }
@@ -394,7 +424,8 @@ pub fn ritual_done(state: State<'_, AppState>, strength: bool) -> usize {
         ritual::record(&mut inner.settings.ritual_strength_log, &day);
     }
     state.save(&inner);
-    ritual::streak(&inner.settings.ritual_log, Utc::now(), Zone::Local)
+    publish_habits(&inner);
+    ritual::streak(&habits(&inner).ritual, Utc::now(), Zone::Local)
 }
 
 // MARK: 設定
@@ -457,14 +488,22 @@ pub fn settings_save(
     let autostart = patch.autostart.is_some();
     {
         let mut inner = state.inner.lock().expect("state");
+        let before = folder(&inner);
         if inner.settings.apply(patch) {
             inner.english = None;
             inner.undo = None;
+            // 同じフォルダで名前だけ変えたら、古い名前の記録を消す(別の端末として二重に数えないように)
+            if let (Some(old), Some(new)) = (before, folder(&inner)) {
+                if old.root == new.root && old.habits_file() != new.habits_file() {
+                    let _ = std::fs::remove_file(old.habits_file());
+                }
+            }
         }
         inner
             .settings
             .save(&state.settings_path)
             .map_err(|e| e.to_string())?;
+        publish_habits(&inner);
     }
     // 自動起動はレジストリを触るので、鍵を放してから
     if autostart {

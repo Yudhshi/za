@@ -6,7 +6,7 @@
 //! - 素材(語表)は同期フォルダの `english-library/` から読む(`library`)。語表は git に入れない
 //! - 会議:Mac が書く `agenda.json` を読むだけ(`agenda`)
 //! - 坐站の切り替え:計時と小窓の判定だけ(`posture`)。全画面のゲーム中は出さない
-//! - 泡澡のあとの日课と腹式呼吸の習慣(`ritual`)
+//! - 泡澡のあとの日课と腹式呼吸の習慣(`ritual`)。記録は端末ごとの `habits-<端末>.json` で共有する(`habits`)
 //!
 //! 書式は Mac 側の `docs/sync-format.md` が正本。数字はどちらのテストでも同じになるようにしてある
 
@@ -14,6 +14,7 @@ pub mod agenda;
 pub mod day;
 pub mod english;
 pub mod event;
+pub mod habits;
 pub mod library;
 pub mod posture;
 pub mod queue;

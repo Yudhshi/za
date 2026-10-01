@@ -14,7 +14,8 @@
 <同步文件夹>/
   english-events-<设备名>.jsonl     每台设备一个，只由该设备写
   english-library/                  词表（vocab / paraphrase / dictation / dict.json + LICENSES.txt），只由 Mac 写
-  agenda.json                       今天和明天的会议，只由 Mac 写（见文末）
+  agenda.json                       今天和明天的会议，只由 Mac 写（见后文）
+  habits-<设备名>.json              日课和腹式呼吸的每日次数，每台设备一个，只由该设备写（见文末）
 ```
 
 词表来自教材，不进 git，所以 Windows 的安装包里没有。Mac 在每次同步时把 `Resources/English/` 里的这几个文件复制到 `english-library/`（大小相同且副本较新就跳过；设置里可以关掉）。Windows 只读这里。只供自己学习，不要把同步文件夹共享给别人。
@@ -148,3 +149,26 @@ Windows 端的读法：
 - 「明天」= Windows 本地日期 + 1 天，在 `days` 里找同一个 `day`。**找不到 = Mac 还没更新**（比如 Mac 一直在睡），显示「Mac 还没同步明天的日程」之类的话，不要显示成「明天没会」。
 - 只在打开面板时读一次；文件很小，不用监听。
 - 以 Swift 端 `Sources/NippoCore/Calendar/AgendaExport.swift`（`parse`）与 `Sources/nippo-tests/AgendaExportTests.swift` 为准。
+
+## 习惯记录：`habits-<设备名>.json`（各设备各写一个）
+
+日课连续天数、隔天的肩袖力量、今天做了几次腹式呼吸，要把两台设备的记录加起来算，否则在 Mac 上泡完澡做了、Windows 上的连续天数就断了。
+
+```json
+{
+  "ritual": { "2026-09-30": 1, "2026-10-01": 1 },
+  "ritualStrength": { "2026-09-30": 1 },
+  "breath": { "2026-10-01": 3 }
+}
+```
+
+| 字段 | 说明 |
+|---|---|
+| `ritual` | 日课做完的次数（`yyyy-MM-dd` → 次数，本机时区） |
+| `ritualStrength` | 那次日课里含肩袖力量的次数（判断「隔天」用） |
+| `breath` | 3 次腹式呼吸做完的次数（站起来时、日课最后各算 1 次） |
+
+- 只写本机的记录（本机设置里的那三个日志，各保留最近 60 天），文件名的设备名规则同 `english-events-`。写法同上：先写临时文件再替换，内容没变就不写。缺的键当作空。
+- 读的时候：本机记录（以内存里的为准，不读自己的文件）+ 其他所有 `habits-*.json` 按日相加。坏文件跳过。连续天数、隔天力量、「今天第几次呼吸」都用相加后的结果。
+- 写的时机：记录增加时、启动时、保存设置时。同一个同步文件夹里改了设备名，要删掉旧名字的文件（不然会被当成另一台设备重复计数）。
+- Windows 已实现（`yudh-core/src/habits.rs`）。Mac 端尚未实现：在那之前 Mac 只看自己的记录，Windows 会读不到 Mac 的部分。
