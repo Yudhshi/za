@@ -12,7 +12,6 @@ from .bake import gnoise, hexrgb, lin, shade_from_height, smoothstep, srgb
 
 S = 2
 TILE = 1024           # px = 512pt: big enough that nothing repeats visibly on a 520 x 900pt panel
-QUIET = 0.5           # concrete-quiet-night keeps half the base tile's (already quiet) detail
 GROUND_HEX = '#292C2F'  # v12 nominal concrete ground; the base tile is normalised to it so every sprite solved
 #                         against ground_hex() keeps its look
 _GROUND = {}
@@ -105,19 +104,14 @@ def detail_stats(col, wrap=True):
 
 def bake_tiles():
     col, hgt, pore = tile_fields()
-    q = ext.quiet_wrap(col, QUIET)
     t_lo, t_hi = detail_stats(col)
-    q_lo, q_hi = detail_stats(q)
     out.save('concrete-night', ext.rgb8(col), 'tile',
              f'Base wall: quiet poured-concrete tile 512pt (no pour blotches, mid mottling, fine grain, sparse small '
              f'bug holes lit top-left) — tile it under the WHOLE panel; it never visibly repeats on 520×900. '
              f'Detail {t_lo:+.1f}/{t_hi:+.1f}% luma (text may sit anywhere on it). Texture only comes from '
              f'concrete-edge-night and concrete-band-night laid on top.')
-    out.save('concrete-quiet-night', ext.rgb8(q), 'tile',
-             f'Optional: the base tile with half its detail ({q_lo:+.1f}/{q_hi:+.1f}% luma), pixel-aligned with '
-             f'concrete-night. Since v12.1 concrete-night is itself quiet, so this is redundant — kept only so older '
-             f'code keeps drawing; new code needs just concrete-night.')
-    return dict(base=(t_lo, t_hi), quiet=(q_lo, q_hi))
+    # r2: concrete-quiet-night is retired — concrete-night is itself quiet
+    return dict(base=(t_lo, t_hi))
 
 
 def _rgba(col, a):
@@ -319,14 +313,18 @@ def slab_alpha(W, H, radius, polys):
 
 
 def bake_panel():
-    """520 x 760pt nominal slab (radius 20pt): two mortar-plugged tie holes at the top, two small broken arrises
+    """The panel slab as a 9-slice (radius 20pt; caps 96 / 40 / 116 / 150pt, centre PANEL_CENTRE pt): two mortar-plugged tie holes at the top, two small broken arrises
     (top edge inside the top-right cap, left edge inside the bottom-left cap), the lit arris, and the contact +
     faint ambient shadow outside.  Three images with identical geometry / insets:
       panel-shadow-night  black shadow (draw first, under the slab)
       panel-mask          slab outline incl. the chip bites (mask the concrete tiles with it)
       panel-rim-night     lit arris, chip faces, tie holes (overlay drawn over the tiles)"""
     rng = np.random.default_rng(7321)
-    Wp, Hp = 520, 760          # v12.1: nominal = the real panel height (Today / English ~640–900pt): ≤ ±20 % stretch
+    # r2: the smallest canvas that keeps the caps — the interior is transparent and the edges are uniform along their
+    # length (arris = distance field, shadow = blur of a straight edge; the chips and tie holes sit in the caps), so a
+    # PANEL_CENTRE pt centre stretches to any panel size without a visible change (520×760 cost ~7 MB decoded)
+    caps = (96, 40, 116, 150)
+    Wp, Hp = caps[1] + PANEL_CENTRE + caps[3], caps[0] + PANEL_CENTRE + caps[2]
     W, H = Wp * S, Hp * S
     bleed = (6, 12, 22, 12)
     bt, bl, bb, br = (int(v * S) for v in bleed)
@@ -401,12 +399,31 @@ def bake_panel():
     rgb = np.clip(pm / np.maximum(alpha, 1e-6)[..., None], 0, 1)
     frame = np.dstack([(rgb * 255 + 0.5).astype(np.uint8), (np.clip(alpha, 0, 1) * 255 + 0.5).astype(np.uint8)])
     frame[frame[..., 3] == 0, :3] = 0
-    insets = (bleed[0] + 96, bleed[1] + 40, bleed[2] + 116, bleed[3] + 150)
+    insets = tuple(b + c for b, c in zip(bleed, caps))
+    _check_uniform(frame, insets)
     out.save('panel-frame-night', frame, 'slice',
-             'Panel frame: contact + faint ambient shadow in the bleed, lit arris, two mortar-plugged tie holes, two '
-             'broken arrises (inside the top-right / bottom-left caps); interior transparent — lay concrete tiles '
-             'clipped to a 20pt rounded rect underneath. Edges uniform along their length (stretch-safe).',
+             f'Panel frame: contact + faint ambient shadow in the bleed, lit arris, two mortar-plugged tie holes, two '
+             f'broken arrises (inside the top-right / bottom-left caps); interior transparent — lay concrete tiles '
+             f'clipped to a 20pt rounded rect underneath. Baked on the smallest canvas that keeps the caps ({Wp}×{Hp}pt '
+             f'layout, {PANEL_CENTRE}pt centre): every row / column of the centre band is identical, so it stretches '
+             f'to any panel (520 × 640–900pt) without a visible change.',
              bleed=bleed, insets=insets)
+
+
+PANEL_CENTRE = 4
+
+
+def _check_uniform(img, insets):
+    """The 9-slice centre band must be the same along its length: every column of the top / bottom edge band and every
+    row of the left / right edge band identical (±1 level)."""
+    t, l, b, r = (int(round(v * S)) for v in insets)
+    H, W = img.shape[:2]
+    a = img.astype(np.int16)
+    cols = a[:, l:W - r]
+    rows = a[t:H - b, :]
+    dc = int(np.abs(cols - cols[:, :1]).max())
+    dr = int(np.abs(rows - rows[:1]).max())
+    assert dc <= 1 and dr <= 1, ('panel-frame-night centre band not uniform', dc, dr)
 
 
 def bake_all():

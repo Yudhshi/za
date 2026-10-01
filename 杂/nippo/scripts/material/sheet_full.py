@@ -74,7 +74,7 @@ class Board:
     def panel(self, x, y, w, h, header=56, frame='panel-frame-night'):
         """Concrete slab: quiet tile everywhere, texture tile in the header band and the 18pt edge band (feathered),
         clipped to the 20pt rounded rect, then the frame slice."""
-        quiet, tex = self.m.img('concrete-quiet-night'), self.m.img('concrete-night')
+        quiet = tex = self.m.img('concrete-night')        # concrete-night is the quiet base (r2: no quiet tile)
         X0, Y0, X1, Y1 = int(x * 2), int(y * 2), int((x + w) * 2), int((y + h) * 2)
         rr = rrect_mask(X1 - X0, Y1 - Y0, 40)
         tile_fill(self.c, quiet, X0, Y0, X1, Y1, mask=rr)
@@ -250,7 +250,7 @@ def english(m):
     b.slice('band-black-night', cx + 18, cy + 152, 294, 34)
     states = ['good', 'fuzzy', 'good', 'good', 'forgot', 'current', 'empty', 'empty', 'empty', 'empty']
     for i, st in enumerate(states):
-        b.sprite(f'rate-18-{st}', cx + 26 + i * 27.5, cy + 160)
+        b.sprite(f'rate-20-{st}', cx + 26 + i * 27.5, cy + 160)
     b.text(cx + 18, cy + 214, '释义', 13, (42, 41, 38))
     b.slice('redact-black-night', cx + 60, cy + 204, 134, 35)
     b.slice('redact-black-night', cx + 18, cy + 256, 270, 15)

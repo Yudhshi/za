@@ -196,6 +196,15 @@ def v121():
           'Row hover 472×40pt (schedule / list / task rows): a very faint wash of white masked paint on the concrete '
           '(hard tape edge, thin patches) — the only hover plate; never a flat rectangle.', caps=(10, 14, 10, 14),
           cov=0.013, thin=0.35, thin_sigma=7, ridge=0.0, relief=0.2, noise=0.003, jitter=0.9, rough=0.12)
+    block('row-hover-title-night', 472, 24, 'white', 14764,
+          'Title-line hover plate 472×24pt (single-line full-width targets: the hero title row, section caption rows): '
+          'the same very faint white masked wash on the concrete as row-hover-night (hard tape edge, thin patches).',
+          caps=(7, 14, 7, 14),
+          cov=0.013, thin=0.35, thin_sigma=6, ridge=0.0, relief=0.2, noise=0.003, jitter=0.9, rough=0.12)
+    block('tab-chip-wide-night', 96, 32, 'white', 14504,
+          'Selected tab, WIDE 96×32pt (labels like 「学习中 120」): the same white masked chip as tab-chip-night, '
+          'baked at its real width (rough edge, thin patches); black live text.',
+          cov=0.95, thin=0.28, ridge=0.03, jitter=1.0, rough=0.10, thin_sigma=6)
     block('row-hover-small-night', 120, 24, 'white', 4757,
           'Small hover plate 120×24pt (the 「任务 N」 line, other short single-line targets): the same very faint '
           'white masked wash as row-hover-night.', caps=(7, 10, 7, 10),

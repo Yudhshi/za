@@ -83,9 +83,12 @@ def glyph_set(sid, aid, prefix, chars, color, bridge, recipe, ground, kind='conc
     Wa = sum(c[1].shape[1] for c in cells) + 2 * (len(cells) - 1)
     atlas = np.zeros((Hc, Wa, 4), np.uint8)
     glyphs = {}
-    for ch, img, inkw, gap in cells:
+    for (ch, img, inkw, gap), piece in zip(cells, pieces):
         atlas[:, x:x + img.shape[1]] = img
-        glyphs[ch] = dict(rect=[x, 0, img.shape[1], Hc], advance=(inkw + gap) / S, bearing=-l / S)
+        # the mask starts at the pen; its right edge = the last column with ≥ 50 % stencil ink (no overspray)
+        ink_cols = np.nonzero(piece[1].max(0) > 0.5)[0]
+        ink_right = (int(ink_cols.max()) + 1) / S if len(ink_cols) else 0.0
+        glyphs[ch] = dict(rect=[x, 0, img.shape[1], Hc], advance=(inkw + gap) / S, bearing=-l / S, inkRight=ink_right)
         x += img.shape[1] + 2
     ascent = (t + base - top) / S
     descent = (Hc - t - (base - top)) / S
@@ -95,8 +98,15 @@ def glyph_set(sid, aid, prefix, chars, color, bridge, recipe, ground, kind='conc
 
 
 def word_sprite(aid, prefix, text, color, bridge, recipe, ground, seed, purpose, pad_pt=(8, 8, 8, 8), over=None,
-                track=0.03, side=None, second=None):
+                track=0.03, side=None, second=None, scale=1.0):
+    """scale < 1: the stencil (cut at the row's size) is resampled before spraying, so the paint (overspray, droplets,
+    the second pass offset) keeps its physical size — a smaller sheet, the same can."""
     m, base, ctop, inkw, gap = glyph.word(prefix, text, bridge_em=bridge, track_em=track, seed=seed, over=over)
+    if scale != 1.0:
+        h, w = m.shape
+        sh, sw = int(round(h * scale)), int(round(w * scale))
+        m = np.clip(np.asarray(Image.fromarray(m.astype(np.float32), 'F').resize((sw, sh), Image.LANCZOS)), 0, 1)
+        base, ctop = base * sh / h, ctop * sh / h
     rows = np.where(m.max(1) > 0.05)[0]
     top, bot = int(rows.min()), int(rows.max()) + 1
     t, l, b, r = (int(v * S) for v in pad_pt)
@@ -225,7 +235,7 @@ def bake_all():
               pad_pt=(8, 8, 8, 8), seed=5400,
               purpose='English 20/20 (stage clear, progress): black stencil on the white card, 56pt.')
     shouts = [('NEXT', 'next', ('teal', 'black')), ('NOW', 'now', ('teal', 'black')),
-              ('TOMORROW', 'tomorrow', ('teal', 'black')), ('LATER', 'later', ('teal', 'black')),
+              ('TOMORROW', 'tomorrow', ('teal',)), ('LATER', 'later', ('teal', 'black')),
               ('DONE', 'done', ('teal',))]
     for w, wid, colours in shouts:
         for color in colours:
@@ -241,6 +251,13 @@ def bake_all():
                     f'Header weekday {d}: white stencil sprayed on concrete, 31pt, with a faint second pass of '
                     f'meeting grey re-laid 1pt right / 0.5pt down (two-pass misregistration, V4 §2.6).',
                     pad_pt=(7, 7, 8, 9), over=NO_I, second=('grey', 2, 1, 0.34))
+        # r2: the long names (WEDNESDAY 277pt …) overflow the header budget — a 0.8× sheet (24.8pt), bridges cut at
+        # 0.08em so they stay ≈ 2pt after the reduction, same two-pass misregistration (1pt right / 0.5pt down)
+        word_sprite(f'day-{d.lower()}-white-night-s', 'day', d, 'white', 0.08, 'day', ground_hex(), 15700 + 13 * i,
+                    f'Header weekday {d}, SHORT: 0.8× of day-{d.lower()}-white-night (24.8pt cap box) for when the long '
+                    f'name does not fit the header budget; white stencil on concrete, bridges ≈ 2pt, the same faint '
+                    f'meeting-grey second pass re-laid 1pt right / 0.5pt down. baseline / capHeight as day-*.',
+                    pad_pt=(7, 7, 8, 9), over=NO_I, second=('grey', 2, 1, 0.34), scale=0.8)
         aid = f'dayshout-{d.lower()}-white-night'
         word_sprite(aid, 'sm', d, 'white', 0.08, 'shout', BLACK_SLAB, 5800 + 13 * i,
                     f'{d} after TOMORROW on the calm hero: white stencil, 21pt.', over=NO_I)

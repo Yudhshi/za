@@ -18,12 +18,11 @@ def shadow_alpha(s):
     return 1 - np.power(np.clip(1 - s, 0, 1), 1 / 2.2)
 
 
-def sheet():
-    Hb = 400
+def sheet(aid='kraft-sheet-night', Hb=400, seed=9005, purpose=None):
+    """Baked at the popup's real height (fibres, flutes and the corner features are never stretched more than ±20 %)."""
     bleed = (8, 14, 28, 14)
     bt, bl, bb, br = (int(v * S) for v in bleed)
     W, H = BW * S + bl + br, Hb * S + bt + bb
-    seed = 9005
     rng = np.random.default_rng(seed * 101)
     col, hgt, ab = ext.kraft(W, H, seed, falloff=0.03)
     # text can sit anywhere inside: flatten the fibre detail there like popups.py did under each text line, so
@@ -72,10 +71,11 @@ def sheet():
     A = alpha + sa
     pm = col * alpha[..., None]
     img = ext.export(pm, A)
-    out.save('kraft-sheet-night', img, 'slice',
-             'Posture popup board: corrugated kraft (fibres, flutes, mottle), worn edges, a torn liner patch and a '
-             'crushed corner at the bottom, ghosts of earlier teal / black / orange sprays in the corners, contact '
-             'shadow in the bleed. Width fixed 360pt; height stretches (caps keep every feature).', bleed=bleed,
+    out.save(aid, img, 'slice',
+             purpose or ('Posture popup board: corrugated kraft (fibres, flutes, mottle), worn edges, a torn liner patch '
+                         'and a crushed corner at the bottom, ghosts of earlier teal / black / orange sprays in the '
+                         'corners, contact shadow in the bleed. Width fixed 360pt; height stretches (caps keep every '
+                         'feature).'), bleed=bleed,
              insets=(bleed[0] + cap_t, bleed[1] + 36, bleed[2] + cap_b, bleed[3] + 36), ground='kraft')
 
 
@@ -152,6 +152,11 @@ def dots():
 
 def bake_all():
     sheet()
+    sheet('kraft-sheet-tall-night', 500, 19011,
+          'Posture popup board, TALL 360×500pt (the standing guide with the Egyptian frieze): the same corrugated kraft '
+          'as kraft-sheet-night (own seed: fibres, flutes, worn edges, torn liner patch + crushed corner at the bottom, '
+          'ghosts of earlier sprays in the corners) baked at its real height — corrugation and fibres are not '
+          'stretched. Width fixed 360pt; height stretches ≤ ±20 % (caps 64pt keep every feature).')
     tape()
     score()
     dots()

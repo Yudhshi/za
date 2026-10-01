@@ -30,6 +30,8 @@ def drip(aid, color, seed, length, width, blob, purpose):
 
 def bake_all():
     for ci, color in enumerate(('teal', 'black', 'orange', 'white')):
+        if color == 'black':          # r2: retired (no black drips anywhere); index kept so the seeds stay put
+            continue
         for i, (Ln, w, blob) in enumerate(VARIANTS):
             extra = '' if color != 'white' else ' (white word card, English event states)'
             drip(f'drip-{color}-{i + 1}', color, 6000 + 100 * ci + i, Ln, w, blob,

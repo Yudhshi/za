@@ -2,10 +2,12 @@
 baked: SwiftUI only swaps these frames, masks, offsets, rotates and fades.
 
 Two kinds of output:
-  * reveal MASKS (white RGB + alpha, kind "sprite"): alpha = the share of the FINAL asset's paint that is already
-    on the wall at that frame (mb_core.rel_mask: coverage now / coverage at the end).  Use them as `.mask` on the
-    final asset, drawn at the same frame (same size + bleed); the last frame is fully opaque, so final.mask(last)
-    is the final asset pixel for pixel, and the hold frame needs no mask.
+  * reveal MASKS (8-bit GREY PNG at 1×, no alpha, `mask: true`; kind "sprite"): grey = the share of the FINAL
+    asset's paint that is already on the wall at that frame (mb_core.rel_mask: coverage now / coverage at the end),
+    white = all of it.  Computed at @2x like everything else, then 2×2 box-averaged to 1pt pixels (pixel size = pt
+    size incl. bleed: a fifth of the decoded memory of an @2x RGBA mask).  Use them as `.luminanceToAlpha()` `.mask`
+    on the final asset, drawn at the same frame (same size + bleed); the last frame is fully white, so
+    final.mask(last) is the final asset pixel for pixel, and the hold frame needs no mask.
       flood-teal-0…7     hero-event-night over the calm card (teal flood out of the numerals)
       flood-orange-0…7   hero-zero-night over the event card (orange seeps out of the 00 bridges, then floods)
       drip-grow-0…3      any drip-<paint>-n, scaled to the drip's box (gravity growth, meniscus front)
@@ -123,10 +125,8 @@ def hero_target(aid):
 
 
 def save_mask(aid, m, purpose, bleed=(0, 0, 0, 0), **extra):
-    """Alpha mask -> white RGB + 8-bit alpha (oxipng reduces it to a palette / grey+alpha PNG losslessly)."""
-    a8 = (np.clip(m, 0, 1) * 255 + 0.5).astype(np.uint8)
-    rgba = np.dstack([np.full(a8.shape + (3,), 255, np.uint8), a8])
-    return out.save(aid, rgba, 'sprite', purpose, bleed=bleed, palette=False, **extra)
+    """@2x coverage map -> 8-bit grey PNG at 1× (out.save_mask: `<id>.png`, `mask: true`)."""
+    return out.save_mask(aid, m, purpose, bleed=bleed, **extra)
 
 
 def dot_field(shape, n, rng, rmin=0.35, rmax=2.2):

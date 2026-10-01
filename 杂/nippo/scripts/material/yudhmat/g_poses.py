@@ -18,7 +18,6 @@ NAMES = {'stretch': '拉伸', 'walk': '走一走', 'chest-doorway': '扩胸', 'b
 # v12.1: baked at the size the popup shows them (sprite scale stays 1): the question / current pose at 132pt, the
 # step pose at 96pt (`-s`).  pose-standing is gone (no code path draws it).
 SIZES = [(132, ''), (96, '-s')]
-out.RETIRED.add('pose-standing')
 
 
 def pose(i, name, size=132, suffix=''):
@@ -137,8 +136,13 @@ def frieze():
              f'{FZ_W}×{FZ_H:.1f}pt, origin (0, 0).', bleed=(b, b, b, b), origin=[0.0, 0.0], ground='kraft')
 
 
+NO_SMALL = {'sit-down', 'stand-up'}      # r2: only ever shown as the 132pt question pose
+
+
 def bake_all():
     for i, name in enumerate(POSES):
         for size, suffix in SIZES:
+            if suffix and name in NO_SMALL:
+                continue
             pose(i, name, size, suffix)
     frieze()

@@ -1,5 +1,6 @@
-"""Cells: day-board cells (10.5 x 20pt) + the now-notch (merge2/today/todaybake.py paint_cell / paint_now) and the
-rating cells — paint fullness = rating — at 24 / 18 / 14pt (merge2/english/eng_bake.py cell)."""
+"""Cells: day-board cells (10.5 x 20pt for 15-minute boards, 18 x 20pt `-wide` for 30-minute boards) + the now-notch
+(merge2/today/todaybake.py paint_cell / paint_now) and the rating cells — paint fullness = rating — at 30 / 24 / 20 /
+14pt (merge2/english/eng_bake.py cell); the 14pt set also on the black swatch plate (`-dark`)."""
 import numpy as np
 
 from . import ext, out
@@ -10,6 +11,7 @@ S = 2
 BLACK_PLATE = '#191918'
 BLACK_SLAB = '#1B1C1D'
 WHITE_CARD = '#F4F3EE'
+SWATCH_BLACK = '#1E1E1D'     # measured interior of swatch-black-card (mean sRGB over the white card)
 
 
 def new(wpt, hpt, bleed, seed, kind='concrete', q=0.5):
@@ -21,9 +23,9 @@ def new(wpt, hpt, bleed, seed, kind='concrete', q=0.5):
 
 
 # ---------------------------------------------------------------- board cells
-def board_cell(aid, kind, seed, purpose, ink='teal', ground=None):
+def board_cell(aid, kind, seed, purpose, ink='teal', ground=None, w=10.5):
     bleed = (1, 1, 1, 1)
-    L, r = new(10.5, 20, bleed, seed + 1)
+    L, r = new(w, 20, bleed, seed + 1)
     x0, y0, x1, y1 = r
     rng = np.random.default_rng(seed)
     W, H = L.W, L.H
@@ -85,7 +87,9 @@ def now_notch():
 GROUND = {'concrete': dict(empty='#80858A', ecov=0.72, efill=0.035, hex=None),
           'black': dict(empty='#6A6F74', ecov=0.70, efill=0.0, hex=BLACK_PLATE),
           'band': dict(empty='#6A6F74', ecov=0.70, efill=0.0, hex=BLACK_PLATE),
-          'light': dict(empty='#7B7A77', ecov=0.80, efill=0.03, hex=WHITE_CARD)}
+          'light': dict(empty='#7B7A77', ecov=0.80, efill=0.03, hex=WHITE_CARD),
+          # swatch-black-card: black masked paint (cov .993) over the white card — its interior reads #1E1E1D
+          'swatch': dict(empty='#6A6F74', ecov=0.70, efill=0.0, hex=SWATCH_BLACK)}
 
 
 def rate_cell(size, state, ground, seed):
@@ -145,9 +149,11 @@ RATE_TEXT = dict(easy='太简单 (4): teal solid + black stencil star', good='�
 RATE_WHERE = {30: ('concrete', 'this round\'s turf (4×5, gap 6) on the concrete beside the card; the stage-clear '
                                'board may lay the same cells on plate-black-night'),
               20: ('band', 'review history (10 cells, gap 4) on band-black-night'),
-              24: ('black', 'v12 session board on the black plate — superseded by rate-30-*'),
-              18: ('band', 'v12 review history — superseded by rate-20-*'),
+              24: ('black', 'stage-clear board on the black plate (plate-black-night)'),
               14: ('light', 'legend swatch on the white card (1pt black paint edge)')}
+# r2: the 14pt legend / rating-button swatches sit on swatch-black-card (20×20 black masked plate), not on the card
+DARK14 = 'legend / rating-button swatch baked ON swatch-black-card (the 20×20pt black masked plate): centre the 14pt ' \
+         'cell on the plate (3pt margin); no white-card black edge'
 
 
 def bake_all():
@@ -165,9 +171,18 @@ def bake_all():
               'teal', BLACK_SLAB)]
     for i, (aid, kind, purpose, ink, ground) in enumerate(board):
         board_cell(aid, kind, 6300 + 17 * i, purpose + ' 10.5×20pt.', ink=ink, ground=ground)
+    # r2: 30-minute boards (long work days): the same paint logic at 18×20pt, so 472pt never stretches a 10.5 cell
+    for i, (aid, kind, purpose, ink, ground) in enumerate(board):
+        board_cell(aid.replace('-night', '-wide-night'), kind, 16300 + 17 * i,
+                   purpose + ' WIDE 18×20pt: one cell = 30 minutes (boards whose 15-minute cells would be < 0.85 × '
+                   '10.5pt); stretch 0.85–1.15 at most.', ink=ink, ground=ground, w=18)
     now_notch()
     for size, (ground, where) in RATE_WHERE.items():
         for j, state in enumerate(('easy', 'good', 'fuzzy', 'forgot', 'empty', 'current')):
             img, bleed = rate_cell(size, state, ground, 6600 + size * 31 + j * 7)
             out.save(f'rate-{size}-{state}', img, 'sprite', f'Rating cell {size}pt, {RATE_TEXT[state]} — {where}.',
                      bleed=bleed, ground={'light': 'white card', 'concrete': 'concrete'}.get(ground, 'black plate'))
+    for j, state in enumerate(('easy', 'good', 'fuzzy', 'forgot', 'empty', 'current')):
+        img, bleed = rate_cell(14, state, 'swatch', 16600 + j * 7)
+        out.save(f'rate-14-{state}-dark', img, 'sprite', f'Rating cell 14pt, {RATE_TEXT[state]} — {DARK14}.',
+                 bleed=bleed, ground='black swatch plate')

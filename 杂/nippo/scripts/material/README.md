@@ -4,8 +4,9 @@
 `Resources/Material/*.png` + `Resources/Material/manifest.json`。SwiftUI 只负责摆放、九宫格拉伸、裁切和淡入；文字、图标永远是真的。
 
 ```bash
-python3 scripts/material/make.py                      # 全部重烘（约 3 分钟，4 核）
+python3 scripts/material/make.py                      # 全部重烘（约 10 分钟，4 核；神兽三档 ~160s）
 python3 scripts/material/make.py --only stencil -v    # 只烘某几组：它们的条目合并进现有 manifest（其他组的条目原样保留），-v 打印每张的大小和编码
+python3 scripts/material/check_ids.py                 # Swift 里用到的素材 id 是否都在 manifest 里
 python3 scripts/material/sheet.py /tmp/material-sheet.png   # 审查用的拼版（不进仓库）：拼好的画面 + 每张 1× + 100% 局部
 ```
 
@@ -48,17 +49,21 @@ python3 scripts/material/sheet.py /tmp/material-sheet.png   # 审查用的拼版
 ## 怎么用这些图（给 SwiftUI）
 
 - **manifest.json**（schema v1）：`assets[id]` = `file`、`kind`（`tile` / `slice` / `sprite`）、`size`（pt，整张图）、`bleed`（pt，图超出布局框的部分：飞沫、投影、旋转余量）、`insets`（仅 slice，pt，从**图像边缘**量，≥ bleed）、可选 `anchor`、单词精灵图的 `baseline` / `capHeight`、`purpose`、`ground`（烘焙时对着的地面）。
-  神兽 `creature-*-grey`：`ink` = 模板墨迹外接框 `[x0, y0, x1, y1]`，`contour` = 32 个数：布局框自上而下等分成 32 条横带，每条里最左的墨迹 x（没有墨迹为 null）；都是布局框坐标、pt、不含飞沫。垂滴 `drip-*`：`length` = 锚点以下垂多长（pt）。另有 `origin`（壁画带）、`feetY` 等说明性字段。v12.1 起没有 `words` 别名表。
-- **glyphs[set]**：一组一张图集，所有格子同高；`lineHeight = [ascent, descent]`（pt，基线在格子顶下 ascent 处），`capTop`（格子顶到大写顶，pt）、`capHeight`（大写顶到基线，pt；capTop + capHeight = ascent），每个字 `rect`（px）、`advance`（pt，含字距）、`bearing`（pt，格子左边相对笔位置，负数 = 左边的飞沫）。拼「04」：笔位置从 x 开始，每个字画在 `pen + bearing`，然后 `pen += advance`；布局框 = 宽 Σadvance × 高 capHeight，图向上 / 下溢出。
+  神兽 `creature-<day>-grey`：**三档**（r2），让静档主角卡只在 0.85–1.15 之间缩放：`creature-<day>-grey`（墨迹高 ≈ 180pt，472×248 一类的卡）、`-m`（≈ 145pt，472×212）、`-s`（≈ 114pt，472×150 短卡）。同一张图、同一朝向、同一种灰漆（喷漆参数按 px = 物理尺寸，不随模板缩小），每档自己的种子；模板桥按该档的尺寸重切，**每条桥 / 模板纸舌 ≥ 2.2pt**（`g_creatures.widen_bridges`：背景用半径 1.1pt 的圆做开运算，留不下来的窄条若分开两块墨或够长，就沿中线加宽；凹角的小尖不动）。每档的布局框 = 400×300 的画框按该档缩放（高是 1.5pt 的倍数），`ink` = 模板墨迹外接框 `[x0, y0, x1, y1]`，`contour` = 32 个数：布局框自上而下等分成 32 条横带，每条里最左的墨迹 x（没有墨迹为 null）；都是**该档自己的**布局框坐标、pt、不含飞沫。Swift 的 `CreatureTier` 从大到小挑第一档放得下的。垂滴 `drip-*`：`length` = 锚点以下垂多长（pt）。另有 `origin`（壁画带）、`feetY` 等说明性字段。v12.1 起没有 `words` 别名表。
+  **动效遮罩**（`flood-teal-*`、`flood-orange-*`、`stamp-mask-*`、`badge-mask-*`、`drip-grow-*`）：`"mask": true` = **8-bit 灰度 PNG、无 alpha、1×**（像素尺寸 = `size` 的 pt 数，含 bleed；文件名 `<id>.png`，没有 `@2x`）；白 = 最终素材的漆已经在了。按 @2x 算好再 2×2 平均到 1pt 一像素（解码后约为 @2x RGBA 的 1/16）。灰度值就是覆盖率本身（不做 gamma 编码），Swift 侧 `.luminanceToAlpha()` 后当 `.mask` 用，放大 2× 用 `.interpolation(.high)`；`size` / `bleed` / `frames` / `durationMs` / `frameStartsMs` / `numeralBox` / `dripBox` / `anchor` 的含义不变。
+- **glyphs[set]**：一组一张图集，所有格子同高；`lineHeight = [ascent, descent]`（pt，基线在格子顶下 ascent 处），`capTop`（格子顶到大写顶，pt）、`capHeight`（大写顶到基线，pt；capTop + capHeight = ascent），每个字 `rect`（px）、`advance`（pt，含字距）、`bearing`（pt，格子左边相对笔位置，负数 = 左边的飞沫）、`inkRight`（pt，笔位置到模板墨迹右边缘，不含飞沫；r2）。拼「04」：笔位置从 x 开始，每个字画在 `pen + bearing`，然后 `pen += advance`；布局框 = 宽（Σ前面各字的 advance + 最后一个字的 `inkRight`）× 高 capHeight——最后一个字后面的字距不算进去，图向上 / 下 / 右溢出。
 - **布局框 = 图像减去 bleed**。九宫格的拉伸只发生在 insets 之内；v12.1 每张都按真实显示尺寸烘焙（主角卡 472×270 / 短卡 472×150、白卡 308×380 / 472×340 / 472×160、选项 233×56、评分 112×52、剪影 132 / 96pt …），九宫格拉伸 ≤ ±20 %，精灵按 1× 用。
 - **透明的喷 / 遮**：颜色是漆本身的颜色；alpha 是覆盖率按「在 manifest `ground` 上做 sRGB 空间 over 合成时亮度与线性光烘焙一致」重解过的（Core Animation 在 gamma 空间混合）。所以薄处、飞沫、渗边在混凝土 / 黑漆 / 牛皮纸上看起来和设计稿一致，换底色时色相也不会跑。
-- **面板**（裁成 20pt 圆角矩形）：`concrete-night`（512pt 安静平铺，整块面板都铺它，520×900 上看不出重复）→ `concrete-edge-night`（左右各 18pt 的浇筑纹理 + 向内羽化，`BakedSlice(tile: true)` 铺满整块面板，竖向 512pt 周期）→ `concrete-band-night`（520×60，盘面格子行后面）→ `concrete-seam-night`（整条 520pt、不周期、两端消失，只放在区块之间的空隙里）→ 最上面 `panel-frame-night`（520×760 名义高度；投影在 bleed 里，崩角处画成阴影里的空缺）。`concrete-quiet-night` 现在多余，只为旧代码保留。
-- **牛皮纸小窗**：`kraft-sheet-night`（宽固定 360pt，只竖向拉伸）→ 当天的 `kraft-ghost-<day>`（只在 09 / 11，铺在 (0, 84)）→ 剪影 / 模板字 / 按钮 → `tape-handle-night` 横跨上沿，文字是真的。
+- **面板**（裁成 20pt 圆角矩形）：`concrete-night`（512pt 安静平铺，整块面板都铺它，520×900 上看不出重复）→ `concrete-edge-night`（左右各 18pt 的浇筑纹理 + 向内羽化，`BakedSlice(tile: true)` 铺满整块面板，竖向 512pt 周期）→ `concrete-band-night`（520×60，盘面格子行后面）→ `concrete-seam-night`（整条 520pt、不周期、两端消失，只放在区块之间的空隙里）→ 最上面 `panel-frame-night`（投影在 bleed 里，崩角处画成阴影里的空缺）。r2：`panel-frame-night` 烘在**保住四个帽子的最小画布**上（insets 102 / 52 / 138 / 162 + 中间 4pt，布局 194×216pt）：中间是透明的，四条边沿长度方向逐行 / 逐列完全一样（烘的时候断言 ±1 级），所以拉到任意面板尺寸都和以前 520×760 那张一样，解码内存从 ~6.9 MB 降到 ~0.85 MB。`concrete-quiet-night` 已退役。
+- **牛皮纸小窗**：`kraft-sheet-night`（360×400，宽固定 360pt，只竖向拉伸）/ `kraft-sheet-tall-night`（360×500，站立引导带古埃及壁画带的那一张；同一配方、自己的种子，按真实高度烘，瓦楞和纤维不被拉长）→ 当天的 `kraft-ghost-<day>`（只在 09 / 11，铺在 (0, 84)）→ 剪影 / 模板字 / 按钮 → `tape-handle-night` 横跨上沿，文字是真的。
+- **r2 新增的尺寸**：`row-hover-title-night`（472×24，标题行悬停）、`tab-chip-wide-night`（96×32，「学习中 120」这类长标签）、`cell-<…>-wide-night`（18×20，30 分钟一格的盘面；15 分钟格放不下 0.85×10.5 时用）、`day-<weekday>-white-night-s`（0.8×，24.8pt 字身，长星期名放不进表头时用；桥 0.08em ≈ 2pt，保留第二遍错版）、`rate-14-<…>-dark`（14pt 凡例 / 评分按钮小格，直接烘在 `swatch-black-card` 的黑漆上）。
+- **退役**：`make.py` 的 `RETIRED`（任何一次烘焙——包括 `--only`——都会把这些 id 从 manifest 删掉、删 PNG）：`concrete-quiet-night`、`rate-18-*`、`drip-black-*`、`pose-stand-up-s`、`pose-sit-down-s`、`shout-tomorrow-black-night`、`pose-standing`。全量烘焙还会删掉 `Resources/Material` 里 manifest 没引用的 PNG；`--only` 时某个 id 换了文件名（遮罩从 `<id>@2x.png` 变成 `<id>.png`）也会删旧文件。
 - **动档**：`hero-event-night` / `hero-zero-night` 下沿挂 ≤ 3 条 `drip-<色>-n`（锚点 = 离开漆面的顶点中点，压进卡里 1pt）；静档不挂。
 
 ## 体积
 
-静态素材约 4.6 MB / 210 多个文件（连动效组全部 ≲ 8 MB）。大头是四张主角卡（各 ~160–300 KB）、三张白卡、牛皮纸板（~260 KB）、混凝土平铺（~150 KB）和七张残影。
+r2 全部 5.9 MB：275 个 PNG（269 个素材 + 6 个字集图集）+ manifest。大头是四张主角卡（各 ~160–300 KB）、三张白卡、两张牛皮纸板（~260 / ~370 KB）、混凝土平铺（~150 KB）、七张残影和 21 张神兽灰（三档，各 15–45 KB）。
+动效遮罩 28 张是 1× 8-bit 灰度：文件 0.2 MB，解码 2.75 MB（r1 的 @2x RGBA 是 44 MB）；遮罩在 oxipng 里只重新压缩、不降位深 / 不转调色板（全白的末帧也是 8-bit 灰度）。
 编码：先试 64→256 色的 k-means 调色板（预乘 RGBA，透明索引精确），模糊后误差 < 0.3/255（均值）且 < 2.5/255（99.9%）才用，否则真彩；最后过 oxipng。
 
 ## 已量过的数

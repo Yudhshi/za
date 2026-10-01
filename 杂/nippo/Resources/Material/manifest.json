@@ -3,7 +3,7 @@
  "scale": 2,
  "assets": {
   "badge-mask-0": {
-   "file": "badge-mask-0@2x.png",
+   "file": "badge-mask-0.png",
    "kind": "sprite",
    "size": [
     172.0,
@@ -15,12 +15,13 @@
     16.0,
     18.0
    ],
+   "mask": true,
    "frames": 4,
    "durationMs": 340,
    "purpose": "Stage-clear badge, frame 0/3 (starts 0ms of 340; three passes, linear): reveal mask for badge-plate-night (same 172×135pt canvas, layout 142×105, −2° baked) — the replayed strokes and droplets of its bake. Then lift the creature stencil off creature-<day>-teal (offset, 340–650ms). Frame 3 opaque."
   },
   "badge-mask-1": {
-   "file": "badge-mask-1@2x.png",
+   "file": "badge-mask-1.png",
    "kind": "sprite",
    "size": [
     172.0,
@@ -32,10 +33,11 @@
     16.0,
     18.0
    ],
+   "mask": true,
    "purpose": "Stage-clear badge, frame 1/3 (starts 85ms of 340; three passes, linear): reveal mask for badge-plate-night (same 172×135pt canvas, layout 142×105, −2° baked) — the replayed strokes and droplets of its bake. Then lift the creature stencil off creature-<day>-teal (offset, 340–650ms). Frame 3 opaque."
   },
   "badge-mask-2": {
-   "file": "badge-mask-2@2x.png",
+   "file": "badge-mask-2.png",
    "kind": "sprite",
    "size": [
     172.0,
@@ -47,10 +49,11 @@
     16.0,
     18.0
    ],
+   "mask": true,
    "purpose": "Stage-clear badge, frame 2/3 (starts 170ms of 340; three passes, linear): reveal mask for badge-plate-night (same 172×135pt canvas, layout 142×105, −2° baked) — the replayed strokes and droplets of its bake. Then lift the creature stencil off creature-<day>-teal (offset, 340–650ms). Frame 3 opaque."
   },
   "badge-mask-3": {
-   "file": "badge-mask-3@2x.png",
+   "file": "badge-mask-3.png",
    "kind": "sprite",
    "size": [
     172.0,
@@ -62,6 +65,7 @@
     16.0,
     18.0
    ],
+   "mask": true,
    "purpose": "Stage-clear badge, frame 3/3 (starts 255ms of 340; three passes, linear): reveal mask for badge-plate-night (same 172×135pt canvas, layout 142×105, −2° baked) — the replayed strokes and droplets of its bake. Then lift the creature stencil off creature-<day>-teal (offset, 340–650ms). Frame 3 opaque."
   },
   "badge-plate-night": {
@@ -562,6 +566,22 @@
    "ground": "teal paint",
    "purpose": "Duration strip on the teal event hero, remaining part: black frame + fine black spray. 10.5×20pt."
   },
+  "cell-black-dots-wide-night": {
+   "file": "cell-black-dots-wide-night@2x.png",
+   "kind": "sprite",
+   "size": [
+    20.0,
+    22.0
+   ],
+   "bleed": [
+    1.0,
+    1.0,
+    1.0,
+    1.0
+   ],
+   "ground": "teal paint",
+   "purpose": "Duration strip on the teal event hero, remaining part: black frame + fine black spray. WIDE 18×20pt: one cell = 30 minutes (boards whose 15-minute cells would be < 0.85 × 10.5pt); stretch 0.85–1.15 at most."
+  },
   "cell-black-night": {
    "file": "cell-black-night@2x.png",
    "kind": "sprite",
@@ -578,6 +598,22 @@
    "ground": "teal paint",
    "purpose": "Duration strip on the teal event hero: black masked solid. 10.5×20pt."
   },
+  "cell-black-wide-night": {
+   "file": "cell-black-wide-night@2x.png",
+   "kind": "sprite",
+   "size": [
+    20.0,
+    22.0
+   ],
+   "bleed": [
+    1.0,
+    1.0,
+    1.0,
+    1.0
+   ],
+   "ground": "teal paint",
+   "purpose": "Duration strip on the teal event hero: black masked solid. WIDE 18×20pt: one cell = 30 minutes (boards whose 15-minute cells would be < 0.85 × 10.5pt); stretch 0.85–1.15 at most."
+  },
   "cell-empty-night": {
    "file": "cell-empty-night@2x.png",
    "kind": "sprite",
@@ -593,6 +629,22 @@
    ],
    "ground": "concrete",
    "purpose": "Board cell, free 15 min: faint white fill + 1.5pt grey masked frame. 10.5×20pt."
+  },
+  "cell-empty-wide-night": {
+   "file": "cell-empty-wide-night@2x.png",
+   "kind": "sprite",
+   "size": [
+    20.0,
+    22.0
+   ],
+   "bleed": [
+    1.0,
+    1.0,
+    1.0,
+    1.0
+   ],
+   "ground": "concrete",
+   "purpose": "Board cell, free 15 min: faint white fill + 1.5pt grey masked frame. WIDE 18×20pt: one cell = 30 minutes (boards whose 15-minute cells would be < 0.85 × 10.5pt); stretch 0.85–1.15 at most."
   },
   "cell-meeting-night": {
    "file": "cell-meeting-night@2x.png",
@@ -626,6 +678,38 @@
    "ground": "concrete",
    "purpose": "Board cell, finished meeting: darker grey masked. 10.5×20pt."
   },
+  "cell-meeting-past-wide-night": {
+   "file": "cell-meeting-past-wide-night@2x.png",
+   "kind": "sprite",
+   "size": [
+    20.0,
+    22.0
+   ],
+   "bleed": [
+    1.0,
+    1.0,
+    1.0,
+    1.0
+   ],
+   "ground": "concrete",
+   "purpose": "Board cell, finished meeting: darker grey masked. WIDE 18×20pt: one cell = 30 minutes (boards whose 15-minute cells would be < 0.85 × 10.5pt); stretch 0.85–1.15 at most."
+  },
+  "cell-meeting-wide-night": {
+   "file": "cell-meeting-wide-night@2x.png",
+   "kind": "sprite",
+   "size": [
+    20.0,
+    22.0
+   ],
+   "bleed": [
+    1.0,
+    1.0,
+    1.0,
+    1.0
+   ],
+   "ground": "concrete",
+   "purpose": "Board cell, meeting: meeting-grey masked. WIDE 18×20pt: one cell = 30 minutes (boards whose 15-minute cells would be < 0.85 × 10.5pt); stretch 0.85–1.15 at most."
+  },
   "cell-outline-night": {
    "file": "cell-outline-night@2x.png",
    "kind": "sprite",
@@ -641,6 +725,22 @@
    ],
    "ground": "black slab",
    "purpose": "Duration strip on the calm hero for tomorrow's meeting: pale 1.5pt frame. 10.5×20pt."
+  },
+  "cell-outline-wide-night": {
+   "file": "cell-outline-wide-night@2x.png",
+   "kind": "sprite",
+   "size": [
+    20.0,
+    22.0
+   ],
+   "bleed": [
+    1.0,
+    1.0,
+    1.0,
+    1.0
+   ],
+   "ground": "black slab",
+   "purpose": "Duration strip on the calm hero for tomorrow's meeting: pale 1.5pt frame. WIDE 18×20pt: one cell = 30 minutes (boards whose 15-minute cells would be < 0.85 × 10.5pt); stretch 0.85–1.15 at most."
   },
   "cell-past-night": {
    "file": "cell-past-night@2x.png",
@@ -658,6 +758,22 @@
    "ground": "concrete",
    "purpose": "Board cell, elapsed free time: dark masked fill, no frame. 10.5×20pt."
   },
+  "cell-past-wide-night": {
+   "file": "cell-past-wide-night@2x.png",
+   "kind": "sprite",
+   "size": [
+    20.0,
+    22.0
+   ],
+   "bleed": [
+    1.0,
+    1.0,
+    1.0,
+    1.0
+   ],
+   "ground": "concrete",
+   "purpose": "Board cell, elapsed free time: dark masked fill, no frame. WIDE 18×20pt: one cell = 30 minutes (boards whose 15-minute cells would be < 0.85 × 10.5pt); stretch 0.85–1.15 at most."
+  },
   "cell-teal-dots-night": {
    "file": "cell-teal-dots-night@2x.png",
    "kind": "sprite",
@@ -674,6 +790,22 @@
    "ground": "concrete",
    "purpose": "Remaining part of an in-progress / next meeting: 1pt teal frame + light fine spray inside (~40%). 10.5×20pt."
   },
+  "cell-teal-dots-wide-night": {
+   "file": "cell-teal-dots-wide-night@2x.png",
+   "kind": "sprite",
+   "size": [
+    20.0,
+    22.0
+   ],
+   "bleed": [
+    1.0,
+    1.0,
+    1.0,
+    1.0
+   ],
+   "ground": "concrete",
+   "purpose": "Remaining part of an in-progress / next meeting: 1pt teal frame + light fine spray inside (~40%). WIDE 18×20pt: one cell = 30 minutes (boards whose 15-minute cells would be < 0.85 × 10.5pt); stretch 0.85–1.15 at most."
+  },
   "cell-teal-night": {
    "file": "cell-teal-night@2x.png",
    "kind": "sprite",
@@ -689,6 +821,22 @@
    ],
    "ground": "concrete",
    "purpose": "Board / duration cell, selected meeting (or elapsed part): teal masked solid. 10.5×20pt."
+  },
+  "cell-teal-wide-night": {
+   "file": "cell-teal-wide-night@2x.png",
+   "kind": "sprite",
+   "size": [
+    20.0,
+    22.0
+   ],
+   "bleed": [
+    1.0,
+    1.0,
+    1.0,
+    1.0
+   ],
+   "ground": "concrete",
+   "purpose": "Board / duration cell, selected meeting (or elapsed part): teal masked solid. WIDE 18×20pt: one cell = 30 minutes (boards whose 15-minute cells would be < 0.85 × 10.5pt); stretch 0.85–1.15 at most."
   },
   "checkbox-checked-night": {
    "file": "checkbox-checked-night@2x.png",
@@ -819,21 +967,6 @@
    ],
    "purpose": "Base wall: quiet poured-concrete tile 512pt (no pour blotches, mid mottling, fine grain, sparse small bug holes lit top-left) — tile it under the WHOLE panel; it never visibly repeats on 520×900. Detail -2.6/+2.5% luma (text may sit anywhere on it). Texture only comes from concrete-edge-night and concrete-band-night laid on top."
   },
-  "concrete-quiet-night": {
-   "file": "concrete-quiet-night@2x.png",
-   "kind": "tile",
-   "size": [
-    512.0,
-    512.0
-   ],
-   "bleed": [
-    0.0,
-    0.0,
-    0.0,
-    0.0
-   ],
-   "purpose": "Optional: the base tile with half its detail (-1.4/+1.4% luma), pixel-aligned with concrete-night. Since v12.1 concrete-night is itself quiet, so this is redundant — kept only so older code keeps drawing; new code needs just concrete-night."
-  },
   "concrete-seam-night": {
    "file": "concrete-seam-night@2x.png",
    "kind": "slice",
@@ -906,8 +1039,8 @@
    "file": "creature-fri-grey@2x.png",
    "kind": "sprite",
    "size": [
-    296.0,
-    226.0
+    286.0,
+    218.5
    ],
    "bleed": [
     8.0,
@@ -917,47 +1050,161 @@
    ],
    "ink": [
     9.0,
-    21.0,
-    271.0,
-    207.0
+    20.0,
+    261.0,
+    199.5
    ],
    "contour": [
     null,
     null,
     null,
-    142.0,
-    9.5,
+    137.0,
     9.0,
-    11.0,
-    22.0,
-    13.5,
-    13.5,
-    16.5,
-    23.0,
-    20.5,
-    20.5,
-    40.0,
-    31.5,
-    31.5,
-    34.5,
-    47.0,
-    47.0,
-    49.5,
-    123.0,
-    124.5,
-    125.0,
-    123.0,
-    113.0,
-    113.0,
-    107.5,
+    9.0,
+    10.5,
+    21.5,
+    13.0,
+    13.0,
+    16.0,
+    22.5,
+    19.5,
+    19.5,
+    41.0,
+    30.5,
+    30.5,
+    33.0,
+    45.5,
+    45.0,
+    48.5,
+    118.5,
+    120.5,
+    120.5,
+    118.5,
+    109.0,
+    109.0,
     103.5,
-    101.0,
-    101.0,
-    119.0
+    99.5,
+    97.5,
+    97.5,
+    115.0
    ],
-   "feetY": 200.2,
+   "feetY": 193.05,
    "ground": "black slab",
-   "purpose": "Calm hero second stencil (FRI): non-fluorescent grey paint, faces left; layout rect = the 400×300 art box (280×210pt master). ink = stencil-ink box [x0, y0, x1, y1] and contour = leftmost stencil ink per band (32 equal horizontal bands of the layout rect, top to bottom; null = no ink), both in layout-rect pt (overspray excluded) — CreatureFit scales the ink to 0.76 × card height and shrinks until ≥9pt clear of text / numerals / cells. Never in event states."
+   "purpose": "Calm hero second stencil (FRI), tier -l: for the calm hero at ~472×248 (ink ≈ 180pt); scale it only 0.85–1.15 (CreatureTier picks the tier). Non-fluorescent grey paint, faces left; layout rect = the 400×300 art box (270×202.5pt). ink = stencil-ink box [x0, y0, x1, y1] and contour = leftmost stencil ink per band (32 equal horizontal bands of the layout rect, top to bottom; null = no ink), both in layout-rect pt (overspray excluded). Bridges cut ≥ 2.2pt at this size. Never in event states."
+  },
+  "creature-fri-grey-m": {
+   "file": "creature-fri-grey-m@2x.png",
+   "kind": "sprite",
+   "size": [
+    234.0,
+    179.5
+   ],
+   "bleed": [
+    8.0,
+    8.0,
+    8.0,
+    8.0
+   ],
+   "ink": [
+    7.0,
+    16.0,
+    211.0,
+    161.0
+   ],
+   "contour": [
+    null,
+    null,
+    null,
+    110.5,
+    7.5,
+    7.0,
+    8.5,
+    17.0,
+    10.5,
+    10.5,
+    13.0,
+    18.0,
+    16.0,
+    16.0,
+    33.5,
+    24.5,
+    24.5,
+    26.5,
+    36.5,
+    36.5,
+    39.0,
+    96.0,
+    97.0,
+    97.0,
+    96.0,
+    88.0,
+    88.0,
+    83.5,
+    80.5,
+    79.0,
+    79.0,
+    92.5
+   ],
+   "feetY": 155.87,
+   "ground": "black slab",
+   "purpose": "Calm hero second stencil (FRI), tier -m: for the calm hero at ~472×212 (ink ≈ 145pt); scale it only 0.85–1.15 (CreatureTier picks the tier). Non-fluorescent grey paint, faces left; layout rect = the 400×300 art box (218×163.5pt). ink = stencil-ink box [x0, y0, x1, y1] and contour = leftmost stencil ink per band (32 equal horizontal bands of the layout rect, top to bottom; null = no ink), both in layout-rect pt (overspray excluded). Bridges cut ≥ 2.2pt at this size. Never in event states."
+  },
+  "creature-fri-grey-s": {
+   "file": "creature-fri-grey-s@2x.png",
+   "kind": "sprite",
+   "size": [
+    188.0,
+    145.0
+   ],
+   "bleed": [
+    8.0,
+    8.0,
+    8.0,
+    8.0
+   ],
+   "ink": [
+    5.5,
+    12.5,
+    166.5,
+    127.0
+   ],
+   "contour": [
+    null,
+    null,
+    null,
+    87.0,
+    6.0,
+    5.5,
+    7.0,
+    13.5,
+    8.0,
+    8.0,
+    10.0,
+    14.5,
+    12.5,
+    12.5,
+    23.5,
+    19.5,
+    19.5,
+    21.5,
+    29.0,
+    29.0,
+    30.5,
+    75.5,
+    76.5,
+    76.5,
+    75.5,
+    69.5,
+    69.5,
+    66.0,
+    64.0,
+    62.0,
+    62.0,
+    73.0
+   ],
+   "feetY": 122.98,
+   "ground": "black slab",
+   "purpose": "Calm hero second stencil (FRI), tier -s: for the short calm card 472×150 (ink ≈ 114pt); scale it only 0.85–1.15 (CreatureTier picks the tier). Non-fluorescent grey paint, faces left; layout rect = the 400×300 art box (172×129pt). ink = stencil-ink box [x0, y0, x1, y1] and contour = leftmost stencil ink per band (32 equal horizontal bands of the layout rect, top to bottom; null = no ink), both in layout-rect pt (overspray excluded). Bridges cut ≥ 2.2pt at this size. Never in event states."
   },
   "creature-fri-teal": {
    "file": "creature-fri-teal@2x.png",
@@ -983,8 +1230,8 @@
    "file": "creature-mon-grey@2x.png",
    "kind": "sprite",
    "size": [
-    296.0,
-    226.0
+    274.0,
+    209.5
    ],
    "bleed": [
     8.0,
@@ -993,48 +1240,162 @@
     8.0
    ],
    "ink": [
-    40.0,
-    5.5,
-    275.5,
-    200.0
+    37.0,
+    5.0,
+    254.0,
+    184.5
    ],
    "contour": [
-    54.5,
-    54.5,
-    55.0,
-    55.0,
-    55.5,
-    55.5,
-    56.0,
-    54.5,
-    49.5,
-    42.5,
-    40.0,
-    40.0,
-    49.5,
+    50.5,
+    50.5,
     50.5,
     51.0,
+    51.0,
     51.5,
-    52.5,
-    53.0,
-    54.0,
-    54.5,
-    55.5,
-    104.5,
-    104.0,
-    104.0,
-    104.0,
-    104.0,
-    104.0,
-    103.5,
-    103.5,
-    98.5,
-    98.5,
+    51.5,
+    50.0,
+    46.0,
+    39.5,
+    37.0,
+    37.0,
+    45.5,
+    46.5,
+    47.0,
+    47.5,
+    48.5,
+    49.0,
+    50.0,
+    50.0,
+    51.0,
+    96.0,
+    96.0,
+    96.0,
+    96.0,
+    96.0,
+    95.5,
+    95.5,
+    95.5,
+    90.5,
+    90.5,
     null
    ],
-   "feetY": 200.2,
+   "feetY": 184.47,
    "ground": "black slab",
-   "purpose": "Calm hero second stencil (MON): non-fluorescent grey paint, faces left; layout rect = the 400×300 art box (280×210pt master). ink = stencil-ink box [x0, y0, x1, y1] and contour = leftmost stencil ink per band (32 equal horizontal bands of the layout rect, top to bottom; null = no ink), both in layout-rect pt (overspray excluded) — CreatureFit scales the ink to 0.76 × card height and shrinks until ≥9pt clear of text / numerals / cells. Never in event states."
+   "purpose": "Calm hero second stencil (MON), tier -l: for the calm hero at ~472×248 (ink ≈ 180pt); scale it only 0.85–1.15 (CreatureTier picks the tier). Non-fluorescent grey paint, faces left; layout rect = the 400×300 art box (258×193.5pt). ink = stencil-ink box [x0, y0, x1, y1] and contour = leftmost stencil ink per band (32 equal horizontal bands of the layout rect, top to bottom; null = no ink), both in layout-rect pt (overspray excluded). Bridges cut ≥ 2.2pt at this size. Never in event states."
+  },
+  "creature-mon-grey-m": {
+   "file": "creature-mon-grey-m@2x.png",
+   "kind": "sprite",
+   "size": [
+    224.0,
+    172.0
+   ],
+   "bleed": [
+    8.0,
+    8.0,
+    8.0,
+    8.0
+   ],
+   "ink": [
+    29.5,
+    4.0,
+    204.5,
+    148.5
+   ],
+   "contour": [
+    40.5,
+    40.5,
+    41.0,
+    41.0,
+    41.5,
+    41.5,
+    41.5,
+    40.5,
+    37.0,
+    31.5,
+    29.5,
+    30.0,
+    37.0,
+    37.5,
+    38.0,
+    38.5,
+    39.0,
+    39.5,
+    40.5,
+    40.5,
+    41.0,
+    77.5,
+    77.5,
+    77.5,
+    77.0,
+    77.0,
+    77.0,
+    77.0,
+    77.0,
+    73.0,
+    73.0,
+    null
+   ],
+   "feetY": 148.72,
+   "ground": "black slab",
+   "purpose": "Calm hero second stencil (MON), tier -m: for the calm hero at ~472×212 (ink ≈ 145pt); scale it only 0.85–1.15 (CreatureTier picks the tier). Non-fluorescent grey paint, faces left; layout rect = the 400×300 art box (208×156pt). ink = stencil-ink box [x0, y0, x1, y1] and contour = leftmost stencil ink per band (32 equal horizontal bands of the layout rect, top to bottom; null = no ink), both in layout-rect pt (overspray excluded). Bridges cut ≥ 2.2pt at this size. Never in event states."
+  },
+  "creature-mon-grey-s": {
+   "file": "creature-mon-grey-s@2x.png",
+   "kind": "sprite",
+   "size": [
+    180.0,
+    139.0
+   ],
+   "bleed": [
+    8.0,
+    8.0,
+    8.0,
+    8.0
+   ],
+   "ink": [
+    23.5,
+    3.5,
+    161.5,
+    117.5
+   ],
+   "contour": [
+    32.0,
+    32.0,
+    32.0,
+    32.5,
+    32.5,
+    32.5,
+    33.0,
+    31.5,
+    29.0,
+    25.0,
+    23.5,
+    23.5,
+    29.0,
+    29.5,
+    30.0,
+    30.0,
+    30.5,
+    31.0,
+    32.0,
+    32.0,
+    32.5,
+    61.0,
+    61.0,
+    61.0,
+    61.0,
+    61.0,
+    60.5,
+    60.5,
+    60.5,
+    57.5,
+    57.5,
+    null
+   ],
+   "feetY": 117.26,
+   "ground": "black slab",
+   "purpose": "Calm hero second stencil (MON), tier -s: for the short calm card 472×150 (ink ≈ 114pt); scale it only 0.85–1.15 (CreatureTier picks the tier). Non-fluorescent grey paint, faces left; layout rect = the 400×300 art box (164×123pt). ink = stencil-ink box [x0, y0, x1, y1] and contour = leftmost stencil ink per band (32 equal horizontal bands of the layout rect, top to bottom; null = no ink), both in layout-rect pt (overspray excluded). Bridges cut ≥ 2.2pt at this size. Never in event states."
   },
   "creature-mon-teal": {
    "file": "creature-mon-teal@2x.png",
@@ -1060,8 +1421,8 @@
    "file": "creature-sat-grey@2x.png",
    "kind": "sprite",
    "size": [
-    296.0,
-    226.0
+    300.0,
+    229.0
    ],
    "bleed": [
     8.0,
@@ -1070,48 +1431,162 @@
     8.0
    ],
    "ink": [
-    39.0,
-    24.0,
-    274.5,
-    201.5
+    39.5,
+    24.5,
+    278.5,
+    204.0
    ],
    "contour": [
     null,
     null,
     null,
-    78.0,
-    76.5,
-    67.5,
-    60.5,
-    54.5,
-    48.5,
-    43.5,
-    39.5,
-    39.0,
+    79.0,
+    77.5,
+    68.5,
+    61.0,
+    55.0,
+    49.5,
+    44.0,
     40.0,
-    72.0,
-    74.0,
-    76.5,
-    83.0,
-    85.0,
-    85.5,
-    81.5,
+    39.5,
+    40.5,
+    73.0,
+    75.5,
     78.0,
-    74.5,
-    71.5,
-    69.5,
-    65.0,
-    62.0,
-    59.0,
-    56.5,
-    48.0,
-    48.0,
-    88.5,
+    84.5,
+    86.0,
+    87.0,
+    82.5,
+    79.0,
+    76.0,
+    72.5,
+    70.5,
+    66.0,
+    62.5,
+    59.5,
+    57.5,
+    48.5,
+    48.5,
+    90.0,
     null
    ],
-   "feetY": 200.2,
+   "feetY": 203.06,
    "ground": "black slab",
-   "purpose": "Calm hero second stencil (SAT): non-fluorescent grey paint, faces left; layout rect = the 400×300 art box (280×210pt master). ink = stencil-ink box [x0, y0, x1, y1] and contour = leftmost stencil ink per band (32 equal horizontal bands of the layout rect, top to bottom; null = no ink), both in layout-rect pt (overspray excluded) — CreatureFit scales the ink to 0.76 × card height and shrinks until ≥9pt clear of text / numerals / cells. Never in event states."
+   "purpose": "Calm hero second stencil (SAT), tier -l: for the calm hero at ~472×248 (ink ≈ 180pt); scale it only 0.85–1.15 (CreatureTier picks the tier). Non-fluorescent grey paint, faces left; layout rect = the 400×300 art box (284×213pt). ink = stencil-ink box [x0, y0, x1, y1] and contour = leftmost stencil ink per band (32 equal horizontal bands of the layout rect, top to bottom; null = no ink), both in layout-rect pt (overspray excluded). Bridges cut ≥ 2.2pt at this size. Never in event states."
+  },
+  "creature-sat-grey-m": {
+   "file": "creature-sat-grey-m@2x.png",
+   "kind": "sprite",
+   "size": [
+    244.0,
+    187.0
+   ],
+   "bleed": [
+    8.0,
+    8.0,
+    8.0,
+    8.0
+   ],
+   "ink": [
+    31.5,
+    19.5,
+    223.5,
+    164.0
+   ],
+   "contour": [
+    null,
+    null,
+    null,
+    63.5,
+    62.5,
+    54.5,
+    49.5,
+    44.0,
+    39.5,
+    35.5,
+    32.0,
+    31.5,
+    32.5,
+    58.5,
+    60.5,
+    62.5,
+    68.0,
+    69.0,
+    69.5,
+    66.5,
+    63.5,
+    60.5,
+    58.0,
+    56.5,
+    53.0,
+    50.5,
+    48.0,
+    46.0,
+    39.0,
+    39.0,
+    72.0,
+    null
+   ],
+   "feetY": 163.02,
+   "ground": "black slab",
+   "purpose": "Calm hero second stencil (SAT), tier -m: for the calm hero at ~472×212 (ink ≈ 145pt); scale it only 0.85–1.15 (CreatureTier picks the tier). Non-fluorescent grey paint, faces left; layout rect = the 400×300 art box (228×171pt). ink = stencil-ink box [x0, y0, x1, y1] and contour = leftmost stencil ink per band (32 equal horizontal bands of the layout rect, top to bottom; null = no ink), both in layout-rect pt (overspray excluded). Bridges cut ≥ 2.2pt at this size. Never in event states."
+  },
+  "creature-sat-grey-s": {
+   "file": "creature-sat-grey-s@2x.png",
+   "kind": "sprite",
+   "size": [
+    196.0,
+    151.0
+   ],
+   "bleed": [
+    8.0,
+    8.0,
+    8.0,
+    8.0
+   ],
+   "ink": [
+    25.5,
+    15.5,
+    176.5,
+    129.5
+   ],
+   "contour": [
+    null,
+    null,
+    null,
+    50.5,
+    49.5,
+    43.5,
+    38.5,
+    35.0,
+    31.5,
+    28.0,
+    25.5,
+    25.5,
+    25.5,
+    46.0,
+    48.0,
+    49.0,
+    53.5,
+    54.5,
+    55.0,
+    52.5,
+    50.0,
+    48.0,
+    46.0,
+    45.0,
+    42.0,
+    40.0,
+    38.0,
+    36.5,
+    31.0,
+    31.0,
+    57.0,
+    null
+   ],
+   "feetY": 128.7,
+   "ground": "black slab",
+   "purpose": "Calm hero second stencil (SAT), tier -s: for the short calm card 472×150 (ink ≈ 114pt); scale it only 0.85–1.15 (CreatureTier picks the tier). Non-fluorescent grey paint, faces left; layout rect = the 400×300 art box (180×135pt). ink = stencil-ink box [x0, y0, x1, y1] and contour = leftmost stencil ink per band (32 equal horizontal bands of the layout rect, top to bottom; null = no ink), both in layout-rect pt (overspray excluded). Bridges cut ≥ 2.2pt at this size. Never in event states."
   },
   "creature-sat-teal": {
    "file": "creature-sat-teal@2x.png",
@@ -1137,8 +1612,8 @@
    "file": "creature-sun-grey@2x.png",
    "kind": "sprite",
    "size": [
-    296.0,
-    226.0
+    264.0,
+    202.0
    ],
    "bleed": [
     8.0,
@@ -1147,48 +1622,162 @@
     8.0
    ],
    "ink": [
-    45.0,
-    2.5,
-    275.5,
-    205.5
+    39.5,
+    2.0,
+    244.0,
+    182.0
    ],
    "contour": [
-    71.5,
-    66.5,
-    65.0,
-    65.0,
-    65.5,
-    52.5,
-    45.0,
-    45.5,
-    62.0,
-    60.5,
-    60.0,
-    61.0,
-    61.5,
     63.5,
-    66.5,
-    70.0,
-    74.5,
-    86.0,
-    86.5,
-    88.0,
-    91.0,
+    59.0,
+    57.5,
+    57.5,
+    58.0,
+    46.5,
+    39.5,
+    41.0,
+    55.0,
+    53.5,
+    53.0,
+    54.0,
+    54.5,
+    56.5,
+    59.0,
+    62.0,
+    66.0,
+    76.5,
+    76.5,
+    78.0,
+    80.5,
+    85.5,
+    94.0,
+    98.0,
+    97.0,
     96.0,
-    106.0,
-    110.5,
-    109.5,
-    108.5,
-    106.5,
-    105.0,
-    93.5,
-    93.5,
-    93.5,
-    97.0
+    94.5,
+    93.0,
+    83.0,
+    83.0,
+    82.5,
+    86.0
    ],
-   "feetY": 200.2,
+   "feetY": 177.32,
    "ground": "black slab",
-   "purpose": "Calm hero second stencil (SUN): non-fluorescent grey paint, faces left; layout rect = the 400×300 art box (280×210pt master). ink = stencil-ink box [x0, y0, x1, y1] and contour = leftmost stencil ink per band (32 equal horizontal bands of the layout rect, top to bottom; null = no ink), both in layout-rect pt (overspray excluded) — CreatureFit scales the ink to 0.76 × card height and shrinks until ≥9pt clear of text / numerals / cells. Never in event states."
+   "purpose": "Calm hero second stencil (SUN), tier -l: for the calm hero at ~472×248 (ink ≈ 180pt); scale it only 0.85–1.15 (CreatureTier picks the tier). Non-fluorescent grey paint, faces left; layout rect = the 400×300 art box (248×186pt). ink = stencil-ink box [x0, y0, x1, y1] and contour = leftmost stencil ink per band (32 equal horizontal bands of the layout rect, top to bottom; null = no ink), both in layout-rect pt (overspray excluded). Bridges cut ≥ 2.2pt at this size. Never in event states."
+  },
+  "creature-sun-grey-m": {
+   "file": "creature-sun-grey-m@2x.png",
+   "kind": "sprite",
+   "size": [
+    216.0,
+    166.0
+   ],
+   "bleed": [
+    8.0,
+    8.0,
+    8.0,
+    8.0
+   ],
+   "ink": [
+    32.0,
+    2.0,
+    196.5,
+    147.0
+   ],
+   "contour": [
+    51.0,
+    48.0,
+    46.5,
+    46.5,
+    47.0,
+    37.0,
+    32.0,
+    32.5,
+    44.5,
+    43.0,
+    43.0,
+    43.5,
+    44.0,
+    45.5,
+    47.5,
+    50.0,
+    53.5,
+    61.5,
+    62.0,
+    63.0,
+    65.0,
+    68.5,
+    76.0,
+    79.0,
+    78.0,
+    77.5,
+    76.0,
+    75.0,
+    67.0,
+    66.5,
+    66.5,
+    69.0
+   ],
+   "feetY": 143.0,
+   "ground": "black slab",
+   "purpose": "Calm hero second stencil (SUN), tier -m: for the calm hero at ~472×212 (ink ≈ 145pt); scale it only 0.85–1.15 (CreatureTier picks the tier). Non-fluorescent grey paint, faces left; layout rect = the 400×300 art box (200×150pt). ink = stencil-ink box [x0, y0, x1, y1] and contour = leftmost stencil ink per band (32 equal horizontal bands of the layout rect, top to bottom; null = no ink), both in layout-rect pt (overspray excluded). Bridges cut ≥ 2.2pt at this size. Never in event states."
+  },
+  "creature-sun-grey-s": {
+   "file": "creature-sun-grey-s@2x.png",
+   "kind": "sprite",
+   "size": [
+    174.0,
+    134.5
+   ],
+   "bleed": [
+    8.0,
+    8.0,
+    8.0,
+    8.0
+   ],
+   "ink": [
+    25.5,
+    1.5,
+    155.5,
+    116.0
+   ],
+   "contour": [
+    40.5,
+    37.5,
+    36.5,
+    36.5,
+    37.0,
+    29.5,
+    25.5,
+    25.5,
+    35.0,
+    34.0,
+    34.0,
+    34.5,
+    34.5,
+    36.0,
+    37.5,
+    39.5,
+    42.0,
+    48.5,
+    49.0,
+    49.5,
+    51.5,
+    54.0,
+    59.5,
+    62.5,
+    61.5,
+    61.5,
+    60.0,
+    59.0,
+    53.0,
+    52.5,
+    52.5,
+    54.5
+   ],
+   "feetY": 112.97,
+   "ground": "black slab",
+   "purpose": "Calm hero second stencil (SUN), tier -s: for the short calm card 472×150 (ink ≈ 114pt); scale it only 0.85–1.15 (CreatureTier picks the tier). Non-fluorescent grey paint, faces left; layout rect = the 400×300 art box (158×118.5pt). ink = stencil-ink box [x0, y0, x1, y1] and contour = leftmost stencil ink per band (32 equal horizontal bands of the layout rect, top to bottom; null = no ink), both in layout-rect pt (overspray excluded). Bridges cut ≥ 2.2pt at this size. Never in event states."
   },
   "creature-sun-teal": {
    "file": "creature-sun-teal@2x.png",
@@ -1214,8 +1803,8 @@
    "file": "creature-thu-grey@2x.png",
    "kind": "sprite",
    "size": [
-    296.0,
-    226.0
+    310.0,
+    236.5
    ],
    "bleed": [
     8.0,
@@ -1224,48 +1813,162 @@
     8.0
    ],
    "ink": [
-    20.0,
-    16.5,
-    257.5,
-    188.0
+    21.0,
+    17.5,
+    270.5,
+    197.5
    ],
    "contour": [
     null,
     null,
-    79.5,
-    78.0,
-    78.5,
-    81.5,
-    80.0,
-    79.0,
-    78.0,
-    70.0,
-    70.0,
-    77.0,
-    77.5,
     83.5,
+    82.0,
+    82.5,
     85.5,
-    86.0,
-    86.5,
-    87.5,
+    84.0,
+    83.0,
+    81.5,
+    74.0,
+    74.0,
+    81.0,
+    81.5,
     88.0,
-    91.0,
-    91.0,
-    91.0,
+    89.5,
+    90.0,
     91.0,
     91.5,
-    59.0,
-    21.0,
-    20.5,
-    20.0,
+    92.5,
+    95.5,
+    95.5,
+    95.5,
+    95.5,
+    96.0,
+    66.0,
     22.0,
+    21.5,
+    21.0,
+    23.0,
     null,
     null,
     null
    ],
-   "feetY": 200.2,
+   "feetY": 210.21,
    "ground": "black slab",
-   "purpose": "Calm hero second stencil (THU): non-fluorescent grey paint, faces left; layout rect = the 400×300 art box (280×210pt master). ink = stencil-ink box [x0, y0, x1, y1] and contour = leftmost stencil ink per band (32 equal horizontal bands of the layout rect, top to bottom; null = no ink), both in layout-rect pt (overspray excluded) — CreatureFit scales the ink to 0.76 × card height and shrinks until ≥9pt clear of text / numerals / cells. Never in event states."
+   "purpose": "Calm hero second stencil (THU), tier -l: for the calm hero at ~472×248 (ink ≈ 180pt); scale it only 0.85–1.15 (CreatureTier picks the tier). Non-fluorescent grey paint, faces left; layout rect = the 400×300 art box (294×220.5pt). ink = stencil-ink box [x0, y0, x1, y1] and contour = leftmost stencil ink per band (32 equal horizontal bands of the layout rect, top to bottom; null = no ink), both in layout-rect pt (overspray excluded). Bridges cut ≥ 2.2pt at this size. Never in event states."
+  },
+  "creature-thu-grey-m": {
+   "file": "creature-thu-grey-m@2x.png",
+   "kind": "sprite",
+   "size": [
+    252.0,
+    193.0
+   ],
+   "bleed": [
+    8.0,
+    8.0,
+    8.0,
+    8.0
+   ],
+   "ink": [
+    17.0,
+    14.0,
+    217.0,
+    158.5
+   ],
+   "contour": [
+    null,
+    null,
+    67.0,
+    66.0,
+    66.0,
+    69.0,
+    67.5,
+    66.5,
+    66.0,
+    59.0,
+    59.0,
+    65.0,
+    65.0,
+    70.5,
+    72.0,
+    72.5,
+    73.0,
+    73.5,
+    74.0,
+    77.0,
+    76.5,
+    76.5,
+    77.0,
+    77.0,
+    52.5,
+    17.5,
+    17.5,
+    17.0,
+    18.5,
+    null,
+    null,
+    null
+   ],
+   "feetY": 168.74,
+   "ground": "black slab",
+   "purpose": "Calm hero second stencil (THU), tier -m: for the calm hero at ~472×212 (ink ≈ 145pt); scale it only 0.85–1.15 (CreatureTier picks the tier). Non-fluorescent grey paint, faces left; layout rect = the 400×300 art box (236×177pt). ink = stencil-ink box [x0, y0, x1, y1] and contour = leftmost stencil ink per band (32 equal horizontal bands of the layout rect, top to bottom; null = no ink), both in layout-rect pt (overspray excluded). Bridges cut ≥ 2.2pt at this size. Never in event states."
+  },
+  "creature-thu-grey-s": {
+   "file": "creature-thu-grey-s@2x.png",
+   "kind": "sprite",
+   "size": [
+    202.0,
+    155.5
+   ],
+   "bleed": [
+    8.0,
+    8.0,
+    8.0,
+    8.0
+   ],
+   "ink": [
+    13.5,
+    11.0,
+    171.0,
+    125.0
+   ],
+   "contour": [
+    null,
+    null,
+    52.5,
+    52.0,
+    52.0,
+    54.5,
+    53.0,
+    52.5,
+    52.0,
+    46.5,
+    46.5,
+    51.5,
+    51.5,
+    55.5,
+    56.5,
+    57.0,
+    57.5,
+    58.0,
+    58.5,
+    60.5,
+    60.5,
+    60.5,
+    60.5,
+    61.0,
+    45.5,
+    14.0,
+    13.5,
+    13.5,
+    14.5,
+    null,
+    null,
+    null
+   ],
+   "feetY": 132.99,
+   "ground": "black slab",
+   "purpose": "Calm hero second stencil (THU), tier -s: for the short calm card 472×150 (ink ≈ 114pt); scale it only 0.85–1.15 (CreatureTier picks the tier). Non-fluorescent grey paint, faces left; layout rect = the 400×300 art box (186×139.5pt). ink = stencil-ink box [x0, y0, x1, y1] and contour = leftmost stencil ink per band (32 equal horizontal bands of the layout rect, top to bottom; null = no ink), both in layout-rect pt (overspray excluded). Bridges cut ≥ 2.2pt at this size. Never in event states."
   },
   "creature-thu-teal": {
    "file": "creature-thu-teal@2x.png",
@@ -1291,8 +1994,8 @@
    "file": "creature-tue-grey@2x.png",
    "kind": "sprite",
    "size": [
-    296.0,
-    226.0
+    268.0,
+    205.0
    ],
    "bleed": [
     8.0,
@@ -1301,48 +2004,162 @@
     8.0
    ],
    "ink": [
-    34.5,
-    3.5,
-    275.5,
-    204.0
+    31.0,
+    3.0,
+    248.0,
+    183.5
    ],
    "contour": [
-    166.0,
-    164.0,
-    143.5,
-    99.0,
-    94.0,
-    72.0,
-    46.0,
-    38.5,
-    35.0,
+    150.0,
+    147.5,
+    129.5,
+    89.0,
+    84.5,
+    65.0,
+    41.0,
     34.5,
-    34.5,
+    31.5,
+    31.0,
+    31.0,
+    63.0,
+    61.5,
+    61.0,
+    61.0,
+    61.5,
+    62.5,
+    65.0,
     70.0,
-    68.5,
-    68.0,
-    67.5,
-    68.0,
-    69.5,
-    72.5,
-    78.0,
-    86.0,
-    43.5,
-    43.0,
+    77.5,
+    39.0,
+    38.5,
+    38.5,
     42.5,
-    47.0,
-    71.5,
-    108.0,
-    109.0,
-    109.0,
+    44.5,
     97.5,
-    97.5,
-    98.0,
-    102.0
+    98.5,
+    98.5,
+    88.0,
+    87.5,
+    88.5,
+    92.5
    ],
-   "feetY": 200.2,
+   "feetY": 180.18,
    "ground": "black slab",
-   "purpose": "Calm hero second stencil (TUE): non-fluorescent grey paint, faces left; layout rect = the 400×300 art box (280×210pt master). ink = stencil-ink box [x0, y0, x1, y1] and contour = leftmost stencil ink per band (32 equal horizontal bands of the layout rect, top to bottom; null = no ink), both in layout-rect pt (overspray excluded) — CreatureFit scales the ink to 0.76 × card height and shrinks until ≥9pt clear of text / numerals / cells. Never in event states."
+   "purpose": "Calm hero second stencil (TUE), tier -l: for the calm hero at ~472×248 (ink ≈ 180pt); scale it only 0.85–1.15 (CreatureTier picks the tier). Non-fluorescent grey paint, faces left; layout rect = the 400×300 art box (252×189pt). ink = stencil-ink box [x0, y0, x1, y1] and contour = leftmost stencil ink per band (32 equal horizontal bands of the layout rect, top to bottom; null = no ink), both in layout-rect pt (overspray excluded). Bridges cut ≥ 2.2pt at this size. Never in event states."
+  },
+  "creature-tue-grey-m": {
+   "file": "creature-tue-grey-m@2x.png",
+   "kind": "sprite",
+   "size": [
+    218.0,
+    167.5
+   ],
+   "bleed": [
+    8.0,
+    8.0,
+    8.0,
+    8.0
+   ],
+   "ink": [
+    25.0,
+    2.5,
+    199.0,
+    147.0
+   ],
+   "contour": [
+    120.0,
+    118.5,
+    103.5,
+    71.5,
+    67.5,
+    52.0,
+    32.5,
+    27.5,
+    25.5,
+    25.0,
+    25.0,
+    50.5,
+    49.0,
+    49.0,
+    49.0,
+    49.0,
+    50.0,
+    52.0,
+    56.0,
+    62.0,
+    31.5,
+    31.0,
+    31.0,
+    34.0,
+    51.5,
+    78.0,
+    79.0,
+    79.0,
+    70.5,
+    70.5,
+    71.0,
+    74.0
+   ],
+   "feetY": 144.43,
+   "ground": "black slab",
+   "purpose": "Calm hero second stencil (TUE), tier -m: for the calm hero at ~472×212 (ink ≈ 145pt); scale it only 0.85–1.15 (CreatureTier picks the tier). Non-fluorescent grey paint, faces left; layout rect = the 400×300 art box (202×151.5pt). ink = stencil-ink box [x0, y0, x1, y1] and contour = leftmost stencil ink per band (32 equal horizontal bands of the layout rect, top to bottom; null = no ink), both in layout-rect pt (overspray excluded). Bridges cut ≥ 2.2pt at this size. Never in event states."
+  },
+  "creature-tue-grey-s": {
+   "file": "creature-tue-grey-s@2x.png",
+   "kind": "sprite",
+   "size": [
+    176.0,
+    136.0
+   ],
+   "bleed": [
+    8.0,
+    8.0,
+    8.0,
+    8.0
+   ],
+   "ink": [
+    20.0,
+    2.0,
+    157.5,
+    116.5
+   ],
+   "contour": [
+    95.0,
+    94.0,
+    82.0,
+    56.5,
+    53.5,
+    41.5,
+    26.0,
+    22.0,
+    20.0,
+    20.0,
+    20.0,
+    40.0,
+    39.0,
+    39.0,
+    38.5,
+    39.0,
+    40.0,
+    41.0,
+    44.5,
+    49.0,
+    25.0,
+    24.5,
+    24.5,
+    27.0,
+    41.0,
+    61.5,
+    62.5,
+    62.5,
+    56.0,
+    55.5,
+    56.5,
+    58.5
+   ],
+   "feetY": 114.4,
+   "ground": "black slab",
+   "purpose": "Calm hero second stencil (TUE), tier -s: for the short calm card 472×150 (ink ≈ 114pt); scale it only 0.85–1.15 (CreatureTier picks the tier). Non-fluorescent grey paint, faces left; layout rect = the 400×300 art box (160×120pt). ink = stencil-ink box [x0, y0, x1, y1] and contour = leftmost stencil ink per band (32 equal horizontal bands of the layout rect, top to bottom; null = no ink), both in layout-rect pt (overspray excluded). Bridges cut ≥ 2.2pt at this size. Never in event states."
   },
   "creature-tue-teal": {
    "file": "creature-tue-teal@2x.png",
@@ -1368,8 +2185,8 @@
    "file": "creature-wed-grey@2x.png",
    "kind": "sprite",
    "size": [
-    296.0,
-    226.0
+    318.0,
+    242.5
    ],
    "bleed": [
     8.0,
@@ -1378,10 +2195,10 @@
     8.0
    ],
    "ink": [
-    23.5,
-    33.5,
-    274.0,
-    200.0
+    25.5,
+    36.0,
+    295.5,
+    216.0
    ],
    "contour": [
     null,
@@ -1389,37 +2206,151 @@
     null,
     null,
     null,
-    93.0,
-    91.5,
-    60.5,
+    100.0,
+    83.5,
+    65.0,
+    58.5,
+    29.5,
+    26.0,
+    25.5,
+    25.5,
+    28.5,
+    35.0,
+    65.0,
     54.5,
-    27.0,
-    24.0,
-    23.5,
-    24.0,
-    26.5,
-    32.0,
-    60.5,
-    50.5,
-    50.0,
-    104.0,
-    104.0,
-    104.0,
-    103.5,
-    103.0,
-    103.0,
-    102.5,
-    102.5,
-    102.0,
-    101.5,
-    99.0,
-    92.5,
-    92.5,
+    54.0,
+    112.5,
+    112.5,
+    112.0,
+    111.5,
+    111.0,
+    111.0,
+    110.5,
+    110.5,
+    110.0,
+    109.5,
+    106.5,
+    99.5,
+    99.5,
     null
    ],
-   "feetY": 200.2,
+   "feetY": 215.93,
    "ground": "black slab",
-   "purpose": "Calm hero second stencil (WED): non-fluorescent grey paint, faces left; layout rect = the 400×300 art box (280×210pt master). ink = stencil-ink box [x0, y0, x1, y1] and contour = leftmost stencil ink per band (32 equal horizontal bands of the layout rect, top to bottom; null = no ink), both in layout-rect pt (overspray excluded) — CreatureFit scales the ink to 0.76 × card height and shrinks until ≥9pt clear of text / numerals / cells. Never in event states."
+   "purpose": "Calm hero second stencil (WED), tier -l: for the calm hero at ~472×248 (ink ≈ 180pt); scale it only 0.85–1.15 (CreatureTier picks the tier). Non-fluorescent grey paint, faces left; layout rect = the 400×300 art box (302×226.5pt). ink = stencil-ink box [x0, y0, x1, y1] and contour = leftmost stencil ink per band (32 equal horizontal bands of the layout rect, top to bottom; null = no ink), both in layout-rect pt (overspray excluded). Bridges cut ≥ 2.2pt at this size. Never in event states."
+  },
+  "creature-wed-grey-m": {
+   "file": "creature-wed-grey-m@2x.png",
+   "kind": "sprite",
+   "size": [
+    260.0,
+    199.0
+   ],
+   "bleed": [
+    8.0,
+    8.0,
+    8.0,
+    8.0
+   ],
+   "ink": [
+    20.5,
+    29.0,
+    238.5,
+    174.5
+   ],
+   "contour": [
+    null,
+    null,
+    null,
+    null,
+    null,
+    81.0,
+    67.5,
+    52.5,
+    47.5,
+    23.5,
+    21.0,
+    20.5,
+    21.0,
+    23.0,
+    28.0,
+    53.0,
+    44.0,
+    43.5,
+    91.0,
+    91.0,
+    90.5,
+    90.0,
+    90.0,
+    89.5,
+    89.5,
+    89.0,
+    89.0,
+    88.5,
+    86.0,
+    80.5,
+    80.5,
+    null
+   ],
+   "feetY": 174.46,
+   "ground": "black slab",
+   "purpose": "Calm hero second stencil (WED), tier -m: for the calm hero at ~472×212 (ink ≈ 145pt); scale it only 0.85–1.15 (CreatureTier picks the tier). Non-fluorescent grey paint, faces left; layout rect = the 400×300 art box (244×183pt). ink = stencil-ink box [x0, y0, x1, y1] and contour = leftmost stencil ink per band (32 equal horizontal bands of the layout rect, top to bottom; null = no ink), both in layout-rect pt (overspray excluded). Bridges cut ≥ 2.2pt at this size. Never in event states."
+  },
+  "creature-wed-grey-s": {
+   "file": "creature-wed-grey-s@2x.png",
+   "kind": "sprite",
+   "size": [
+    208.0,
+    160.0
+   ],
+   "bleed": [
+    8.0,
+    8.0,
+    8.0,
+    8.0
+   ],
+   "ink": [
+    16.0,
+    23.0,
+    187.5,
+    137.5
+   ],
+   "contour": [
+    null,
+    null,
+    null,
+    null,
+    null,
+    63.5,
+    63.0,
+    41.5,
+    37.5,
+    19.0,
+    16.5,
+    16.0,
+    16.5,
+    18.0,
+    22.5,
+    42.0,
+    35.0,
+    34.5,
+    71.5,
+    71.5,
+    71.0,
+    71.0,
+    70.5,
+    70.5,
+    70.5,
+    70.0,
+    70.0,
+    69.5,
+    68.5,
+    63.5,
+    63.5,
+    null
+   ],
+   "feetY": 137.28,
+   "ground": "black slab",
+   "purpose": "Calm hero second stencil (WED), tier -s: for the short calm card 472×150 (ink ≈ 114pt); scale it only 0.85–1.15 (CreatureTier picks the tier). Non-fluorescent grey paint, faces left; layout rect = the 400×300 art box (192×144pt). ink = stencil-ink box [x0, y0, x1, y1] and contour = leftmost stencil ink per band (32 equal horizontal bands of the layout rect, top to bottom; null = no ink), both in layout-rect pt (overspray excluded). Bridges cut ≥ 2.2pt at this size. Never in event states."
   },
   "creature-wed-teal": {
    "file": "creature-wed-teal@2x.png",
@@ -1459,6 +2390,24 @@
    "ground": "concrete",
    "purpose": "Header weekday FRIDAY: white stencil sprayed on concrete, 31pt, with a faint second pass of meeting grey re-laid 1pt right / 0.5pt down (two-pass misregistration, V4 §2.6)."
   },
+  "day-friday-white-night-s": {
+   "file": "day-friday-white-night-s@2x.png",
+   "kind": "sprite",
+   "size": [
+    135.0,
+    32.5
+   ],
+   "bleed": [
+    7.02,
+    7.0,
+    8.22,
+    9.0
+   ],
+   "baseline": 24.28,
+   "capHeight": 17.26,
+   "ground": "concrete",
+   "purpose": "Header weekday FRIDAY, SHORT: 0.8× of day-friday-white-night (24.8pt cap box) for when the long name does not fit the header budget; white stencil on concrete, bridges ≈ 2pt, the same faint meeting-grey second pass re-laid 1pt right / 0.5pt down. baseline / capHeight as day-*."
+  },
   "day-monday-white-night": {
    "file": "day-monday-white-night@2x.png",
    "kind": "sprite",
@@ -1476,6 +2425,24 @@
    "capHeight": 21.5,
    "ground": "concrete",
    "purpose": "Header weekday MONDAY: white stencil sprayed on concrete, 31pt, with a faint second pass of meeting grey re-laid 1pt right / 0.5pt down (two-pass misregistration, V4 §2.6)."
+  },
+  "day-monday-white-night-s": {
+   "file": "day-monday-white-night-s@2x.png",
+   "kind": "sprite",
+   "size": [
+    161.0,
+    33.5
+   ],
+   "bleed": [
+    7.52,
+    7.0,
+    8.72,
+    9.0
+   ],
+   "baseline": 24.78,
+   "capHeight": 17.26,
+   "ground": "concrete",
+   "purpose": "Header weekday MONDAY, SHORT: 0.8× of day-monday-white-night (24.8pt cap box) for when the long name does not fit the header budget; white stencil on concrete, bridges ≈ 2pt, the same faint meeting-grey second pass re-laid 1pt right / 0.5pt down. baseline / capHeight as day-*."
   },
   "day-saturday-white-night": {
    "file": "day-saturday-white-night@2x.png",
@@ -1495,6 +2462,24 @@
    "ground": "concrete",
    "purpose": "Header weekday SATURDAY: white stencil sprayed on concrete, 31pt, with a faint second pass of meeting grey re-laid 1pt right / 0.5pt down (two-pass misregistration, V4 §2.6)."
   },
+  "day-saturday-white-night-s": {
+   "file": "day-saturday-white-night-s@2x.png",
+   "kind": "sprite",
+   "size": [
+    200.0,
+    33.5
+   ],
+   "bleed": [
+    7.52,
+    7.0,
+    8.72,
+    9.0
+   ],
+   "baseline": 24.78,
+   "capHeight": 17.26,
+   "ground": "concrete",
+   "purpose": "Header weekday SATURDAY, SHORT: 0.8× of day-saturday-white-night (24.8pt cap box) for when the long name does not fit the header budget; white stencil on concrete, bridges ≈ 2pt, the same faint meeting-grey second pass re-laid 1pt right / 0.5pt down. baseline / capHeight as day-*."
+  },
   "day-sunday-white-night": {
    "file": "day-sunday-white-night@2x.png",
    "kind": "sprite",
@@ -1512,6 +2497,24 @@
    "capHeight": 21.5,
    "ground": "concrete",
    "purpose": "Header weekday SUNDAY: white stencil sprayed on concrete, 31pt, with a faint second pass of meeting grey re-laid 1pt right / 0.5pt down (two-pass misregistration, V4 §2.6)."
+  },
+  "day-sunday-white-night-s": {
+   "file": "day-sunday-white-night-s@2x.png",
+   "kind": "sprite",
+   "size": [
+    153.0,
+    33.5
+   ],
+   "bleed": [
+    7.52,
+    7.0,
+    8.72,
+    9.0
+   ],
+   "baseline": 24.78,
+   "capHeight": 17.26,
+   "ground": "concrete",
+   "purpose": "Header weekday SUNDAY, SHORT: 0.8× of day-sunday-white-night (24.8pt cap box) for when the long name does not fit the header budget; white stencil on concrete, bridges ≈ 2pt, the same faint meeting-grey second pass re-laid 1pt right / 0.5pt down. baseline / capHeight as day-*."
   },
   "day-thursday-white-night": {
    "file": "day-thursday-white-night@2x.png",
@@ -1531,6 +2534,24 @@
    "ground": "concrete",
    "purpose": "Header weekday THURSDAY: white stencil sprayed on concrete, 31pt, with a faint second pass of meeting grey re-laid 1pt right / 0.5pt down (two-pass misregistration, V4 §2.6)."
   },
+  "day-thursday-white-night-s": {
+   "file": "day-thursday-white-night-s@2x.png",
+   "kind": "sprite",
+   "size": [
+    197.5,
+    33.5
+   ],
+   "bleed": [
+    7.52,
+    7.0,
+    8.72,
+    9.0
+   ],
+   "baseline": 24.78,
+   "capHeight": 17.26,
+   "ground": "concrete",
+   "purpose": "Header weekday THURSDAY, SHORT: 0.8× of day-thursday-white-night (24.8pt cap box) for when the long name does not fit the header budget; white stencil on concrete, bridges ≈ 2pt, the same faint meeting-grey second pass re-laid 1pt right / 0.5pt down. baseline / capHeight as day-*."
+  },
   "day-tuesday-white-night": {
    "file": "day-tuesday-white-night@2x.png",
    "kind": "sprite",
@@ -1549,6 +2570,24 @@
    "ground": "concrete",
    "purpose": "Header weekday TUESDAY: white stencil sprayed on concrete, 31pt, with a faint second pass of meeting grey re-laid 1pt right / 0.5pt down (two-pass misregistration, V4 §2.6)."
   },
+  "day-tuesday-white-night-s": {
+   "file": "day-tuesday-white-night-s@2x.png",
+   "kind": "sprite",
+   "size": [
+    172.5,
+    33.5
+   ],
+   "bleed": [
+    7.52,
+    7.0,
+    8.72,
+    9.0
+   ],
+   "baseline": 24.78,
+   "capHeight": 17.26,
+   "ground": "concrete",
+   "purpose": "Header weekday TUESDAY, SHORT: 0.8× of day-tuesday-white-night (24.8pt cap box) for when the long name does not fit the header budget; white stencil on concrete, bridges ≈ 2pt, the same faint meeting-grey second pass re-laid 1pt right / 0.5pt down. baseline / capHeight as day-*."
+  },
   "day-wednesday-white-night": {
    "file": "day-wednesday-white-night@2x.png",
    "kind": "sprite",
@@ -1566,6 +2605,24 @@
    "capHeight": 21.5,
    "ground": "concrete",
    "purpose": "Header weekday WEDNESDAY: white stencil sprayed on concrete, 31pt, with a faint second pass of meeting grey re-laid 1pt right / 0.5pt down (two-pass misregistration, V4 §2.6)."
+  },
+  "day-wednesday-white-night-s": {
+   "file": "day-wednesday-white-night-s@2x.png",
+   "kind": "sprite",
+   "size": [
+    225.0,
+    33.5
+   ],
+   "bleed": [
+    7.52,
+    7.0,
+    8.72,
+    9.0
+   ],
+   "baseline": 24.78,
+   "capHeight": 17.26,
+   "ground": "concrete",
+   "purpose": "Header weekday WEDNESDAY, SHORT: 0.8× of day-wednesday-white-night (24.8pt cap box) for when the long name does not fit the header budget; white stencil on concrete, bridges ≈ 2pt, the same faint meeting-grey second pass re-laid 1pt right / 0.5pt down. baseline / capHeight as day-*."
   },
   "dayshout-friday-white-night": {
    "file": "dayshout-friday-white-night@2x.png",
@@ -1741,134 +2798,8 @@
    "ground": "kraft",
    "purpose": "Step dot, future: only the faint imprint of the empty stencil (a pale ring). Layout 10×10pt. Popup 10, right of 站立中 12:30; 6pt between dots."
   },
-  "drip-black-1": {
-   "file": "drip-black-1@2x.png",
-   "kind": "sprite",
-   "size": [
-    14.0,
-    15.0
-   ],
-   "bleed": [
-    0.0,
-    0.0,
-    0.0,
-    0.0
-   ],
-   "anchor": [
-    7.0,
-    1.0
-   ],
-   "ground": "concrete",
-   "length": 5.5,
-   "purpose": "Black drip #1: maxLength 5.5pt = how far it hangs below the anchor (field `length`); pick only drips with length ≤ the free gap below − 6pt. Hang from the heaviest film at a block's lower edge; anchor = top centre where it leaves the paint (overlap 1pt into the block)."
-  },
-  "drip-black-2": {
-   "file": "drip-black-2@2x.png",
-   "kind": "sprite",
-   "size": [
-    15.0,
-    19.0
-   ],
-   "bleed": [
-    0.0,
-    0.0,
-    0.0,
-    0.0
-   ],
-   "anchor": [
-    7.5,
-    1.0
-   ],
-   "ground": "concrete",
-   "length": 12.0,
-   "purpose": "Black drip #2: maxLength 12.0pt = how far it hangs below the anchor (field `length`); pick only drips with length ≤ the free gap below − 6pt. Hang from the heaviest film at a block's lower edge; anchor = top centre where it leaves the paint (overlap 1pt into the block)."
-  },
-  "drip-black-3": {
-   "file": "drip-black-3@2x.png",
-   "kind": "sprite",
-   "size": [
-    14.0,
-    26.0
-   ],
-   "bleed": [
-    0.0,
-    0.0,
-    0.0,
-    0.0
-   ],
-   "anchor": [
-    7.0,
-    1.0
-   ],
-   "ground": "concrete",
-   "length": 18.5,
-   "purpose": "Black drip #3: maxLength 18.5pt = how far it hangs below the anchor (field `length`); pick only drips with length ≤ the free gap below − 6pt. Hang from the heaviest film at a block's lower edge; anchor = top centre where it leaves the paint (overlap 1pt into the block)."
-  },
-  "drip-black-4": {
-   "file": "drip-black-4@2x.png",
-   "kind": "sprite",
-   "size": [
-    16.0,
-    35.0
-   ],
-   "bleed": [
-    0.0,
-    0.0,
-    0.0,
-    0.0
-   ],
-   "anchor": [
-    8.0,
-    1.0
-   ],
-   "ground": "concrete",
-   "length": 27.5,
-   "purpose": "Black drip #4: maxLength 27.5pt = how far it hangs below the anchor (field `length`); pick only drips with length ≤ the free gap below − 6pt. Hang from the heaviest film at a block's lower edge; anchor = top centre where it leaves the paint (overlap 1pt into the block)."
-  },
-  "drip-black-5": {
-   "file": "drip-black-5@2x.png",
-   "kind": "sprite",
-   "size": [
-    15.0,
-    44.0
-   ],
-   "bleed": [
-    0.0,
-    0.0,
-    0.0,
-    0.0
-   ],
-   "anchor": [
-    7.5,
-    1.0
-   ],
-   "ground": "concrete",
-   "length": 37.0,
-   "purpose": "Black drip #5: maxLength 37.0pt = how far it hangs below the anchor (field `length`); pick only drips with length ≤ the free gap below − 6pt. Hang from the heaviest film at a block's lower edge; anchor = top centre where it leaves the paint (overlap 1pt into the block)."
-  },
-  "drip-black-6": {
-   "file": "drip-black-6@2x.png",
-   "kind": "sprite",
-   "size": [
-    17.0,
-    61.0
-   ],
-   "bleed": [
-    0.0,
-    0.0,
-    0.0,
-    0.0
-   ],
-   "anchor": [
-    8.5,
-    1.0
-   ],
-   "ground": "concrete",
-   "length": 52.5,
-   "purpose": "Black drip #6: maxLength 52.5pt = how far it hangs below the anchor (field `length`); pick only drips with length ≤ the free gap below − 6pt. Hang from the heaviest film at a block's lower edge; anchor = top centre where it leaves the paint (overlap 1pt into the block)."
-  },
   "drip-grow-0": {
-   "file": "drip-grow-0@2x.png",
+   "file": "drip-grow-0.png",
    "kind": "sprite",
    "size": [
     20.0,
@@ -1880,12 +2811,13 @@
     0.0,
     0.0
    ],
+   "mask": true,
    "frames": 4,
    "durationMs": 200,
    "purpose": "Drip growth, frame 0/3 (starts 0ms of 200; gravity .55,0,1,.45, hold 280ms for the orange / stamp drips): reveal mask, top = where the drip leaves the paint. Scale the 20×64pt box to the drip sprite's layout rect and use as its .mask; frame 3 opaque."
   },
   "drip-grow-1": {
-   "file": "drip-grow-1@2x.png",
+   "file": "drip-grow-1.png",
    "kind": "sprite",
    "size": [
     20.0,
@@ -1897,10 +2829,11 @@
     0.0,
     0.0
    ],
+   "mask": true,
    "purpose": "Drip growth, frame 1/3 (starts 50ms of 200; gravity .55,0,1,.45, hold 280ms for the orange / stamp drips): reveal mask, top = where the drip leaves the paint. Scale the 20×64pt box to the drip sprite's layout rect and use as its .mask; frame 3 opaque."
   },
   "drip-grow-2": {
-   "file": "drip-grow-2@2x.png",
+   "file": "drip-grow-2.png",
    "kind": "sprite",
    "size": [
     20.0,
@@ -1912,10 +2845,11 @@
     0.0,
     0.0
    ],
+   "mask": true,
    "purpose": "Drip growth, frame 2/3 (starts 100ms of 200; gravity .55,0,1,.45, hold 280ms for the orange / stamp drips): reveal mask, top = where the drip leaves the paint. Scale the 20×64pt box to the drip sprite's layout rect and use as its .mask; frame 3 opaque."
   },
   "drip-grow-3": {
-   "file": "drip-grow-3@2x.png",
+   "file": "drip-grow-3.png",
    "kind": "sprite",
    "size": [
     20.0,
@@ -1927,6 +2861,7 @@
     0.0,
     0.0
    ],
+   "mask": true,
    "purpose": "Drip growth, frame 3/3 (starts 150ms of 200; gravity .55,0,1,.45, hold 280ms for the orange / stamp drips): reveal mask, top = where the drip leaves the paint. Scale the 20×64pt box to the drip sprite's layout rect and use as its .mask; frame 3 opaque."
   },
   "drip-orange-1": {
@@ -2308,7 +3243,7 @@
    "purpose": "White drip #6 (white word card, English event states): maxLength 52.5pt = how far it hangs below the anchor (field `length`); pick only drips with length ≤ the free gap below − 6pt. Hang from the heaviest film at a block's lower edge; anchor = top centre where it leaves the paint (overlap 1pt into the block)."
   },
   "flood-orange-0": {
-   "file": "flood-orange-0@2x.png",
+   "file": "flood-orange-0.png",
    "kind": "sprite",
    "size": [
     510.0,
@@ -2320,6 +3255,7 @@
     30.0,
     24.0
    ],
+   "mask": true,
    "frames": 8,
    "durationMs": 720,
    "numeralBox": [
@@ -2341,7 +3277,7 @@
    "purpose": "01→00, frame 0/7 (starts 0ms of 720; 0–2 = 240ms bridge bleed, 3–7 = 480ms flood): reveal mask for hero-zero-night (orange seeps out of the stencil bridges of 00). Draw hero-zero-night masked by it between hero-event-night and the black stencils (00 / NEXT / cells), same frame; frame 7 opaque; hold = unmasked hero."
   },
   "flood-orange-1": {
-   "file": "flood-orange-1@2x.png",
+   "file": "flood-orange-1.png",
    "kind": "sprite",
    "size": [
     510.0,
@@ -2353,10 +3289,11 @@
     30.0,
     24.0
    ],
+   "mask": true,
    "purpose": "01→00, frame 1/7 (starts 80ms of 720; 0–2 = 240ms bridge bleed, 3–7 = 480ms flood): reveal mask for hero-zero-night (orange seeps out of the stencil bridges of 00). Draw hero-zero-night masked by it between hero-event-night and the black stencils (00 / NEXT / cells), same frame; frame 7 opaque; hold = unmasked hero."
   },
   "flood-orange-2": {
-   "file": "flood-orange-2@2x.png",
+   "file": "flood-orange-2.png",
    "kind": "sprite",
    "size": [
     510.0,
@@ -2368,10 +3305,11 @@
     30.0,
     24.0
    ],
+   "mask": true,
    "purpose": "01→00, frame 2/7 (starts 160ms of 720; 0–2 = 240ms bridge bleed, 3–7 = 480ms flood): reveal mask for hero-zero-night (orange seeps out of the stencil bridges of 00). Draw hero-zero-night masked by it between hero-event-night and the black stencils (00 / NEXT / cells), same frame; frame 7 opaque; hold = unmasked hero."
   },
   "flood-orange-3": {
-   "file": "flood-orange-3@2x.png",
+   "file": "flood-orange-3.png",
    "kind": "sprite",
    "size": [
     510.0,
@@ -2383,10 +3321,11 @@
     30.0,
     24.0
    ],
+   "mask": true,
    "purpose": "01→00, frame 3/7 (starts 240ms of 720; 0–2 = 240ms bridge bleed, 3–7 = 480ms flood): reveal mask for hero-zero-night (orange floods the card). Draw hero-zero-night masked by it between hero-event-night and the black stencils (00 / NEXT / cells), same frame; frame 7 opaque; hold = unmasked hero."
   },
   "flood-orange-4": {
-   "file": "flood-orange-4@2x.png",
+   "file": "flood-orange-4.png",
    "kind": "sprite",
    "size": [
     510.0,
@@ -2398,10 +3337,11 @@
     30.0,
     24.0
    ],
+   "mask": true,
    "purpose": "01→00, frame 4/7 (starts 336ms of 720; 0–2 = 240ms bridge bleed, 3–7 = 480ms flood): reveal mask for hero-zero-night (orange floods the card). Draw hero-zero-night masked by it between hero-event-night and the black stencils (00 / NEXT / cells), same frame; frame 7 opaque; hold = unmasked hero."
   },
   "flood-orange-5": {
-   "file": "flood-orange-5@2x.png",
+   "file": "flood-orange-5.png",
    "kind": "sprite",
    "size": [
     510.0,
@@ -2413,10 +3353,11 @@
     30.0,
     24.0
    ],
+   "mask": true,
    "purpose": "01→00, frame 5/7 (starts 432ms of 720; 0–2 = 240ms bridge bleed, 3–7 = 480ms flood): reveal mask for hero-zero-night (orange floods the card). Draw hero-zero-night masked by it between hero-event-night and the black stencils (00 / NEXT / cells), same frame; frame 7 opaque; hold = unmasked hero."
   },
   "flood-orange-6": {
-   "file": "flood-orange-6@2x.png",
+   "file": "flood-orange-6.png",
    "kind": "sprite",
    "size": [
     510.0,
@@ -2428,10 +3369,11 @@
     30.0,
     24.0
    ],
+   "mask": true,
    "purpose": "01→00, frame 6/7 (starts 528ms of 720; 0–2 = 240ms bridge bleed, 3–7 = 480ms flood): reveal mask for hero-zero-night (orange floods the card). Draw hero-zero-night masked by it between hero-event-night and the black stencils (00 / NEXT / cells), same frame; frame 7 opaque; hold = unmasked hero."
   },
   "flood-orange-7": {
-   "file": "flood-orange-7@2x.png",
+   "file": "flood-orange-7.png",
    "kind": "sprite",
    "size": [
     510.0,
@@ -2443,10 +3385,11 @@
     30.0,
     24.0
    ],
+   "mask": true,
    "purpose": "01→00, frame 7/7 (starts 624ms of 720; 0–2 = 240ms bridge bleed, 3–7 = 480ms flood): reveal mask for hero-zero-night (orange floods the card). Draw hero-zero-night masked by it between hero-event-night and the black stencils (00 / NEXT / cells), same frame; frame 7 opaque; hold = unmasked hero."
   },
   "flood-teal-0": {
-   "file": "flood-teal-0@2x.png",
+   "file": "flood-teal-0.png",
    "kind": "sprite",
    "size": [
     510.0,
@@ -2458,6 +3401,7 @@
     30.0,
     24.0
    ],
+   "mask": true,
    "frames": 8,
    "durationMs": 340,
    "numeralBox": [
@@ -2469,7 +3413,7 @@
    "purpose": "Calm→event flood, frame 0/7 (starts 0ms of 340): reveal mask for hero-event-night — apply as .mask on hero-event-night drawn over the calm card, same frame (layout 472×270 + bleed); teal spreads out of the 10 numerals (numeralBox, card pt) with stroke fingers, a thin banded front and droplets ahead. Frame 7 is opaque = hero-event-night exactly; hold = unmasked hero."
   },
   "flood-teal-1": {
-   "file": "flood-teal-1@2x.png",
+   "file": "flood-teal-1.png",
    "kind": "sprite",
    "size": [
     510.0,
@@ -2481,10 +3425,11 @@
     30.0,
     24.0
    ],
+   "mask": true,
    "purpose": "Calm→event flood, frame 1/7 (starts 42ms of 340): reveal mask for hero-event-night — apply as .mask on hero-event-night drawn over the calm card, same frame (layout 472×270 + bleed); teal spreads out of the 10 numerals (numeralBox, card pt) with stroke fingers, a thin banded front and droplets ahead. Frame 7 is opaque = hero-event-night exactly; hold = unmasked hero."
   },
   "flood-teal-2": {
-   "file": "flood-teal-2@2x.png",
+   "file": "flood-teal-2.png",
    "kind": "sprite",
    "size": [
     510.0,
@@ -2496,10 +3441,11 @@
     30.0,
     24.0
    ],
+   "mask": true,
    "purpose": "Calm→event flood, frame 2/7 (starts 85ms of 340): reveal mask for hero-event-night — apply as .mask on hero-event-night drawn over the calm card, same frame (layout 472×270 + bleed); teal spreads out of the 10 numerals (numeralBox, card pt) with stroke fingers, a thin banded front and droplets ahead. Frame 7 is opaque = hero-event-night exactly; hold = unmasked hero."
   },
   "flood-teal-3": {
-   "file": "flood-teal-3@2x.png",
+   "file": "flood-teal-3.png",
    "kind": "sprite",
    "size": [
     510.0,
@@ -2511,10 +3457,11 @@
     30.0,
     24.0
    ],
+   "mask": true,
    "purpose": "Calm→event flood, frame 3/7 (starts 128ms of 340): reveal mask for hero-event-night — apply as .mask on hero-event-night drawn over the calm card, same frame (layout 472×270 + bleed); teal spreads out of the 10 numerals (numeralBox, card pt) with stroke fingers, a thin banded front and droplets ahead. Frame 7 is opaque = hero-event-night exactly; hold = unmasked hero."
   },
   "flood-teal-4": {
-   "file": "flood-teal-4@2x.png",
+   "file": "flood-teal-4.png",
    "kind": "sprite",
    "size": [
     510.0,
@@ -2526,10 +3473,11 @@
     30.0,
     24.0
    ],
+   "mask": true,
    "purpose": "Calm→event flood, frame 4/7 (starts 170ms of 340): reveal mask for hero-event-night — apply as .mask on hero-event-night drawn over the calm card, same frame (layout 472×270 + bleed); teal spreads out of the 10 numerals (numeralBox, card pt) with stroke fingers, a thin banded front and droplets ahead. Frame 7 is opaque = hero-event-night exactly; hold = unmasked hero."
   },
   "flood-teal-5": {
-   "file": "flood-teal-5@2x.png",
+   "file": "flood-teal-5.png",
    "kind": "sprite",
    "size": [
     510.0,
@@ -2541,10 +3489,11 @@
     30.0,
     24.0
    ],
+   "mask": true,
    "purpose": "Calm→event flood, frame 5/7 (starts 212ms of 340): reveal mask for hero-event-night — apply as .mask on hero-event-night drawn over the calm card, same frame (layout 472×270 + bleed); teal spreads out of the 10 numerals (numeralBox, card pt) with stroke fingers, a thin banded front and droplets ahead. Frame 7 is opaque = hero-event-night exactly; hold = unmasked hero."
   },
   "flood-teal-6": {
-   "file": "flood-teal-6@2x.png",
+   "file": "flood-teal-6.png",
    "kind": "sprite",
    "size": [
     510.0,
@@ -2556,10 +3505,11 @@
     30.0,
     24.0
    ],
+   "mask": true,
    "purpose": "Calm→event flood, frame 6/7 (starts 255ms of 340): reveal mask for hero-event-night — apply as .mask on hero-event-night drawn over the calm card, same frame (layout 472×270 + bleed); teal spreads out of the 10 numerals (numeralBox, card pt) with stroke fingers, a thin banded front and droplets ahead. Frame 7 is opaque = hero-event-night exactly; hold = unmasked hero."
   },
   "flood-teal-7": {
-   "file": "flood-teal-7@2x.png",
+   "file": "flood-teal-7.png",
    "kind": "sprite",
    "size": [
     510.0,
@@ -2571,6 +3521,7 @@
     30.0,
     24.0
    ],
+   "mask": true,
    "purpose": "Calm→event flood, frame 7/7 (starts 298ms of 340): reveal mask for hero-event-night — apply as .mask on hero-event-night drawn over the calm card, same frame (layout 472×270 + bleed); teal spreads out of the 10 numerals (numeralBox, card pt) with stroke fingers, a thin banded front and droplets ahead. Frame 7 is opaque = hero-event-night exactly; hold = unmasked hero."
   },
   "frame-black-long-night": {
@@ -3192,6 +4143,28 @@
    "ground": "kraft",
    "purpose": "Posture popup board: corrugated kraft (fibres, flutes, mottle), worn edges, a torn liner patch and a crushed corner at the bottom, ghosts of earlier teal / black / orange sprays in the corners, contact shadow in the bleed. Width fixed 360pt; height stretches (caps keep every feature)."
   },
+  "kraft-sheet-tall-night": {
+   "file": "kraft-sheet-tall-night@2x.png",
+   "kind": "slice",
+   "size": [
+    388.0,
+    536.0
+   ],
+   "bleed": [
+    8.0,
+    14.0,
+    28.0,
+    14.0
+   ],
+   "insets": [
+    72.0,
+    50.0,
+    92.0,
+    50.0
+   ],
+   "ground": "kraft",
+   "purpose": "Posture popup board, TALL 360×500pt (the standing guide with the Egyptian frieze): the same corrugated kraft as kraft-sheet-night (own seed: fibres, flutes, worn edges, torn liner patch + crushed corner at the bottom, ghosts of earlier sprays in the corners) baked at its real height — corrugation and fibres are not stretched. Width fixed 360pt; height stretches ≤ ±20 % (caps 64pt keep every feature)."
+  },
   "letter-orange-card": {
    "file": "letter-orange-card@2x.png",
    "kind": "sprite",
@@ -3266,8 +4239,8 @@
    "file": "panel-frame-night@2x.png",
    "kind": "slice",
    "size": [
-    544.0,
-    788.0
+    218.0,
+    244.0
    ],
    "bleed": [
     6.0,
@@ -3281,7 +4254,7 @@
     138.0,
     162.0
    ],
-   "purpose": "Panel frame: contact + faint ambient shadow in the bleed, lit arris, two mortar-plugged tie holes, two broken arrises (inside the top-right / bottom-left caps); interior transparent — lay concrete tiles clipped to a 20pt rounded rect underneath. Edges uniform along their length (stretch-safe)."
+   "purpose": "Panel frame: contact + faint ambient shadow in the bleed, lit arris, two mortar-plugged tie holes, two broken arrises (inside the top-right / bottom-left caps); interior transparent — lay concrete tiles clipped to a 20pt rounded rect underneath. Baked on the smallest canvas that keeps the caps (194×216pt layout, 4pt centre): every row / column of the centre band is identical, so it stretches to any panel (520 × 640–900pt) without a visible change."
   },
   "plate-black-night": {
    "file": "plate-black-night@2x.png",
@@ -3513,22 +4486,6 @@
    "ground": "kraft",
    "purpose": "Pose silhouette 坐下: black ink + orange accent sprayed on kraft (bridges per the illustration spec), transparent; baked at 132pt for the question pose of popups 09 / 11 and the current step of popup 10 — layout rect = the 132pt art box, draw at scale 1."
   },
-  "pose-sit-down-s": {
-   "file": "pose-sit-down-s@2x.png",
-   "kind": "sprite",
-   "size": [
-    108.0,
-    108.0
-   ],
-   "bleed": [
-    6.0,
-    6.0,
-    6.0,
-    6.0
-   ],
-   "ground": "kraft",
-   "purpose": "Pose silhouette 坐下: black ink + orange accent sprayed on kraft (bridges per the illustration spec), transparent; baked at 96pt for the small step pose (popup 09 stretch line, list rows) — layout rect = the 96pt art box, draw at scale 1."
-  },
   "pose-stand-up": {
    "file": "pose-stand-up@2x.png",
    "kind": "sprite",
@@ -3544,22 +4501,6 @@
    ],
    "ground": "kraft",
    "purpose": "Pose silhouette 站起来: black ink + orange accent sprayed on kraft (bridges per the illustration spec), transparent; baked at 132pt for the question pose of popups 09 / 11 and the current step of popup 10 — layout rect = the 132pt art box, draw at scale 1."
-  },
-  "pose-stand-up-s": {
-   "file": "pose-stand-up-s@2x.png",
-   "kind": "sprite",
-   "size": [
-    108.0,
-    108.0
-   ],
-   "bleed": [
-    6.0,
-    6.0,
-    6.0,
-    6.0
-   ],
-   "ground": "kraft",
-   "purpose": "Pose silhouette 站起来: black ink + orange accent sprayed on kraft (bridges per the illustration spec), transparent; baked at 96pt for the small step pose (popup 09 stretch line, list rows) — layout rect = the 96pt art box, draw at scale 1."
   },
   "pose-stretch": {
    "file": "pose-stretch@2x.png",
@@ -3641,6 +4582,22 @@
    "ground": "white card",
    "purpose": "Rating cell 14pt, current question: orange dashed tape frame — legend swatch on the white card (1pt black paint edge)."
   },
+  "rate-14-current-dark": {
+   "file": "rate-14-current-dark@2x.png",
+   "kind": "sprite",
+   "size": [
+    20.0,
+    20.0
+   ],
+   "bleed": [
+    3.0,
+    3.0,
+    3.0,
+    3.0
+   ],
+   "ground": "black swatch plate",
+   "purpose": "Rating cell 14pt, current question: orange dashed tape frame — legend / rating-button swatch baked ON swatch-black-card (the 20×20pt black masked plate): centre the 14pt cell on the plate (3pt margin); no white-card black edge."
+  },
   "rate-14-easy": {
    "file": "rate-14-easy@2x.png",
    "kind": "sprite",
@@ -3656,6 +4613,22 @@
    ],
    "ground": "white card",
    "purpose": "Rating cell 14pt, 太简单 (4): teal solid + black stencil star — legend swatch on the white card (1pt black paint edge)."
+  },
+  "rate-14-easy-dark": {
+   "file": "rate-14-easy-dark@2x.png",
+   "kind": "sprite",
+   "size": [
+    18.0,
+    18.0
+   ],
+   "bleed": [
+    2.0,
+    2.0,
+    2.0,
+    2.0
+   ],
+   "ground": "black swatch plate",
+   "purpose": "Rating cell 14pt, 太简单 (4): teal solid + black stencil star — legend / rating-button swatch baked ON swatch-black-card (the 20×20pt black masked plate): centre the 14pt cell on the plate (3pt margin); no white-card black edge."
   },
   "rate-14-empty": {
    "file": "rate-14-empty@2x.png",
@@ -3673,6 +4646,22 @@
    "ground": "white card",
    "purpose": "Rating cell 14pt, not answered yet — legend swatch on the white card (1pt black paint edge)."
   },
+  "rate-14-empty-dark": {
+   "file": "rate-14-empty-dark@2x.png",
+   "kind": "sprite",
+   "size": [
+    18.0,
+    18.0
+   ],
+   "bleed": [
+    2.0,
+    2.0,
+    2.0,
+    2.0
+   ],
+   "ground": "black swatch plate",
+   "purpose": "Rating cell 14pt, not answered yet — legend / rating-button swatch baked ON swatch-black-card (the 20×20pt black masked plate): centre the 14pt cell on the plate (3pt margin); no white-card black edge."
+  },
   "rate-14-forgot": {
    "file": "rate-14-forgot@2x.png",
    "kind": "sprite",
@@ -3688,6 +4677,22 @@
    ],
    "ground": "white card",
    "purpose": "Rating cell 14pt, 忘了 (1): meeting-grey + black stencil ✕ — legend swatch on the white card (1pt black paint edge)."
+  },
+  "rate-14-forgot-dark": {
+   "file": "rate-14-forgot-dark@2x.png",
+   "kind": "sprite",
+   "size": [
+    18.0,
+    18.0
+   ],
+   "bleed": [
+    2.0,
+    2.0,
+    2.0,
+    2.0
+   ],
+   "ground": "black swatch plate",
+   "purpose": "Rating cell 14pt, 忘了 (1): meeting-grey + black stencil ✕ — legend / rating-button swatch baked ON swatch-black-card (the 20×20pt black masked plate): centre the 14pt cell on the plate (3pt margin); no white-card black edge."
   },
   "rate-14-fuzzy": {
    "file": "rate-14-fuzzy@2x.png",
@@ -3705,6 +4710,22 @@
    "ground": "white card",
    "purpose": "Rating cell 14pt, 模糊 (2): sparse teal paint dots — legend swatch on the white card (1pt black paint edge)."
   },
+  "rate-14-fuzzy-dark": {
+   "file": "rate-14-fuzzy-dark@2x.png",
+   "kind": "sprite",
+   "size": [
+    18.0,
+    18.0
+   ],
+   "bleed": [
+    2.0,
+    2.0,
+    2.0,
+    2.0
+   ],
+   "ground": "black swatch plate",
+   "purpose": "Rating cell 14pt, 模糊 (2): sparse teal paint dots — legend / rating-button swatch baked ON swatch-black-card (the 20×20pt black masked plate): centre the 14pt cell on the plate (3pt margin); no white-card black edge."
+  },
   "rate-14-good": {
    "file": "rate-14-good@2x.png",
    "kind": "sprite",
@@ -3721,28 +4742,12 @@
    "ground": "white card",
    "purpose": "Rating cell 14pt, 记住了 (3): teal solid — legend swatch on the white card (1pt black paint edge)."
   },
-  "rate-18-current": {
-   "file": "rate-18-current@2x.png",
+  "rate-14-good-dark": {
+   "file": "rate-14-good-dark@2x.png",
    "kind": "sprite",
    "size": [
-    24.0,
-    24.0
-   ],
-   "bleed": [
-    3.0,
-    3.0,
-    3.0,
-    3.0
-   ],
-   "ground": "black plate",
-   "purpose": "Rating cell 18pt, current question: orange dashed tape frame — v12 review history — superseded by rate-20-*."
-  },
-  "rate-18-easy": {
-   "file": "rate-18-easy@2x.png",
-   "kind": "sprite",
-   "size": [
-    22.0,
-    22.0
+    18.0,
+    18.0
    ],
    "bleed": [
     2.0,
@@ -3750,72 +4755,8 @@
     2.0,
     2.0
    ],
-   "ground": "black plate",
-   "purpose": "Rating cell 18pt, 太简单 (4): teal solid + black stencil star — v12 review history — superseded by rate-20-*."
-  },
-  "rate-18-empty": {
-   "file": "rate-18-empty@2x.png",
-   "kind": "sprite",
-   "size": [
-    22.0,
-    22.0
-   ],
-   "bleed": [
-    2.0,
-    2.0,
-    2.0,
-    2.0
-   ],
-   "ground": "black plate",
-   "purpose": "Rating cell 18pt, not answered yet — v12 review history — superseded by rate-20-*."
-  },
-  "rate-18-forgot": {
-   "file": "rate-18-forgot@2x.png",
-   "kind": "sprite",
-   "size": [
-    22.0,
-    22.0
-   ],
-   "bleed": [
-    2.0,
-    2.0,
-    2.0,
-    2.0
-   ],
-   "ground": "black plate",
-   "purpose": "Rating cell 18pt, 忘了 (1): meeting-grey + black stencil ✕ — v12 review history — superseded by rate-20-*."
-  },
-  "rate-18-fuzzy": {
-   "file": "rate-18-fuzzy@2x.png",
-   "kind": "sprite",
-   "size": [
-    22.0,
-    22.0
-   ],
-   "bleed": [
-    2.0,
-    2.0,
-    2.0,
-    2.0
-   ],
-   "ground": "black plate",
-   "purpose": "Rating cell 18pt, 模糊 (2): sparse teal paint dots — v12 review history — superseded by rate-20-*."
-  },
-  "rate-18-good": {
-   "file": "rate-18-good@2x.png",
-   "kind": "sprite",
-   "size": [
-    22.0,
-    22.0
-   ],
-   "bleed": [
-    2.0,
-    2.0,
-    2.0,
-    2.0
-   ],
-   "ground": "black plate",
-   "purpose": "Rating cell 18pt, 记住了 (3): teal solid — v12 review history — superseded by rate-20-*."
+   "ground": "black swatch plate",
+   "purpose": "Rating cell 14pt, 记住了 (3): teal solid — legend / rating-button swatch baked ON swatch-black-card (the 20×20pt black masked plate): centre the 14pt cell on the plate (3pt margin); no white-card black edge."
   },
   "rate-20-current": {
    "file": "rate-20-current@2x.png",
@@ -3927,7 +4868,7 @@
     3.0
    ],
    "ground": "black plate",
-   "purpose": "Rating cell 24pt, current question: orange dashed tape frame — v12 session board on the black plate — superseded by rate-30-*."
+   "purpose": "Rating cell 24pt, current question: orange dashed tape frame — stage-clear board on the black plate (plate-black-night)."
   },
   "rate-24-easy": {
    "file": "rate-24-easy@2x.png",
@@ -3943,7 +4884,7 @@
     2.0
    ],
    "ground": "black plate",
-   "purpose": "Rating cell 24pt, 太简单 (4): teal solid + black stencil star — v12 session board on the black plate — superseded by rate-30-*."
+   "purpose": "Rating cell 24pt, 太简单 (4): teal solid + black stencil star — stage-clear board on the black plate (plate-black-night)."
   },
   "rate-24-empty": {
    "file": "rate-24-empty@2x.png",
@@ -3959,7 +4900,7 @@
     2.0
    ],
    "ground": "black plate",
-   "purpose": "Rating cell 24pt, not answered yet — v12 session board on the black plate — superseded by rate-30-*."
+   "purpose": "Rating cell 24pt, not answered yet — stage-clear board on the black plate (plate-black-night)."
   },
   "rate-24-forgot": {
    "file": "rate-24-forgot@2x.png",
@@ -3975,7 +4916,7 @@
     2.0
    ],
    "ground": "black plate",
-   "purpose": "Rating cell 24pt, 忘了 (1): meeting-grey + black stencil ✕ — v12 session board on the black plate — superseded by rate-30-*."
+   "purpose": "Rating cell 24pt, 忘了 (1): meeting-grey + black stencil ✕ — stage-clear board on the black plate (plate-black-night)."
   },
   "rate-24-fuzzy": {
    "file": "rate-24-fuzzy@2x.png",
@@ -3991,7 +4932,7 @@
     2.0
    ],
    "ground": "black plate",
-   "purpose": "Rating cell 24pt, 模糊 (2): sparse teal paint dots — v12 session board on the black plate — superseded by rate-30-*."
+   "purpose": "Rating cell 24pt, 模糊 (2): sparse teal paint dots — stage-clear board on the black plate (plate-black-night)."
   },
   "rate-24-good": {
    "file": "rate-24-good@2x.png",
@@ -4007,7 +4948,7 @@
     2.0
    ],
    "ground": "black plate",
-   "purpose": "Rating cell 24pt, 记住了 (3): teal solid — v12 session board on the black plate — superseded by rate-30-*."
+   "purpose": "Rating cell 24pt, 记住了 (3): teal solid — stage-clear board on the black plate (plate-black-night)."
   },
   "rate-30-current": {
    "file": "rate-30-current@2x.png",
@@ -4287,6 +5228,28 @@
    "ground": "concrete",
    "purpose": "Small hover plate 120×24pt (the 「任务 N」 line, other short single-line targets): the same very faint white masked wash as row-hover-night."
   },
+  "row-hover-title-night": {
+   "file": "row-hover-title-night@2x.png",
+   "kind": "slice",
+   "size": [
+    476.0,
+    28.0
+   ],
+   "bleed": [
+    2.0,
+    2.0,
+    2.0,
+    2.0
+   ],
+   "insets": [
+    9.0,
+    16.0,
+    9.0,
+    16.0
+   ],
+   "ground": "concrete",
+   "purpose": "Title-line hover plate 472×24pt (single-line full-width targets: the hero title row, section caption rows): the same very faint white masked wash on the concrete as row-hover-night (hard tape edge, thin patches)."
+  },
   "shout-done-teal-night": {
    "file": "shout-done-teal-night@2x.png",
    "kind": "sprite",
@@ -4413,24 +5376,6 @@
    "ground": "black slab",
    "purpose": "Hero shout NOW (21pt stencil, teal on the calm black slab)."
   },
-  "shout-tomorrow-black-night": {
-   "file": "shout-tomorrow-black-night@2x.png",
-   "kind": "sprite",
-   "size": [
-    189.0,
-    31.5
-   ],
-   "bleed": [
-    8.5,
-    8.0,
-    8.5,
-    8.0
-   ],
-   "baseline": 23.0,
-   "capHeight": 14.5,
-   "ground": "teal paint",
-   "purpose": "Hero shout TOMORROW (21pt stencil, black on the teal event flood)."
-  },
   "shout-tomorrow-teal-night": {
    "file": "shout-tomorrow-teal-night@2x.png",
    "kind": "sprite",
@@ -4450,7 +5395,7 @@
    "purpose": "Hero shout TOMORROW (21pt stencil, teal on the calm black slab)."
   },
   "stamp-mask-0": {
-   "file": "stamp-mask-0@2x.png",
+   "file": "stamp-mask-0.png",
    "kind": "sprite",
    "size": [
     202.0,
@@ -4462,12 +5407,13 @@
     26.0,
     26.0
    ],
+   "mask": true,
+   "frames": 4,
+   "durationMs": 130,
    "anchor": [
     101.0,
     56.0
    ],
-   "frames": 4,
-   "durationMs": 130,
    "dripBox": [
     124.0,
     53.5,
@@ -4477,7 +5423,7 @@
    "purpose": "Stamp spray, frame 0/3 (NICE! 90–220ms: starts 90; MISS 110–270ms: starts 110): reveal mask for stamp-nice-night AND stamp-miss-night (same 202×112 canvas, box 150×60, anchor = box centre) under the stencil sheet. dripBox (box pt) is 0 in every frame: NICE! grows its drip there with drip-grow-0…3 (320–600ms) after the sheet lifts; MISS just drops the mask after frame 3."
   },
   "stamp-mask-1": {
-   "file": "stamp-mask-1@2x.png",
+   "file": "stamp-mask-1.png",
    "kind": "sprite",
    "size": [
     202.0,
@@ -4489,10 +5435,11 @@
     26.0,
     26.0
    ],
+   "mask": true,
    "purpose": "Stamp spray, frame 1/3 (NICE! 90–220ms: starts 122; MISS 110–270ms: starts 150): reveal mask for stamp-nice-night AND stamp-miss-night (same 202×112 canvas, box 150×60, anchor = box centre) under the stencil sheet. dripBox (box pt) is 0 in every frame: NICE! grows its drip there with drip-grow-0…3 (320–600ms) after the sheet lifts; MISS just drops the mask after frame 3."
   },
   "stamp-mask-2": {
-   "file": "stamp-mask-2@2x.png",
+   "file": "stamp-mask-2.png",
    "kind": "sprite",
    "size": [
     202.0,
@@ -4504,10 +5451,11 @@
     26.0,
     26.0
    ],
+   "mask": true,
    "purpose": "Stamp spray, frame 2/3 (NICE! 90–220ms: starts 155; MISS 110–270ms: starts 190): reveal mask for stamp-nice-night AND stamp-miss-night (same 202×112 canvas, box 150×60, anchor = box centre) under the stencil sheet. dripBox (box pt) is 0 in every frame: NICE! grows its drip there with drip-grow-0…3 (320–600ms) after the sheet lifts; MISS just drops the mask after frame 3."
   },
   "stamp-mask-3": {
-   "file": "stamp-mask-3@2x.png",
+   "file": "stamp-mask-3.png",
    "kind": "sprite",
    "size": [
     202.0,
@@ -4519,6 +5467,7 @@
     26.0,
     26.0
    ],
+   "mask": true,
    "purpose": "Stamp spray, frame 3/3 (NICE! 90–220ms: starts 188; MISS 110–270ms: starts 230): reveal mask for stamp-nice-night AND stamp-miss-night (same 202×112 canvas, box 150×60, anchor = box centre) under the stencil sheet. dripBox (box pt) is 0 in every frame: NICE! grows its drip there with drip-grow-0…3 (320–600ms) after the sheet lifts; MISS just drops the mask after frame 3."
   },
   "stamp-miss-night": {
@@ -4682,6 +5631,28 @@
    ],
    "ground": "concrete",
    "purpose": "Selected tab (今日 / 英语 12, 单词 / 考点词 …): white masked chip, rough edge, thin patches; idle tabs have no frame."
+  },
+  "tab-chip-wide-night": {
+   "file": "tab-chip-wide-night@2x.png",
+   "kind": "slice",
+   "size": [
+    100.0,
+    36.0
+   ],
+   "bleed": [
+    2.0,
+    2.0,
+    2.0,
+    2.0
+   ],
+   "insets": [
+    10.0,
+    10.0,
+    10.0,
+    10.0
+   ],
+   "ground": "concrete",
+   "purpose": "Selected tab, WIDE 96×32pt (labels like 「学习中 120」): the same white masked chip as tab-chip-night, baked at its real width (rough edge, thin patches); black live text."
   },
   "tag-black-card": {
    "file": "tag-black-card@2x.png",
@@ -4857,7 +5828,8 @@
       276
      ],
      "advance": 91.5,
-     "bearing": -18.0
+     "bearing": -18.0,
+     "inkRight": 80.5
     },
     "1": {
      "rect": [
@@ -4867,7 +5839,8 @@
       276
      ],
      "advance": 82.0,
-     "bearing": -18.0
+     "bearing": -18.0,
+     "inkRight": 71.0
     },
     "2": {
      "rect": [
@@ -4877,7 +5850,8 @@
       276
      ],
      "advance": 89.0,
-     "bearing": -18.0
+     "bearing": -18.0,
+     "inkRight": 78.0
     },
     "3": {
      "rect": [
@@ -4887,7 +5861,8 @@
       276
      ],
      "advance": 91.0,
-     "bearing": -18.0
+     "bearing": -18.0,
+     "inkRight": 80.0
     },
     "4": {
      "rect": [
@@ -4897,7 +5872,8 @@
       276
      ],
      "advance": 96.0,
-     "bearing": -18.0
+     "bearing": -18.0,
+     "inkRight": 85.0
     },
     "5": {
      "rect": [
@@ -4907,7 +5883,8 @@
       276
      ],
      "advance": 91.5,
-     "bearing": -18.0
+     "bearing": -18.0,
+     "inkRight": 80.5
     },
     "6": {
      "rect": [
@@ -4917,7 +5894,8 @@
       276
      ],
      "advance": 92.0,
-     "bearing": -18.0
+     "bearing": -18.0,
+     "inkRight": 81.5
     },
     "7": {
      "rect": [
@@ -4927,7 +5905,8 @@
       276
      ],
      "advance": 90.5,
-     "bearing": -18.0
+     "bearing": -18.0,
+     "inkRight": 80.0
     },
     "8": {
      "rect": [
@@ -4937,7 +5916,8 @@
       276
      ],
      "advance": 92.0,
-     "bearing": -18.0
+     "bearing": -18.0,
+     "inkRight": 81.0
     },
     "9": {
      "rect": [
@@ -4947,7 +5927,8 @@
       276
      ],
      "advance": 92.0,
-     "bearing": -18.0
+     "bearing": -18.0,
+     "inkRight": 81.0
     },
     ":": {
      "rect": [
@@ -4957,7 +5938,8 @@
       276
      ],
      "advance": 40.0,
-     "bearing": -18.0
+     "bearing": -18.0,
+     "inkRight": 29.0
     },
     "/": {
      "rect": [
@@ -4967,7 +5949,8 @@
       276
      ],
      "advance": 51.0,
-     "bearing": -18.0
+     "bearing": -18.0,
+     "inkRight": 40.5
     },
     "-": {
      "rect": [
@@ -4977,7 +5960,8 @@
       276
      ],
      "advance": 79.5,
-     "bearing": -18.0
+     "bearing": -18.0,
+     "inkRight": 68.5
     }
    },
    "purpose": "Hero numerals on the teal / orange flood (event, 00): black stencil, 132pt."
@@ -5000,7 +5984,8 @@
       276
      ],
      "advance": 91.5,
-     "bearing": -18.0
+     "bearing": -18.0,
+     "inkRight": 80.5
     },
     "1": {
      "rect": [
@@ -5010,7 +5995,8 @@
       276
      ],
      "advance": 82.0,
-     "bearing": -18.0
+     "bearing": -18.0,
+     "inkRight": 71.0
     },
     "2": {
      "rect": [
@@ -5020,7 +6006,8 @@
       276
      ],
      "advance": 89.0,
-     "bearing": -18.0
+     "bearing": -18.0,
+     "inkRight": 78.0
     },
     "3": {
      "rect": [
@@ -5030,7 +6017,8 @@
       276
      ],
      "advance": 91.0,
-     "bearing": -18.0
+     "bearing": -18.0,
+     "inkRight": 80.0
     },
     "4": {
      "rect": [
@@ -5040,7 +6028,8 @@
       276
      ],
      "advance": 96.0,
-     "bearing": -18.0
+     "bearing": -18.0,
+     "inkRight": 85.0
     },
     "5": {
      "rect": [
@@ -5050,7 +6039,8 @@
       276
      ],
      "advance": 91.5,
-     "bearing": -18.0
+     "bearing": -18.0,
+     "inkRight": 80.5
     },
     "6": {
      "rect": [
@@ -5060,7 +6050,8 @@
       276
      ],
      "advance": 92.0,
-     "bearing": -18.0
+     "bearing": -18.0,
+     "inkRight": 81.5
     },
     "7": {
      "rect": [
@@ -5070,7 +6061,8 @@
       276
      ],
      "advance": 90.5,
-     "bearing": -18.0
+     "bearing": -18.0,
+     "inkRight": 80.0
     },
     "8": {
      "rect": [
@@ -5080,7 +6072,8 @@
       276
      ],
      "advance": 92.0,
-     "bearing": -18.0
+     "bearing": -18.0,
+     "inkRight": 81.0
     },
     "9": {
      "rect": [
@@ -5090,7 +6083,8 @@
       276
      ],
      "advance": 92.0,
-     "bearing": -18.0
+     "bearing": -18.0,
+     "inkRight": 81.0
     },
     ":": {
      "rect": [
@@ -5100,7 +6094,8 @@
       276
      ],
      "advance": 40.0,
-     "bearing": -18.0
+     "bearing": -18.0,
+     "inkRight": 29.0
     },
     "/": {
      "rect": [
@@ -5110,7 +6105,8 @@
       276
      ],
      "advance": 51.0,
-     "bearing": -18.0
+     "bearing": -18.0,
+     "inkRight": 40.5
     },
     "-": {
      "rect": [
@@ -5120,7 +6116,8 @@
       276
      ],
      "advance": 79.5,
-     "bearing": -18.0
+     "bearing": -18.0,
+     "inkRight": 68.5
     }
    },
    "purpose": "Hero numerals on the black slab (calm): teal stencil, YudhStencil bridges 0.06em, 132pt. '-' = en dash (nothing / just ended)."
@@ -5143,7 +6140,8 @@
       121
      ],
      "advance": 38.0,
-     "bearing": -8.0
+     "bearing": -8.0,
+     "inkRight": 34.0
     },
     "1": {
      "rect": [
@@ -5153,7 +6151,8 @@
       121
      ],
      "advance": 34.0,
-     "bearing": -8.0
+     "bearing": -8.0,
+     "inkRight": 30.0
     },
     "2": {
      "rect": [
@@ -5163,7 +6162,8 @@
       121
      ],
      "advance": 37.0,
-     "bearing": -8.0
+     "bearing": -8.0,
+     "inkRight": 33.0
     },
     "3": {
      "rect": [
@@ -5173,7 +6173,8 @@
       121
      ],
      "advance": 38.0,
-     "bearing": -8.0
+     "bearing": -8.0,
+     "inkRight": 34.0
     },
     "4": {
      "rect": [
@@ -5183,7 +6184,8 @@
       121
      ],
      "advance": 40.0,
-     "bearing": -8.0
+     "bearing": -8.0,
+     "inkRight": 36.0
     },
     "5": {
      "rect": [
@@ -5193,7 +6195,8 @@
       121
      ],
      "advance": 38.0,
-     "bearing": -8.0
+     "bearing": -8.0,
+     "inkRight": 34.0
     },
     "6": {
      "rect": [
@@ -5203,7 +6206,8 @@
       121
      ],
      "advance": 38.5,
-     "bearing": -8.0
+     "bearing": -8.0,
+     "inkRight": 34.5
     },
     "7": {
      "rect": [
@@ -5213,7 +6217,8 @@
       121
      ],
      "advance": 38.0,
-     "bearing": -8.0
+     "bearing": -8.0,
+     "inkRight": 34.0
     },
     "8": {
      "rect": [
@@ -5223,7 +6228,8 @@
       121
      ],
      "advance": 38.0,
-     "bearing": -8.0
+     "bearing": -8.0,
+     "inkRight": 34.0
     },
     "9": {
      "rect": [
@@ -5233,7 +6239,8 @@
       121
      ],
      "advance": 38.5,
-     "bearing": -8.0
+     "bearing": -8.0,
+     "inkRight": 34.5
     },
     "/": {
      "rect": [
@@ -5243,7 +6250,8 @@
       121
      ],
      "advance": 21.5,
-     "bearing": -8.0
+     "bearing": -8.0,
+     "inkRight": 17.0
     },
     "-": {
      "rect": [
@@ -5253,7 +6261,8 @@
       121
      ],
      "advance": 33.0,
-     "bearing": -8.0
+     "bearing": -8.0,
+     "inkRight": 29.0
     }
    },
    "purpose": "English 20/20 (stage clear, progress): black stencil on the white card, 56pt."
@@ -5276,7 +6285,8 @@
       157
      ],
      "advance": 55.0,
-     "bearing": -11.0
+     "bearing": -11.0,
+     "inkRight": 49.0
     },
     "1": {
      "rect": [
@@ -5286,7 +6296,8 @@
       157
      ],
      "advance": 49.0,
-     "bearing": -11.0
+     "bearing": -11.0,
+     "inkRight": 43.0
     },
     "2": {
      "rect": [
@@ -5296,7 +6307,8 @@
       157
      ],
      "advance": 53.5,
-     "bearing": -11.0
+     "bearing": -11.0,
+     "inkRight": 47.5
     },
     "3": {
      "rect": [
@@ -5306,7 +6318,8 @@
       157
      ],
      "advance": 54.5,
-     "bearing": -11.0
+     "bearing": -11.0,
+     "inkRight": 48.5
     },
     "4": {
      "rect": [
@@ -5316,7 +6329,8 @@
       157
      ],
      "advance": 57.5,
-     "bearing": -11.0
+     "bearing": -11.0,
+     "inkRight": 51.5
     },
     "5": {
      "rect": [
@@ -5326,7 +6340,8 @@
       157
      ],
      "advance": 55.0,
-     "bearing": -11.0
+     "bearing": -11.0,
+     "inkRight": 49.0
     },
     "6": {
      "rect": [
@@ -5336,7 +6351,8 @@
       157
      ],
      "advance": 55.0,
-     "bearing": -11.0
+     "bearing": -11.0,
+     "inkRight": 49.0
     },
     "7": {
      "rect": [
@@ -5346,7 +6362,8 @@
       157
      ],
      "advance": 54.0,
-     "bearing": -11.0
+     "bearing": -11.0,
+     "inkRight": 48.0
     },
     "8": {
      "rect": [
@@ -5356,7 +6373,8 @@
       157
      ],
      "advance": 55.0,
-     "bearing": -11.0
+     "bearing": -11.0,
+     "inkRight": 49.0
     },
     "9": {
      "rect": [
@@ -5366,7 +6384,8 @@
       157
      ],
      "advance": 55.0,
-     "bearing": -11.0
+     "bearing": -11.0,
+     "inkRight": 49.0
     },
     ":": {
      "rect": [
@@ -5376,7 +6395,8 @@
       157
      ],
      "advance": 23.5,
-     "bearing": -11.0
+     "bearing": -11.0,
+     "inkRight": 17.5
     },
     "-": {
      "rect": [
@@ -5386,7 +6406,8 @@
       157
      ],
      "advance": 47.5,
-     "bearing": -11.0
+     "bearing": -11.0,
+     "inkRight": 41.5
     }
    },
    "purpose": "Hero moment on the teal / orange flood: black stencil, 80pt."
@@ -5409,7 +6430,8 @@
       157
      ],
      "advance": 55.0,
-     "bearing": -11.0
+     "bearing": -11.0,
+     "inkRight": 49.0
     },
     "1": {
      "rect": [
@@ -5419,7 +6441,8 @@
       157
      ],
      "advance": 49.0,
-     "bearing": -11.0
+     "bearing": -11.0,
+     "inkRight": 43.0
     },
     "2": {
      "rect": [
@@ -5429,7 +6452,8 @@
       157
      ],
      "advance": 53.5,
-     "bearing": -11.0
+     "bearing": -11.0,
+     "inkRight": 47.5
     },
     "3": {
      "rect": [
@@ -5439,7 +6463,8 @@
       157
      ],
      "advance": 54.5,
-     "bearing": -11.0
+     "bearing": -11.0,
+     "inkRight": 48.5
     },
     "4": {
      "rect": [
@@ -5449,7 +6474,8 @@
       157
      ],
      "advance": 57.5,
-     "bearing": -11.0
+     "bearing": -11.0,
+     "inkRight": 51.5
     },
     "5": {
      "rect": [
@@ -5459,7 +6485,8 @@
       157
      ],
      "advance": 55.0,
-     "bearing": -11.0
+     "bearing": -11.0,
+     "inkRight": 49.0
     },
     "6": {
      "rect": [
@@ -5469,7 +6496,8 @@
       157
      ],
      "advance": 55.0,
-     "bearing": -11.0
+     "bearing": -11.0,
+     "inkRight": 49.0
     },
     "7": {
      "rect": [
@@ -5479,7 +6507,8 @@
       157
      ],
      "advance": 54.0,
-     "bearing": -11.0
+     "bearing": -11.0,
+     "inkRight": 48.0
     },
     "8": {
      "rect": [
@@ -5489,7 +6518,8 @@
       157
      ],
      "advance": 55.0,
-     "bearing": -11.0
+     "bearing": -11.0,
+     "inkRight": 49.0
     },
     "9": {
      "rect": [
@@ -5499,7 +6529,8 @@
       157
      ],
      "advance": 55.0,
-     "bearing": -11.0
+     "bearing": -11.0,
+     "inkRight": 49.0
     },
     ":": {
      "rect": [
@@ -5509,7 +6540,8 @@
       157
      ],
      "advance": 23.5,
-     "bearing": -11.0
+     "bearing": -11.0,
+     "inkRight": 17.5
     },
     "-": {
      "rect": [
@@ -5519,7 +6551,8 @@
       157
      ],
      "advance": 47.5,
-     "bearing": -11.0
+     "bearing": -11.0,
+     "inkRight": 41.5
     }
    },
    "purpose": "Hero moment (10:00 / 16:30, tomorrow) on the calm black slab: teal stencil, 80pt — use at 1×, never the 132pt set scaled down."
@@ -5542,7 +6575,8 @@
       85
      ],
      "advance": 27.5,
-     "bearing": -7.0
+     "bearing": -7.0,
+     "inkRight": 24.5
     },
     "1": {
      "rect": [
@@ -5552,7 +6586,8 @@
       85
      ],
      "advance": 24.5,
-     "bearing": -7.0
+     "bearing": -7.0,
+     "inkRight": 21.5
     },
     "2": {
      "rect": [
@@ -5562,7 +6597,8 @@
       85
      ],
      "advance": 26.5,
-     "bearing": -7.0
+     "bearing": -7.0,
+     "inkRight": 23.5
     },
     "3": {
      "rect": [
@@ -5572,7 +6608,8 @@
       85
      ],
      "advance": 27.5,
-     "bearing": -7.0
+     "bearing": -7.0,
+     "inkRight": 24.0
     },
     "4": {
      "rect": [
@@ -5582,7 +6619,8 @@
       85
      ],
      "advance": 29.0,
-     "bearing": -7.0
+     "bearing": -7.0,
+     "inkRight": 26.0
     },
     "5": {
      "rect": [
@@ -5592,7 +6630,8 @@
       85
      ],
      "advance": 27.5,
-     "bearing": -7.0
+     "bearing": -7.0,
+     "inkRight": 24.5
     },
     "6": {
      "rect": [
@@ -5602,7 +6641,8 @@
       85
      ],
      "advance": 28.0,
-     "bearing": -7.0
+     "bearing": -7.0,
+     "inkRight": 24.5
     },
     "7": {
      "rect": [
@@ -5612,7 +6652,8 @@
       85
      ],
      "advance": 27.0,
-     "bearing": -7.0
+     "bearing": -7.0,
+     "inkRight": 24.0
     },
     "8": {
      "rect": [
@@ -5622,7 +6663,8 @@
       85
      ],
      "advance": 28.0,
-     "bearing": -7.0
+     "bearing": -7.0,
+     "inkRight": 24.5
     },
     "9": {
      "rect": [
@@ -5632,7 +6674,8 @@
       85
      ],
      "advance": 27.5,
-     "bearing": -7.0
+     "bearing": -7.0,
+     "inkRight": 24.5
     },
     ":": {
      "rect": [
@@ -5642,7 +6685,8 @@
       85
      ],
      "advance": 12.0,
-     "bearing": -7.0
+     "bearing": -7.0,
+     "inkRight": 9.0
     },
     "-": {
      "rect": [
@@ -5652,7 +6696,8 @@
       85
      ],
      "advance": 24.0,
-     "bearing": -7.0
+     "bearing": -7.0,
+     "inkRight": 21.0
     }
    },
    "purpose": "Posture popup timer 12:30: black stencil on kraft, 40pt, bridges 0.075em."

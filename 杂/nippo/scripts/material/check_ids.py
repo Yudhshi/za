@@ -53,7 +53,8 @@ def expand(pattern):
         if not part.startswith('\\('):
             options.append([part])
             continue
-        if pattern.startswith('frieze-') or any(w in part for w in ('paint', 'state', 'suffix', 'size', '$0', 'index', '?')):
+        # frieze は 3 つの姿勢だけ、pose-…-s は焼いてある姿勢だけ(無ければ大きい方へ退く)なので展開しない
+        if pattern.startswith('frieze-') or pattern.endswith('-s') or any(w in part for w in ('paint', 'state', 'suffix', 'size', '$0', 'index', '?')):
             return None
         key = None
         for words, value in HINTS:

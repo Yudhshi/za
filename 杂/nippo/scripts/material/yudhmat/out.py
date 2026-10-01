@@ -5,11 +5,14 @@ manifest.json (schema v1, agreed with the Swift loader — Sources/NippoApp/Bake
   assets: {id: {file, kind: tile|slice|sprite, size [w,h] pt (whole image), bleed [t,l,b,r] pt outside the layout rect,
                 insets [t,l,b,r] pt from the image edge (slice only), anchor [x,y] pt (sprite, optional),
                 baseline / capHeight pt (word sprites), purpose,
-                ink [x0,y0,x1,y1] pt + contour [32 × x|null] pt (creature-*-grey: layout-rect coordinates; contour[i] =
-                leftmost stencil ink in the i-th of 32 equal horizontal bands of the layout rect, top to bottom),
-                frames / durationMs (motion sequences), origin (frieze), ground (informative)}}
+                ink [x0,y0,x1,y1] pt + contour [32 × x|null] pt (creature-<day>-grey, -grey-m, -grey-s = ink ≈ 180 /
+                145 / 114pt: each in its OWN layout-rect coordinates; contour[i] = leftmost stencil ink in the i-th of
+                32 equal horizontal bands of the layout rect, top to bottom),
+                frames / durationMs (motion sequences), mask true (motion masks: 8-bit GREY PNG at 1×, white = paint
+                present, no alpha — file `<id>.png`, pixel size = `size`), origin (frieze), ground (informative)}}
   glyphs: {set: {file, pt, lineHeight [ascent, descent] pt, capTop pt (cell top -> cap top), capHeight pt (cap top ->
-                 baseline), glyphs {ch: {rect [x,y,w,h] px, advance pt, bearing pt}}}}
+                 baseline), glyphs {ch: {rect [x,y,w,h] px, advance pt, bearing pt, inkRight pt (pen -> right edge of
+                 the stencil ink, overspray excluded)}}}}
 (v12.1: the `words` alias table is gone — use the asset ids.)
 """
 import io
@@ -32,12 +35,15 @@ OPTIMISE = True
 RETIRED = set()          # ids a group no longer bakes (removed from a merged manifest + their PNG deleted)
 
 
-def _png_bytes(im):
+def _png_bytes(im, keep_format=False):
+    """keep_format: oxipng may only re-filter / re-deflate (an 8-bit grey mask stays 8-bit grey, never 1-bit / palette)."""
     b = io.BytesIO()
     im.save(b, 'PNG', optimize=True, compress_level=9)
     data = b.getvalue()
     if oxipng is not None and OPTIMISE:
-        data = oxipng.optimize_from_memory(data, level=4, strip=oxipng.StripChunks.safe())
+        kw = dict(bit_depth_reduction=False, color_type_reduction=False, palette_reduction=False,
+                  grayscale_reduction=False) if keep_format else {}
+        data = oxipng.optimize_from_memory(data, level=4, strip=oxipng.StripChunks.safe(), **kw)
     return data
 
 
@@ -138,8 +144,33 @@ def save(aid, arr, kind, purpose, bleed=(0, 0, 0, 0), insets=None, anchor=None, 
     return e
 
 
+def save_mask(aid, m2x, purpose, bleed=(0, 0, 0, 0), **extra):
+    """Motion reveal mask: float coverage map at @2x -> 8-bit GREY PNG at 1× (2×2 box average = the exact coverage of
+    each 1pt pixel; always 8-bit colour type 0, even a constant frame), no alpha; white = the final asset's paint is already there.  File `<id>.png`; manifest entry
+    `mask: true`, `size` = pixel size = pt.  Grey value = alpha straight (not gamma-encoded): luminanceToAlpha in the
+    gamma working space gives back the coverage."""
+    os.makedirs(DEST, exist_ok=True)
+    H2, W2 = m2x.shape
+    assert H2 % 2 == 0 and W2 % 2 == 0, (aid, m2x.shape)
+    m = np.clip(m2x, 0, 1).astype(np.float32).reshape(H2 // 2, 2, W2 // 2, 2).mean((1, 3))
+    g8 = (m * 255 + 0.5).astype(np.uint8)
+    data = _png_bytes(Image.fromarray(g8, 'L'), keep_format=True)
+    fn = f'{aid}.png'
+    with open(os.path.join(DEST, fn), 'wb') as f:
+        f.write(data)
+    H, W = g8.shape
+    e = dict(file=fn, kind='sprite', size=[_r(W), _r(H)], bleed=[_r(v) for v in bleed], mask=True)
+    for k, v in extra.items():
+        e[k] = ([None if x is None else _r(x) for x in v] if isinstance(v, (list, tuple))
+                else (_r(v) if isinstance(v, float) else v))
+    e['purpose'] = purpose
+    ASSETS[aid] = e
+    LOG[aid] = (len(data), 'grey 1x')
+    return e
+
+
 def glyph_set(sid, aid, arr, pt, line_height, glyphs, purpose, cap=None):
-    """One atlas PNG per glyph set; glyphs = {ch: dict(rect=[x,y,w,h] px, advance=pt, bearing=pt)};
+    """One atlas PNG per glyph set; glyphs = {ch: dict(rect=[x,y,w,h] px, advance=pt, bearing=pt, inkRight=pt)};
     cap = (capTop, capHeight) pt, measured from the cell top at nominal size (capTop + capHeight = ascent)."""
     os.makedirs(DEST, exist_ok=True)
     data, mode = encode(arr)
@@ -149,7 +180,8 @@ def glyph_set(sid, aid, arr, pt, line_height, glyphs, purpose, cap=None):
     e = dict(file=fn, pt=pt, lineHeight=[_r(v) for v in line_height])
     if cap is not None:
         e['capTop'], e['capHeight'] = _r(cap[0]), _r(cap[1])
-    e['glyphs'] = {c: dict(rect=[int(v) for v in g['rect']], advance=_r(g['advance']), bearing=_r(g['bearing']))
+    e['glyphs'] = {c: dict(rect=[int(v) for v in g['rect']], advance=_r(g['advance']), bearing=_r(g['bearing']),
+                           inkRight=_r(g['inkRight']))
                    for c, g in glyphs.items()}
     e['purpose'] = purpose
     GLYPHS[sid] = e
@@ -160,19 +192,31 @@ def total_bytes():
     return sum(v[0] for v in LOG.values())
 
 
+def _remove(fn):
+    fp = os.path.join(DEST, fn)
+    if os.path.exists(fp):
+        os.remove(fp)
+
+
 def write_manifest(merge=False, drop=()):
     """merge=True (a partial --only run): keep the other groups' entries of the existing manifest, except the ids a
-    group retired (`drop`, whose PNGs are deleted too)."""
+    group retired (`drop`, whose PNGs are deleted too).  An id whose file name changed (a mask moved from
+    `<id>@2x.png` to `<id>.png`) loses its old file.  A full run (merge=False) deletes every PNG in Resources/Material
+    the new manifest does not reference."""
     a, g = {}, {}
     path = os.path.join(DEST, 'manifest.json')
-    if merge and os.path.exists(path):
-        old = json.load(open(path))
-        a, g = old.get('assets', {}), old.get('glyphs', {})
+    old = json.load(open(path)) if os.path.exists(path) else {}
+    if merge:
+        a, g = dict(old.get('assets', {})), dict(old.get('glyphs', {}))
     for aid in drop:
         a.pop(aid, None)
-        fp = os.path.join(DEST, f'{aid}@2x.png')
-        if aid not in ASSETS and os.path.exists(fp):
-            os.remove(fp)
+        if aid not in ASSETS:
+            _remove(f'{aid}@2x.png')
+            _remove(f'{aid}.png')
+    for aid, e in ASSETS.items():
+        prev = old.get('assets', {}).get(aid)
+        if prev and prev.get('file') != e['file']:
+            _remove(prev['file'])
     a.update(ASSETS)
     g.update(GLYPHS)
     m = dict(version=1, scale=2,
@@ -183,4 +227,9 @@ def write_manifest(merge=False, drop=()):
         json.dump(m, f, ensure_ascii=False, indent=1)
         f.write('\n')
     os.replace(tmp, path)
+    if not merge:
+        keep = {e['file'] for e in m['assets'].values()} | {e['file'] for e in m['glyphs'].values()}
+        for fn in os.listdir(DEST):
+            if fn.endswith('.png') and fn not in keep:
+                os.remove(os.path.join(DEST, fn))
     return m

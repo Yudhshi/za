@@ -25,27 +25,80 @@ def paths(name):
     return svg.parse(os.path.join(SRC, name + '.svg'))[2]['creature']
 
 
-def grey(i, day, name):
+# r2: three tiers so the calm hero only ever scales a creature 0.85–1.15 (CreatureTier in Baked.swift): the stencil
+# ink is ≈ 180 / 145 / 114pt tall (472×248 / 472×212 / the 472×150 short card).  Same art, same facing, same grey paint
+# (the spray recipe is in px = physical, so the overspray does not shrink with the sheet); each tier its own seed.
+TIERS = [('', 180, 0), ('-m', 145, 11), ('-s', 114, 23)]
+BRIDGE_MIN = 2.2        # pt: every stencil bridge / sheet tongue ≥ this after the cut (≥ 2pt once the paint creeps)
+_INK_UNITS = {}
+
+
+def ink_units(name):
+    """Stencil-ink height of the art in SVG units (of the 400 × 300 art box)."""
+    if name not in _INK_UNITS:
+        K = 4
+        m = svg.raster(paths(name), 400 * K, 300 * K, K, 0, 0, ss=2)
+        ys = np.nonzero((m > 0.5).any(1))[0]
+        _INK_UNITS[name] = (ys.max() + 1 - ys.min()) / K
+    return _INK_UNITS[name]
+
+
+def widen_bridges(ink, r):
+    """Cut every narrow strip of stencil SHEET (background between ink: the bridges, toe cuts, slits) to at least
+    2r px: open the background with a disk of radius r; what does not survive is narrower than 2r.  Keep the strips
+    that part two ink islands or are long enough to be a tongue of sheet (≥ 3pt² at the tier); the tiny unreachable
+    tips of concave ink corners are left alone.  Then stamp a disk of radius r along each kept strip's centre line."""
+    bg = ~ink
+    dt = ndi.distance_transform_edt(bg)
+    core = dt > r
+    narrow = bg & (ndi.distance_transform_edt(~core) > r)
+    lab_ink, _ = ndi.label(ink, np.ones((3, 3)))
+    lab, n = ndi.label(narrow, np.ones((3, 3)))
+    keep = np.zeros(n + 1, bool)
+    min_area = 3.0 * (r / BRIDGE_MIN * 2) ** 2           # 3pt² in px² (r px = BRIDGE_MIN / 2 pt)
+    for k, sl in enumerate(ndi.find_objects(lab), 1):
+        sl = tuple(slice(max(0, a.start - 2), a.stop + 2) for a in sl)
+        comp = lab[sl] == k
+        touch = np.unique(lab_ink[sl][ndi.binary_dilation(comp, np.ones((3, 3)))])
+        keep[k] = (len(touch[touch > 0]) >= 2) or comp.sum() >= min_area
+    kept = keep[lab]
+    ridge = kept & (dt >= ndi.maximum_filter(dt, size=3) - 0.5)
+    if not ridge.any():
+        return ink, 0
+    carve = ndi.distance_transform_edt(~ridge) <= r
+    return ink & ~carve, int(keep.sum())
+
+
+def grey(i, day, name, tier):
     """today v3 hero_hook: #42464A through the creature's own sheet, k 1.5 (the black slab reads through)."""
-    bw, bh = 280, 210                         # art box 400 x 300 -> 280 x 210pt master (hero scales it by height)
+    suffix, ink_h, soff = tier
+    bh = 1.5 * round(300 * ink_h / ink_units(name) / 1.5)    # layout = the 400 × 300 art box (bh multiple of 1.5pt
+    bw = bh * 4 / 3                                           # so the box is whole pixels at @2x)
     bleed = (8, 8, 8, 8)
-    W, H = (bw + 16) * S, (bh + 16) * S
+    W, H = int(round((bw + 16) * S)), int(round((bh + 16) * S))
     ox, oy = 8 * S, 8 * S
-    m = svg.raster(paths(name), W, H, bw * S / 400, ox, oy)
-    seed = 7000 + 31 * i
+    SS = 4                                                    # cut the stencil at 4× and box it down (svg.raster does)
+    hi = svg.raster(paths(name), W * SS, H * SS, bh * S * SS / 300, ox * SS, oy * SS, ss=1) > 0.5
+    hi, nb = widen_bridges(hi, BRIDGE_MIN / 2 * S * SS)
+    m = hi.astype(np.float32).reshape(H, SS, W, SS).mean((1, 3))
+    seed = 7000 + 31 * i + (10000 + soff if soff else 0)
     L = ext.Layer(W, H, seed, 'concrete')
     L.spray(m, 'creature', seed + 600, side=SIDES[i] + 180, side_min=0.0, passes=3, angle=-9 + (seed + 600) % 8,
             sheet_pad=8, k=1.5, droplets=0.10, reach=7, spits=0, sheen=0.03, under=(0.6, 0.6), relief=1.0)
     border_fade(L, 6)
     x0, y0, x1, y1 = svg.ink_box(m)
-    out.save(f'creature-{day}-grey', ext.export(L.col, L.A, BLACK_SLAB), 'sprite',
-             f'Calm hero second stencil ({day.upper()}): non-fluorescent grey paint, faces left; layout rect = the '
-             f'400×300 art box (280×210pt master). ink = stencil-ink box [x0, y0, x1, y1] and contour = leftmost '
-             f'stencil ink per band ({BANDS} equal horizontal bands of the layout rect, top to bottom; null = no ink), '
-             f'both in layout-rect pt (overspray excluded) — CreatureFit scales the ink to 0.76 × card height and '
-             f'shrinks until ≥9pt clear of text / numerals / cells. Never in event states.', bleed=bleed,
-             ink=[(x0 - ox) / S, (y0 - oy) / S, (x1 - ox) / S, (y1 - oy) / S], contour=contour(m, ox, oy, bw, bh),
-             feetY=286 * bh / 300, ground='black slab')
+    ink = [(x0 - ox) / S, (y0 - oy) / S, (x1 - ox) / S, (y1 - oy) / S]
+    use = {'': 'the calm hero at ~472×248 (ink ≈ 180pt)', '-m': 'the calm hero at ~472×212 (ink ≈ 145pt)',
+           '-s': 'the short calm card 472×150 (ink ≈ 114pt)'}[suffix]
+    out.save(f'creature-{day}-grey{suffix}', ext.export(L.col, L.A, BLACK_SLAB), 'sprite',
+             f'Calm hero second stencil ({day.upper()}), tier {suffix or "-l"}: for {use}; scale it only 0.85–1.15 '
+             f'(CreatureTier picks the tier). Non-fluorescent grey paint, faces left; layout rect = the 400×300 art '
+             f'box ({bw:g}×{bh:g}pt). ink = stencil-ink box [x0, y0, x1, y1] and contour = leftmost stencil ink per '
+             f'band ({BANDS} equal horizontal bands of the layout rect, top to bottom; null = no ink), both in '
+             f'layout-rect pt (overspray excluded). Bridges cut ≥ {BRIDGE_MIN:g}pt at this size. Never in event '
+             f'states.', bleed=bleed,
+             ink=ink, contour=contour(m, ox, oy, bw, bh), feetY=286 * bh / 300, ground='black slab')
+    return ink[3] - ink[1], nb
 
 
 BANDS = 32
@@ -125,6 +178,7 @@ def ghost(i, day, name):
 
 def bake_all():
     for i, (day, name) in enumerate(DAYS):
-        grey(i, day, name)
+        for tier in TIERS:
+            grey(i, day, name, tier)
         teal(i, day, name)
         ghost(i, day, name)

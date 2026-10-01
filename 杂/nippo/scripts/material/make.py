@@ -22,6 +22,12 @@ from yudhmat import out  # noqa: E402
 
 GROUPS = ['concrete', 'paint', 'masked', 'stencil', 'drips', 'cells', 'creatures', 'poses', 'kraft', 'motion']
 
+# ids no group bakes any more: dropped from the manifest and their PNGs deleted, also on an --only run of any group
+RETIRED = {'concrete-quiet-night', 'pose-standing', 'pose-stand-up-s', 'pose-sit-down-s',
+           'shout-tomorrow-black-night'} | \
+          {f'rate-18-{s}' for s in ('easy', 'good', 'fuzzy', 'forgot', 'empty', 'current')} | \
+          {f'drip-black-{n}' for n in range(1, 7)}
+
 
 def run(group):
     mod = __import__(f'yudhmat.g_{group}', fromlist=['bake_all'])
@@ -36,6 +42,7 @@ def main():
     ap.add_argument('-v', '--verbose', action='store_true')
     a = ap.parse_args()
     out.OPTIMISE = not a.no_optimise
+    out.RETIRED.update(RETIRED)
     groups = a.only or GROUPS
     seen = set()
     for g in groups:
