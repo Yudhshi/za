@@ -68,9 +68,11 @@ struct SprayButtonStyle: ButtonStyle {
     var kind: Kind = .orange
     var height: CGFloat = Turf.primaryButton
     var wide = false
+    /// 左右の余白(主角卡の ≤ 120pt のボタンは詰める)
+    var padding: CGFloat = 18
 
     func makeBody(configuration: Configuration) -> some View {
-        SprayButtonBody(configuration: configuration, kind: kind, height: height, wide: wide)
+        SprayButtonBody(configuration: configuration, kind: kind, height: height, wide: wide, padding: padding)
     }
 }
 
@@ -79,6 +81,7 @@ private struct SprayButtonBody: View {
     let kind: SprayButtonStyle.Kind
     let height: CGFloat
     let wide: Bool
+    let padding: CGFloat
     @Environment(\.isEnabled) private var isEnabled
     @State private var hovering = false
 
@@ -89,7 +92,7 @@ private struct SprayButtonBody: View {
             .tracking(17 * 0.04)
             .foregroundStyle(Palette.black)
             .lineLimit(1)
-            .padding(.horizontal, 18)
+            .padding(.horizontal, padding)
             .frame(maxWidth: wide ? .infinity : nil, minHeight: height, maxHeight: height)
             .background {
                 MaterialSlice(id: kind.asset, fallback: kind.fallback)
@@ -429,7 +432,7 @@ struct Drips: View {
                 let id = "drip-\(paint.rawValue)-\((seed + index * 2) % 6 + 1)"
                 if let asset = Material.asset(id) {
                     // 素材の anchor(画像の座標)を卡の下縁の x に合わせる。position は配置の枠(bleed を除く)の中心
-                    let anchor = asset.anchor ?? [asset.width / 2, 0]
+                    let anchor = (asset.anchor?.count ?? 0) >= 2 ? asset.anchor! : [asset.width / 2, 0]
                     let bleed = asset.bleedInsets
                     MaterialSprite(id: id)
                         .fixedSize()

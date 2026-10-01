@@ -176,6 +176,7 @@ struct MaterialSlice: View {
                 .accessibilityHidden(true)
         } else {
             Rectangle().fill(fallback)
+                .allowsHitTesting(false)
         }
     }
 }
@@ -193,6 +194,7 @@ struct MaterialTile: View {
                 .accessibilityHidden(true)
         } else {
             Rectangle().fill(fallback)
+                .allowsHitTesting(false)
         }
     }
 }
@@ -274,21 +276,23 @@ struct StencilWord: View {
     let fallback: String
     var fallbackSize: CGFloat = 21
     var fallbackColor: Color = Palette.teal
+    /// 長い語(WEDNESDAY)を枠に収めるときの縮小
+    var scale: CGFloat = 1
 
     var body: some View {
         if let asset = Material.asset(id), Material.image(id) != nil {
             let b = asset.bleedInsets
             // 配置の枠の上端から基線まで
-            let baseline = (asset.baseline ?? asset.height - b.bottom) - b.top
-            MaterialSprite(id: id)
+            let baseline = ((asset.baseline ?? asset.height - b.bottom) - b.top) * scale
+            MaterialSprite(id: id, scale: scale)
                 .alignmentGuide(.firstTextBaseline) { _ in baseline }
                 .alignmentGuide(.lastTextBaseline) { _ in baseline }
                 .accessibilityElement()
                 .accessibilityLabel(fallback)
         } else {
             Text(fallback)
-                .font(Typeface.archivo(fallbackSize, weight: 900, width: 125))
-                .tracking(fallbackSize * 0.02)
+                .font(Typeface.archivo(fallbackSize * scale, weight: 900, width: 125))
+                .tracking(fallbackSize * scale * 0.02)
                 .foregroundStyle(fallbackColor)
         }
     }
