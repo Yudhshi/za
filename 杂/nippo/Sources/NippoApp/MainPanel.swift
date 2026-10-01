@@ -25,7 +25,8 @@ final class MainPanelController: NSObject, NSWindowDelegate {
         panel.level = .floating
         panel.backgroundColor = .clear
         panel.isOpaque = false
-        panel.hasShadow = true
+        // 影は面板の縁の素材(panel-frame)に焼いてある。システムの大きなぼかし影は使わない
+        panel.hasShadow = false
         panel.hidesOnDeactivate = false
         panel.isReleasedWhenClosed = false
         panel.isMovableByWindowBackground = true
@@ -164,13 +165,15 @@ private final class KeyablePanel: NSPanel {
     override var canBecomeMain: Bool { false }
 }
 
-/// 窓の中身。角を丸め、自分の大きさを窓に知らせる
+/// 窓の中身。焼いた影の分の余白を足し、自分の大きさを窓に知らせる
 private struct PanelRoot: View {
     let coordinator: AppCoordinator
     let sizeChanged: (CGSize) -> Void
 
     var body: some View {
         MenuContentView(coordinator: coordinator)
+            // 焼いた接地影が窓の外で切れないように、その分だけ窓を広げる
+            .padding(Material.asset("panel-frame-night")?.bleedInsets ?? EdgeInsets())
             .background(GeometryReader { geo in
                 Color.clear.preference(key: PanelSizeKey.self, value: geo.size)
             })

@@ -24,6 +24,9 @@ cp Resources/AppIcon/AppIcon.icns "$APP/Contents/Resources/AppIcon.icns"
 # 小窓の説明の絵(scripts/make-illustrations.py で描く。PNG は 2 倍)
 mkdir -p "$APP/Contents/Resources/Stretches"
 cp Resources/Stretches/*.png "$APP/Contents/Resources/Stretches/"
+# 画面の材質(scripts/material/ で焼く。PNG は 2 倍)と同梱の字体(Archivo / JetBrains Mono、OFL)
+[ -d Resources/Material ] && cp -R Resources/Material "$APP/Contents/Resources/Material"
+cp -R Resources/Fonts "$APP/Contents/Resources/Fonts"
 # 英語タブの素材(scripts/import-english.mjs で作る。教材由来なのでリポジトリには入れていない)
 if [ -d Resources/English ]; then
     cp -R Resources/English "$APP/Contents/Resources/English"
