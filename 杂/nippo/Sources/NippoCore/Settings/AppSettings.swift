@@ -125,6 +125,12 @@ public final class AppSettings: ObservableObject {
         set { d.set(newValue ?? "", forKey: "syncRoot"); objectWillChange.send() }
     }
 
+    /// 今日と明日の会議を同期フォルダの agenda.json に書く(Windows はカレンダーを読まず、これを読む)
+    public var agendaExport: Bool {
+        get { d.object(forKey: "agendaExport") as? Bool ?? true }
+        set { d.set(newValue, forKey: "agendaExport"); objectWillChange.send() }
+    }
+
     /// 出来事に付ける、この端末の名前(同期フォルダのファイル名にもなる)
     public var deviceName: String {
         get {

@@ -82,12 +82,13 @@ struct SettingsView: View {
                 }
             }
 
-            Section("同步（和 Windows 共享单词进度）") {
+            Section("同步（和 Windows 共享单词进度和会议）") {
                 HStack {
                     TextField("同步文件夹（OneDrive / iCloud Drive 里的一个文件夹）", text: syncRootBinding)
                     Button("选择…") { chooseSyncFolder() }
                 }
                 TextField("这台设备的名字", text: binding(\.deviceName))
+                Toggle("把今天和明天的会议写给 Windows（agenda.json）", isOn: binding(\.agendaExport))
                 HStack {
                     Button("立即同步") { english.syncNow() }
                         .disabled(settings.syncRoot == nil)

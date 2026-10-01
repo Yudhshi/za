@@ -172,20 +172,41 @@ final class AppCoordinator: ObservableObject {
     }
 
     private var eventsRefreshInFlight = false
+    /// agenda.json を最後に書けなかった理由(同じ失敗を毎分ログに積まない)
+    private var agendaFailure: String?
 
     func refreshTodayEvents() {
         guard calendarAuthorized, !eventsRefreshInFlight else { return }
         eventsRefreshInFlight = true
         let provider = calendarProvider
+        // 同期フォルダがあれば、今日と明日の会議を agenda.json に書く(Windows はこれだけを読む)
+        let agendaRoot = settings.agendaExport ? settings.syncRoot : nil
+        let device = settings.deviceName
         // EventKit の同期フェッチをメインスレッドから追い出す(終極監査 major の修正)
         Task.detached(priority: .utility) { [weak self] in
             let now = Date()
             let events = provider.events(on: now)
             // 明日の予定も読む(リマインド予約用)。夜のスリープ中に日付が変わっても、朝一の会議の通知が届くように
-            let tomorrow = Calendar.current.date(byAdding: .day, value: 1, to: now)
-                .map { provider.events(on: $0) } ?? []
+            let tomorrowDate = Calendar.current.date(byAdding: .day, value: 1, to: now)
+            let tomorrow = tomorrowDate.map { provider.events(on: $0) } ?? []
+            // 中身が前と同じなら書かない(同期盘が毎分アップロードしないように)
+            let agendaFailure: String? = {
+                guard let agendaRoot, let tomorrowDate else { return nil }
+                do {
+                    try AgendaExport.write(days: [AgendaExport.Day(day: DayKey.key(for: now), events: events),
+                                                  AgendaExport.Day(day: DayKey.key(for: tomorrowDate), events: tomorrow)],
+                                           device: device, to: URL(fileURLWithPath: agendaRoot), now: now)
+                    return nil
+                } catch {
+                    return "\(error)"
+                }
+            }()
             await MainActor.run {
                 guard let self else { return }
+                if agendaFailure != self.agendaFailure {
+                    if let agendaFailure { AppLog.shared.log("agenda", "agenda.json write failed: \(agendaFailure)") }
+                    self.agendaFailure = agendaFailure
+                }
                 self.eventsRefreshInFlight = false
                 self.todayEvents = events
                 self.tomorrowEvents = tomorrow

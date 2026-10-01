@@ -83,4 +83,64 @@
 - 不常驻轮询：打开面板时和每 5 分钟读一次文件夹；文件很小（几千行）。
 - 不要用文件系统监听常驻钩子；不要开后台服务。
 - 只写自己的文件；本地用 SQLite 或一个 JSON 文件存重放结果都可以。
-- 会议：Windows 不读日历，只读 Mac 写出的 `agenda.json`（待实现，见 README 的计划）。
+- 会议：Windows 不读日历，只读 Mac 写出的 `agenda.json`（见下）。
+
+## 会议：`agenda.json`（Mac → Windows，只读）
+
+Windows 不碰日历。Mac 在同步文件夹里写一个 `agenda.json`，内容是**今天和明天**的会议；Windows 只读它，从不写。
+
+```
+<同步文件夹>/
+  agenda.json            只由 Mac 写（设置里「把今天和明天的会议写给 Windows」可以关掉）
+```
+
+- 什么时候写：Mac 每次读日历（打开面板时、每分钟的 tick）之后。**除 `generatedAt` 以外的内容没变就不写**，所以一天里只在会议变动和日期变化时才会改动这个文件。
+- 写法同上：先写 `.agenda.json.tmp` 再整体替换。
+- 不写参加者。标题、时间、会议链接照写（文件在你自己的同步盘里）。
+
+```json
+{
+  "days" : [
+    {
+      "day" : "2026-10-01",
+      "events" : []
+    },
+    {
+      "day" : "2026-10-02",
+      "events" : [
+        {
+          "allDay" : false,
+          "end" : "2026-10-02T01:15:00Z",
+          "id" : "C1A2…",
+          "join" : "https://meet.google.com/abc-defg-hij",
+          "start" : "2026-10-02T01:00:00Z",
+          "title" : "朝会"
+        }
+      ]
+    }
+  ],
+  "device" : "MacBook",
+  "generatedAt" : "2026-10-01T12:00:00Z",
+  "timeZone" : "Asia/Tokyo",
+  "version" : 1
+}
+```
+
+| 字段 | 说明 |
+|---|---|
+| `version` | 现在是 `1`。不认识的版本整个文件不读 |
+| `device` | 写这个文件的 Mac 的设备名 |
+| `generatedAt` | 内容最后一次变化的时刻（ISO 8601、UTC） |
+| `timeZone` | Mac 的时区（IANA 名）。`day` 按这个时区划分 |
+| `days[].day` | `yyyy-MM-dd`。今天、明天各一项；没有会议也会列出（`events` 为空 = 确实没会） |
+| `events[]` | 按 `start` 升序；同一时刻按 `end`、`title`、`id` |
+| `id` | 日历里的事件 id（同一个会议在两次写出之间不变，提醒去重用） |
+| `start` `end` | ISO 8601、UTC（读的时候也接受带毫秒的写法） |
+| `allDay` | 全天事件（Windows 端一般不提醒、不显示倒计时） |
+| `join` | 会议链接（Meet / Zoom / Teams），没有就不写 |
+
+Windows 端的读法：
+
+- 「明天」= Windows 本地日期 + 1 天，在 `days` 里找同一个 `day`。**找不到 = Mac 还没更新**（比如 Mac 一直在睡），显示「Mac 还没同步明天的日程」之类的话，不要显示成「明天没会」。
+- 只在打开面板时读一次；文件很小，不用监听。
+- 以 Swift 端 `Sources/NippoCore/Calendar/AgendaExport.swift`（`parse`）与 `Sources/nippo-tests/AgendaExportTests.swift` 为准。

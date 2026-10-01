@@ -49,6 +49,10 @@ func runSettingsTests() {
         T.expectEqual(AppSettings(defaults: d).sitMinutes, 30)
         T.expectEqual(AppSettings(defaults: d).stretches, "肩回し")
         T.expectEqual(s.lastStretchIndex, 0)
+
+        T.expectEqual(s.agendaExport, true, "agenda.json is written by default")
+        s.agendaExport = false
+        T.expectEqual(AppSettings(defaults: d).agendaExport, false)
     }
 
     T.run("time parsing with fallback") {
