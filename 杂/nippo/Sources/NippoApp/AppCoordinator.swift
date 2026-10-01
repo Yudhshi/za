@@ -55,6 +55,7 @@ final class AppCoordinator: ObservableObject {
         // 同期(設定でフォルダを選んだときだけ)
         english.deviceName = { [weak self] in self?.settings.deviceName ?? "Mac" }
         english.syncRoot = { [weak self] in self?.settings.syncRoot }
+        english.libraryExport = { [weak self] in self?.settings.libraryExport ?? false }
         return english
     }()
 

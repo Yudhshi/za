@@ -117,4 +117,23 @@ func runEnglishSyncTests() {
         T.expectEqual(try a.results(day: "2026-10-01"), ["again", "hard", "known"], "in answer order")
         T.expectEqual(try a.ratings(card: "vocab:none"), [], "unknown card")
     }
+
+    T.run("word lists are copied to english-library once, and again when they change") {
+        let source = tempDir()
+        let root = tempDir()
+        try Data(#"[{"id":"b1-1","w":"storey","zh":"层","lv":"b1"}]"#.utf8)
+            .write(to: source.appendingPathComponent("vocab.json"))
+        try Data("ECDICT MIT".utf8).write(to: source.appendingPathComponent("LICENSES.txt"))
+        T.expectEqual(try EnglishSync.exportLibrary(from: source, to: root), 2, "only the files that exist")
+        let copied = root.appendingPathComponent("english-library/vocab.json")
+        T.expectEqual(EnglishLibrary.load(from: root.appendingPathComponent("english-library")).vocab.first?.w,
+                      "storey", "Windows reads the same JSON")
+        T.expectEqual(try EnglishSync.exportLibrary(from: source, to: root), 0, "unchanged: not copied again")
+        try Data(#"[{"id":"b1-1","w":"storeys","zh":"层","lv":"b1"}]"#.utf8)
+            .write(to: source.appendingPathComponent("vocab.json"))
+        T.expectEqual(try EnglishSync.exportLibrary(from: source, to: root), 1, "a re-imported list is copied")
+        T.expect(try String(contentsOf: copied, encoding: .utf8).contains("storeys"), "new content")
+        try? FileManager.default.removeItem(at: source)
+        try? FileManager.default.removeItem(at: root)
+    }
 }

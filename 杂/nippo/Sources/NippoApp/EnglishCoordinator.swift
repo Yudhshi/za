@@ -165,6 +165,8 @@ final class EnglishCoordinator: ObservableObject {
     private var loading = false
     /// 同期フォルダ(AppCoordinator が設定から注入)。nil なら同期しない
     var syncRoot: () -> String? = { nil }
+    /// 語表を同期フォルダの english-library/ に写すか(Windows 用。AppCoordinator が設定から注入)
+    var libraryExport: () -> Bool = { false }
     /// 出来事に付ける端末名(設定で変えたら次の同期から使う)
     var deviceName: () -> String = { "Mac" } {
         didSet { store.device = deviceName() }
@@ -254,6 +256,8 @@ final class EnglishCoordinator: ObservableObject {
         syncing = true
         store.device = deviceName()
         let sync = EnglishSync(root: URL(fileURLWithPath: root), device: store.device, store: store)
+        // 語表は読み終えてから写す(読む前は空の語表を写しかねない)
+        let librarySource = loaded && libraryExport() ? Self.dataDirectory() : nil
         Task.detached(priority: .utility) { [weak self] in
             let imported: Int
             let failure: String?
@@ -265,9 +269,22 @@ final class EnglishCoordinator: ObservableObject {
                 imported = 0
                 failure = "\(error)"
             }
+            // 語表の写しが失敗しても同期そのものは失敗にしない(ログだけ)
+            let libraryFailure: String? = {
+                guard let librarySource else { return nil }
+                do {
+                    try EnglishSync.exportLibrary(from: librarySource, to: sync.root)
+                    return nil
+                } catch {
+                    return "\(error)"
+                }
+            }()
             await MainActor.run {
                 guard let self else { return }
                 self.syncing = false
+                if let libraryFailure {
+                    AppLog.shared.log("english", "library export failed: \(libraryFailure)")
+                }
                 if let failure {
                     self.syncStatus = "同步失败：\(failure)"
                     AppLog.shared.log("english", "sync failed: \(failure)")

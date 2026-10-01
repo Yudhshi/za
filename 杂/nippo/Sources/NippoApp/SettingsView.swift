@@ -89,6 +89,7 @@ struct SettingsView: View {
                 }
                 TextField("这台设备的名字", text: binding(\.deviceName))
                 Toggle("把今天和明天的会议写给 Windows（agenda.json）", isOn: binding(\.agendaExport))
+                Toggle("把词表复制一份给 Windows（english-library，只供自己学习）", isOn: binding(\.libraryExport))
                 HStack {
                     Button("立即同步") { english.syncNow() }
                         .disabled(settings.syncRoot == nil)

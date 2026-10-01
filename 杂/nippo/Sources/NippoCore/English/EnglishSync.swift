@@ -162,6 +162,35 @@ public final class EnglishSync {
         return events.count
     }
 
+    /// Windows が読む語表の置き場所(同期フォルダの english-library/)。書くのは Mac だけ
+    public static let libraryFolder = "english-library"
+    public static let libraryFiles = ["vocab.json", "paraphrase.json", "dictation.json", "dict.json", "LICENSES.txt"]
+
+    /// 語表を同期フォルダへ写す(Windows は語表を持たないので、ここから読む)。
+    /// 大きさが同じで写しの方が新しければ写さない(開くたびに 2MB の辞書を書き直さない)。写した数を返す
+    @discardableResult
+    public static func exportLibrary(from source: URL, to root: URL) throws -> Int {
+        let fm = FileManager.default
+        let target = root.appendingPathComponent(libraryFolder)
+        var copied = 0
+        for name in libraryFiles {
+            let from = source.appendingPathComponent(name)
+            guard let src = try? fm.attributesOfItem(atPath: from.path) else { continue }
+            let to = target.appendingPathComponent(name)
+            if let dst = try? fm.attributesOfItem(atPath: to.path),
+               (dst[.size] as? NSNumber) == (src[.size] as? NSNumber),
+               let srcDate = src[.modificationDate] as? Date, let dstDate = dst[.modificationDate] as? Date,
+               dstDate >= srcDate {
+                continue
+            }
+            try fm.createDirectory(at: target, withIntermediateDirectories: true)
+            // 一時ファイルに書いてから置き換える(Windows が書きかけを読まないように)
+            try Data(contentsOf: from).write(to: to, options: .atomic)
+            copied += 1
+        }
+        return copied
+    }
+
     /// ほかの端末のファイルを読み、知らない出来事を取り込み、あれば状態を作り直す。取り込んだ数を返す
     @discardableResult
     public func pull(calendar: Calendar = .current) throws -> Int {

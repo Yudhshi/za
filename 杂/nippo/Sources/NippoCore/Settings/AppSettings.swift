@@ -131,6 +131,12 @@ public final class AppSettings: ObservableObject {
         set { d.set(newValue, forKey: "agendaExport"); objectWillChange.send() }
     }
 
+    /// 英語の語表を同期フォルダの english-library/ に写す(Windows は語表を持たず、ここから読む)
+    public var libraryExport: Bool {
+        get { d.object(forKey: "libraryExport") as? Bool ?? true }
+        set { d.set(newValue, forKey: "libraryExport"); objectWillChange.send() }
+    }
+
     /// 出来事に付ける、この端末の名前(同期フォルダのファイル名にもなる)
     public var deviceName: String {
         get {

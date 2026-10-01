@@ -53,6 +53,7 @@ func runSettingsTests() {
         T.expectEqual(s.agendaExport, true, "agenda.json is written by default")
         s.agendaExport = false
         T.expectEqual(AppSettings(defaults: d).agendaExport, false)
+        T.expectEqual(s.libraryExport, true, "the word lists are copied for Windows by default")
     }
 
     T.run("time parsing with fallback") {

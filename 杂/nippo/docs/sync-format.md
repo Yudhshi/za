@@ -13,7 +13,11 @@
 ```
 <同步文件夹>/
   english-events-<设备名>.jsonl     每台设备一个，只由该设备写
+  english-library/                  词表（vocab / paraphrase / dictation / dict.json + LICENSES.txt），只由 Mac 写
+  agenda.json                       今天和明天的会议，只由 Mac 写（见文末）
 ```
+
+词表来自教材，不进 git，所以 Windows 的安装包里没有。Mac 在每次同步时把 `Resources/English/` 里的这几个文件复制到 `english-library/`（大小相同且副本较新就跳过；设置里可以关掉）。Windows 只读这里。只供自己学习，不要把同步文件夹共享给别人。
 
 设备名只保留字母、数字、`-`、`_`，其余替换成 `-`，首尾的 `-` 去掉（`Mac Book (Yudh)` → `english-events-Mac-Book--Yudh.jsonl`）。
 
