@@ -45,7 +45,15 @@ struct SettingsView: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
                 VStack(alignment: .leading) {
-                    Text("每次站起来时按顺序出一个拉伸动作")
+                    HStack {
+                        Text("每次站起来时按顺序出一个拉伸动作")
+                        Spacer()
+                        Button("恢复默认") {
+                            settings.stretches = BreakReminder.defaultStretches
+                            settings.lastStretchIndex = 0
+                        }
+                        .disabled(settings.stretches == BreakReminder.defaultStretches)
+                    }
                     TextEditor(text: binding(\.stretches))
                         .font(.body)
                         .frame(height: 220)
@@ -54,7 +62,7 @@ struct SettingsView: View {
                         .foregroundStyle(.secondary)
                 }
                 .disabled(!settings.postureEnabled)
-                Text("默认动作都很温和、手臂不举过头顶，胸廓出口综合征也常被推荐。如果医生或理疗师给过方案，请换成那个;出现疼痛或麻木就停止。站着工作时放松肩膀，桌子调到手肘 90° 的高度")
+                Text("默认动作针对斜角肌（脖子侧面）发紧，手臂不举过头顶。有拉伸感可以，发麻或刺痛传到手上就停；医生或理疗师给过方案的话换成那个。打字时手肘有支撑、键盘鼠标靠近身体，比拉伸更能让斜角肌放松；站着工作时桌子调到手肘 90° 的高度")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
