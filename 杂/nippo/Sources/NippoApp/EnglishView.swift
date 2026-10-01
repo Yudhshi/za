@@ -1,9 +1,11 @@
-import SwiftUI
+import AppKit
 import NippoCore
+import SwiftUI
 
-/// 英語タブ(v12「Stencil Turf」夜版)。混凝土の上に白漆の単語卡 1 枚、右に章の置き場と本轮の盤面(4×5)。
-/// 卡の上は濃い墨の本物の文字、色面はすべて焼いた素材(喷块・遮块・格)。答えたら卡の右上の枠に NICE! / MISS、
-/// 章が出ている間(動)だけ卡の下縁から漆が垂れる。操作は卡の下の 1 列、撤销はその下の 1 行。
+/// 英語タブ(v12.1「Stencil Turf」夜版)。混凝土の墙に白漆の単語卡 1 枚(308pt)、右の列(148pt)に章の槽と本轮の地盘(4×5、30pt)。
+/// 卡の上は濃い墨の本物の文字、色面はすべて焼いた素材(喷块・遮块・格・折痕)。答えたら章の槽に NICE! / MISS が喷かれ、
+/// その間だけ卡の下縁から白い漆が垂れる(下の操作の列には届かない長さ)。卡と操作の列のあいだに模板の継ぎ目。
+/// 子標籤の行の右には、どの画面でも今日の進み具合(连续 N 天 · 12/20、達成で青 + ✓)。
 /// OOUI:もの(单词・考点词・语料・词典)を選ぶ → カード(1 つ)か列表(まとまり)→ カードに付いた操作。
 /// 1 問 10 秒前後、キーボードだけで回せる(单词:空格 → 1〜4、考点词:1〜4 → 回车、语料:输入 → 回车、⌘Z 撤销)
 struct EnglishView: View {
@@ -15,7 +17,7 @@ struct EnglishView: View {
             HStack(alignment: .center, spacing: 12) {
                 StencilTabs(items: modeTabs, selection: $english.mode)
                 Spacer(minLength: 8)
-                streak
+                EngProgress(english: english)
                 if english.mode != .dict {
                     listToggle
                 }
@@ -29,15 +31,15 @@ struct EnglishView: View {
                             .foregroundStyle(Palette.textSecondary)
                     }
                 } else if !english.hasData {
-                    MissingData()
+                    EngMissingData()
                 } else if english.presentation == .list && english.mode != .dict {
-                    WordList(english: english)
+                    EngWordList(english: english)
                 } else {
                     switch english.mode {
-                    case .vocab: VocabView(english: english)
-                    case .para: ParaphraseCard(english: english)
-                    case .spell: SpellCard(english: english)
-                    case .dict: DictionaryCard(english: english)
+                    case .vocab: EngVocab(english: english)
+                    case .para: EngParaphrase(english: english)
+                    case .spell: EngSpell(english: english)
+                    case .dict: EngDictionary(english: english)
                     }
                 }
             }
@@ -45,28 +47,12 @@ struct EnglishView: View {
         }
     }
 
-    /// 单词 8 / 考点词 4 / 语料 / 词典(今日の分が終わった種類は ✓)
+    /// 单词 8 / 考点词 4 / 语料 / 词典(今日の分が終わった種類は数の代わりに模板の ✓)
     private var modeTabs: [TabItem<EnglishCoordinator.Mode>] {
         EnglishCoordinator.Mode.allCases.map { mode -> TabItem<EnglishCoordinator.Mode> in
             let left = english.remaining[mode]
             let done = english.loaded && english.hasData && left == 0
-            return TabItem(value: mode, title: done ? "\(mode.title) ✓" : mode.title, badge: left)
-        }
-    }
-
-    /// 橙の炎 + 连续 4 天(今日の数と目標は help に)
-    @ViewBuilder
-    private var streak: some View {
-        if english.streak > 0 {
-            HStack(spacing: 5) {
-                StencilIconView(icon: .flame, size: 15)
-                    .foregroundStyle(Palette.orange)
-                Text("连续 \(english.streak) 天")
-                    .font(Typeface.cjk(14, weight: .bold))
-                    .foregroundStyle(Palette.text)
-            }
-            .fixedSize()
-            .help("今天答了 \(english.todayCount) 题，目标 \(EnglishCoordinator.dailyGoal) 题，连续 \(english.streak) 天")
+            return TabItem(value: mode, title: mode.title, badge: done ? nil : left, done: done)
         }
     }
 
@@ -79,7 +65,7 @@ struct EnglishView: View {
             }
         } label: {
             Text(showingList ? "卡片" : "列表")
-                .font(Typeface.cjk(13, weight: .bold))
+                .font(Typeface.mixed(13, weight: 700))
         }
         .buttonStyle(BareButtonStyle())
         .keyboardShortcut("l", modifiers: .command)
@@ -88,70 +74,169 @@ struct EnglishView: View {
     }
 }
 
+// MARK: - 寸法(D1:渲染稿どおり)
+
+private enum EngMetrics {
+    /// 右の列(章の槽と本轮の地盘)。面板の右端にそろえる
+    static let column: CGFloat = 148
+    /// 卡と右の列のあいだ(472 − 308 − 148 = 16、english.png のとおり)
+    static let columnGap: CGFloat = 16
+    /// 単語卡(card-white-night は 308×380 で焼いてある)
+    static let cardWidth: CGFloat = 308
+    /// 単語卡の左右の余白。中の幅 272 = 复习记录の帯・入力枠・折痕を焼いた幅
+    static let cardPadding: CGFloat = 18
+    static let cardInner: CGFloat = cardWidth - 2 * cardPadding
+    /// 章の槽
+    static let slotHeight: CGFloat = 86
+    /// 本轮の地盘(4 × 5、30pt、間 6pt = 138 × 174)
+    static let boardColumns = 4
+    static let boardCell: CGFloat = 30
+    static let boardGap: CGFloat = 6
+    static var boardWidth: CGFloat { CGFloat(boardColumns) * boardCell + CGFloat(boardColumns - 1) * boardGap }
+    /// 复习记录(10 マス、20pt、間 4pt。黒い帯 272×32 の内側 4pt)
+    static let historySlots = 10
+    static let historyCell: CGFloat = 20
+    static let historyGap: CGFloat = 4
+    static let historyPadding: CGFloat = 4
+    static let historyBand: CGFloat = 32
+    /// 卡(と右の列)と操作の列のあいだ。垂れはこれより 6pt 短いものだけ
+    static let stageGap: CGFloat = 40
+    /// 聴写の字の格(20 × 32)と、入力枠の内側の余白
+    static let letterWidth: CGFloat = 20
+    static let letterHeight: CGFloat = 32
+    static let letterInset: CGFloat = 10
+    /// 字の格を並べられる幅(卡の中 − 入力枠の内側の余白)
+    static let letterRow: CGFloat = cardInner - 2 * letterInset
+    /// 入力枠(input-frame-night 244×52)
+    static let inputHeight: CGFloat = 52
+}
+
 // MARK: - 共通
 
-/// 卡 + 右の列(章の置き場 176×100 と本轮の盤面)。章は卡にもボタンにも重ならない
-private struct CardStage<Card: View>: View {
-    @ObservedObject var english: EnglishCoordinator
-    /// いま出ている問題にまだ答えていない(盤面の次のマスを橙の破線にする)
-    let pending: Bool
-    /// 卡の中身(View 拡張の card(padding:) と名前がぶつからないように content)
-    @ViewBuilder var content: () -> Card
+/// 焼けている最初の素材(新しい素材がまだ無いときは前からある素材で代える)
+@MainActor
+private func engFirstBaked(_ ids: [String]) -> String? {
+    ids.first { Baked.has($0) }
+}
 
-    var body: some View {
-        HStack(alignment: .top, spacing: 16) {
-            content()
-                .wordCardSurface()
-                .overlay(alignment: .bottom) { CardDrips(english: english) }
-            VStack(spacing: 12) {
-                StampSlot(english: english)
-                RoundBoard(english: english, pending: pending)
-            }
-            .frame(width: 176)
+/// 白漆の卡の種類:単語卡(280×380 焼き)/ 広い卡(472×340:通关・词典の結果)/ 短い卡(472×160:词典の空・素材なし)
+private enum EngCardKind {
+    case word, wide, short
+
+    var assets: [String] {
+        switch self {
+        case .word: return ["card-white-night"]
+        case .wide: return ["card-white-wide-night", "card-white-night"]
+        case .short: return ["card-white-short-night", "card-white-night"]
         }
+    }
+
+    var width: CGFloat? { self == .word ? EngMetrics.cardWidth : nil }
+
+    /// 単語卡は左右 18pt(中の幅 244)、広い / 短い卡は主角卡と同じ 20pt
+    var padding: EdgeInsets {
+        self == .word
+            ? EdgeInsets(top: Turf.heroPadding.top, leading: EngMetrics.cardPadding,
+                         bottom: Turf.heroPadding.bottom, trailing: EngMetrics.cardPadding)
+            : Turf.heroPadding
+    }
+
+    /// 焼いた高さの 0.8 倍より低くしない(九宮格を −20% より潰さない)。専用の素材があるときだけ
+    @MainActor var minHeight: CGFloat? {
+        guard let id = assets.first, Baked.has(id), let asset = Baked.asset(id) else { return nil }
+        return asset.layoutSize.height * 0.8
     }
 }
 
-/// 章の置き場(卡の右上、176×100)。空のときは薄い破線の枠だけ
-private struct StampSlot: View {
+@MainActor
+private extension View {
+    /// 白漆の卡(焼いた喷块)。中の文字は濃い墨。入力欄のカーソル・選択の色が白く消えないよう、卡の中は明るい外観で描く
+    func engCardSurface(_ kind: EngCardKind) -> some View {
+        self
+            .padding(kind.padding)
+            .frame(minWidth: kind.width, maxWidth: kind.width ?? .infinity, minHeight: kind.minHeight,
+                   alignment: .topLeading)
+            .foregroundStyle(Palette.cardText)
+            .environment(\.colorScheme, .light)
+            .background {
+                BakedSlice(id: engFirstBaked(kind.assets) ?? kind.assets[0], fallback: Palette.white)
+            }
+    }
+}
+
+/// 卡(280)+ 右の列(148、面板の右端。章の槽 148×86 と本轮の地盘)。章は卡にもボタンにも重ならない
+private struct EngStage<Card: View>: View {
+    @ObservedObject var english: EnglishCoordinator
+    /// いま出ている問題にまだ答えていない(地盘の次のマスを橙の破線にする)
+    let pending: Bool
+    @ViewBuilder var content: () -> Card
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 0) {
+            content()
+                .engCardSurface(.word)
+                .overlay { EngCardDrips(english: english) }
+            Spacer(minLength: EngMetrics.columnGap)
+            VStack(alignment: .leading, spacing: 0) {
+                EngStampSlot(english: english)
+                EngRoundBoard(english: english, pending: pending, width: EngMetrics.column)
+                    .padding(.top, 16)
+            }
+            .frame(width: EngMetrics.column)
+        }
+        // 垂れが下の継ぎ目の上に来るように
+        .zIndex(1)
+    }
+}
+
+/// 卡と操作の列のあいだ(40pt)。真ん中に混凝土の模板の継ぎ目(面板の端から端まで、卡にも字にもかからない)
+private struct EngGap: View {
+    var body: some View {
+        Color.clear
+            .frame(height: EngMetrics.stageGap)
+            .overlay { ConcreteSeam() }
+            .allowsHitTesting(false)
+            .accessibilityHidden(true)
+    }
+}
+
+/// 章の槽(148×86)。空のときは墙に残った胶带の浅い印、答えた直後は NICE! / MISS(章が自分で喷かれる)
+private struct EngStampSlot: View {
     @ObservedObject var english: EnglishCoordinator
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         ZStack {
             if let flash = english.flash {
+                // 無障碍の「答对了 / 答错了」は TurfStamp が付ける
                 TurfStamp(kind: flash.good ? .nice : .miss)
-                    .accessibilityElement(children: .ignore)
-                    .accessibilityLabel(flash.good ? "NICE!" : "MISS")
-                    .transition(.scale(scale: 0.3).combined(with: .opacity))
                     .id(flash.id)
+                    .transition(.asymmetric(insertion: .identity, removal: .opacity))
             } else {
-                Rectangle()
-                    .strokeBorder(Palette.cellEmptyStroke.opacity(0.5), style: StrokeStyle(lineWidth: 1.5, dash: [6, 4]))
-                    .frame(width: 136, height: 58)
-                    .rotationEffect(.degrees(-4))
+                StampSlotMark()
                     .transition(.opacity)
-                    .accessibilityHidden(true)
             }
         }
-        .frame(width: 176, height: 100)
-        // 弾むのは章だけ(カード全体には animation を掛けない)
-        .animation(reduceMotion ? nil : .spring(duration: 0.35, bounce: 0.5), value: english.flash)
+        .frame(width: EngMetrics.column, height: EngMetrics.slotHeight)
+        .animation(reduceMotion ? nil : .easeOut(duration: 0.2), value: english.flash)
         .accessibilityHidden(english.flash == nil)
     }
 }
 
-/// 章が出ている間(動)だけ、卡の下縁から漆が垂れる(NICE! = 青、MISS = 黒、2 本)。静では出さない
-private struct CardDrips: View {
+/// 答えた直後(章が出ている間)だけ、卡の下縁から白い漆が垂れる。長さは操作の列まで 6pt 残す
+private struct EngCardDrips: View {
     @ObservedObject var english: EnglishCoordinator
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         ZStack {
             if let flash = english.flash {
-                Drips(paint: flash.good ? .teal : .black, xs: [0.18, 0.7], seed: flash.good ? 0 : 3)
-                    .transition(.opacity)
-                    .id(flash.id)
+                MotionPlayer(trigger: flash.id, durationMs: 280, playOnAppear: true) { progress in
+                    Drips(paint: .white, xs: [0.06, 0.64], seed: flash.good ? 0 : 3,
+                          maxLength: EngMetrics.stageGap - 6, grow: progress)
+                }
+                .id(flash.id)
+                .transition(.opacity)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -161,67 +246,114 @@ private struct CardDrips: View {
     }
 }
 
-/// 本轮:今日の 20 問を 4×5 の格で(漆の満ち具合 = 評分、いまの 1 問 = 橙の破線)
-private struct RoundBoard: View {
+/// 本轮:今日の 20 問を 4×5 の格で(漆の満ち具合 = 評分、いまの 1 問 = 橙の破線)。混凝土の上(卡片)か黒い台の上(通关)
+private struct EngRoundBoard: View {
     @ObservedObject var english: EnglishCoordinator
     let pending: Bool
-
-    private static let columns = 4
-    private static let cell: CGFloat = 24
-    /// 橙の破線と青の格のあいだは 8pt 空ける
-    private static let gap: CGFloat = 8
+    /// 見出しの行の幅(格は真ん中)
+    var width: CGFloat = EngMetrics.boardWidth
 
     var body: some View {
         let goal = EnglishCoordinator.dailyGoal
         let count = min(english.todayCount, goal)
-        let kinds = roundCells(english.todayResults, answered: english.todayCount, goal: goal, pending: pending)
-        let rows = (kinds.count + Self.columns - 1) / Self.columns
-        let label = "本轮 \(count)/\(goal)"
-        VStack(alignment: .leading, spacing: 10) {
+        let marks = EnglishRound.board(results: english.todayResults, answered: english.todayCount, goal: goal,
+                                       pending: pending)
+        let columns = EngMetrics.boardColumns
+        let rows = (marks.count + columns - 1) / columns
+        VStack(alignment: .leading, spacing: 8) {
             HStack(alignment: .firstTextBaseline, spacing: 8) {
                 Text("本轮")
                     .font(TypeRole.caption)
                     .foregroundStyle(Palette.textSecondary)
                 Spacer(minLength: 8)
                 Text("\(count)/\(goal)")
-                    .font(TypeRole.count)
+                    .font(Typeface.mono(15, weight: 700))
                     .foregroundStyle(Palette.text)
             }
-            VStack(spacing: Self.gap) {
+            VStack(spacing: EngMetrics.boardGap) {
                 ForEach(0..<rows, id: \.self) { row in
-                    HStack(spacing: Self.gap) {
-                        ForEach(0..<Self.columns, id: \.self) { column in
-                            let index = row * Self.columns + column
-                            RatingCell(kind: index < kinds.count ? kinds[index] : .empty, size: Self.cell)
+                    HStack(spacing: EngMetrics.boardGap) {
+                        ForEach(0..<columns, id: \.self) { column in
+                            let index = row * columns + column
+                            RatingCell(kind: index < marks.count ? marks[index] : .empty, size: EngMetrics.boardCell)
                         }
                     }
                 }
             }
+            .frame(maxWidth: .infinity)
         }
-        .frame(width: CGFloat(Self.columns) * Self.cell + CGFloat(Self.columns - 1) * Self.gap)
+        .frame(width: width)
         .help("今天答了 \(english.todayCount) 题，目标 \(goal) 题")
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel(label)
+        .accessibilityLabel("本轮 \(count)/\(goal)")
     }
 }
 
-/// 卡の中の复习记录:黒い帯に 10 マス(18pt)+ 回数。いま答える 1 問は橙の破線
-private struct ReviewBand: View {
-    let id: String
+/// 子標籤の行の右:🔥 连续 N 天 · 12/20(目標に届いたら 20/20 が青 + 模板の ✓)。どの画面でも出す
+private struct EngProgress: View {
+    @ObservedObject var english: EnglishCoordinator
+
+    var body: some View {
+        let goal = EnglishCoordinator.dailyGoal
+        ViewThatFits(in: .horizontal) {
+            line(full: true)
+            line(full: false)
+        }
+        .help("今天答了 \(english.todayCount) 题，目标 \(goal) 题，连续 \(english.streak) 天")
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(english.streak > 0
+            ? "连续 \(english.streak) 天，今天 \(english.todayCount)/\(goal)"
+            : "今天 \(english.todayCount)/\(goal)")
+    }
+
+    /// full = 「连续 N 天 ·」まで、そうでなければ炎と数だけ(標籤が長くて入らないとき)
+    private func line(full: Bool) -> some View {
+        let goal = EnglishCoordinator.dailyGoal
+        let reached = english.todayCount >= goal
+        return HStack(alignment: .firstTextBaseline, spacing: 5) {
+            if english.streak > 0 {
+                StencilIconView(icon: .flame, size: 15)
+                    .foregroundStyle(Palette.orange)
+                    .alignmentGuide(.firstTextBaseline) { d in d[.bottom] - 1 }
+                if full {
+                    Text("连续 \(english.streak) 天")
+                        .font(Typeface.mixed(14, weight: 700))
+                        .foregroundStyle(Palette.text)
+                    Text("·")
+                        .font(Typeface.mixed(14, weight: 700))
+                        .foregroundStyle(Palette.textSecondary)
+                }
+            } else if full {
+                Text("今天")
+                    .font(Typeface.mixed(14, weight: 700))
+                    .foregroundStyle(Palette.textSecondary)
+            }
+            Text("\(english.todayCount)/\(goal)")
+                .font(Typeface.mono(13, weight: 700))
+                .foregroundStyle(reached ? Palette.teal : Palette.text)
+            if reached {
+                StencilIconView(icon: .check, size: 12)
+                    .foregroundStyle(Palette.teal)
+                    .alignmentGuide(.firstTextBaseline) { d in d[.bottom] - 1 }
+            }
+        }
+        .fixedSize()
+    }
+}
+
+/// 卡の中の复习记录:黒い遮喷の帯に 10 マス(20pt)+ 回数。いま答える 1 問は橙の破線
+private struct EngReviewBand: View {
     /// 初めて出たカード(0 回なのが確か)
     let isNew: Bool
     /// いまの 1 問に答え終わった
     let answered: Bool
-    /// そのカードの評分(古い順。EnglishCoordinator.history)
-    let past: [RatingCell.Kind]
-
-    private static let slots = 10
+    /// そのカードの評分(古い順。EnglishCoordinator.history(for:)、控えから)
+    let past: [SRSRating]
 
     var body: some View {
-        let cells = Self.cells(past, answered: answered, slots: Self.slots)
+        let marks = Self.cells(past, answered: answered)
         // 同期より前の記録しかないカードは回数が分からないので出さない
         let known = isNew || !past.isEmpty
-        let label = known ? "复习记录 \(past.count) 次" : "复习记录"
         VStack(alignment: .leading, spacing: 8) {
             HStack(alignment: .firstTextBaseline, spacing: 8) {
                 Text("复习记录")
@@ -230,32 +362,34 @@ private struct ReviewBand: View {
                 Spacer(minLength: 8)
                 if known {
                     Text("\(past.count) 次")
-                        .font(TypeRole.count)
+                        .font(Typeface.mono(13, weight: 700))
                         .foregroundStyle(Palette.cardText)
                 }
             }
-            HStack(spacing: 4) {
-                ForEach(0..<Self.slots, id: \.self) { index in
-                    RatingCell(kind: index < cells.count ? cells[index] : .empty, size: 18)
+            HStack(spacing: EngMetrics.historyGap) {
+                ForEach(0..<marks.count, id: \.self) { index in
+                    RatingCell(kind: marks[index], size: EngMetrics.historyCell)
                 }
             }
-            .padding(.horizontal, 7)
-            .frame(maxWidth: .infinity, minHeight: 32, maxHeight: 32, alignment: .leading)
-            .material("band-black-night", fallback: Palette.black)
+            .padding(.horizontal, EngMetrics.historyPadding)
+            .frame(maxWidth: .infinity, minHeight: EngMetrics.historyBand, maxHeight: EngMetrics.historyBand,
+                   alignment: .leading)
+            .background { BakedSlice(id: "band-black-night", fallback: Palette.black) }
         }
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel(label)
+        .accessibilityLabel(known ? "复习记录 \(past.count) 次" : "复习记录")
     }
 
-    private static func cells(_ past: [RatingCell.Kind], answered: Bool, slots: Int) -> [RatingCell.Kind] {
-        var cells = Array(past.suffix(answered ? slots : slots - 1))
-        if !answered { cells.append(.current) }
-        return cells
+    /// 最近の 10 回(答える前なら最後の 1 マスはいまの 1 問)、足りない分は空き
+    private static func cells(_ past: [SRSRating], answered: Bool) -> [RoundMark] {
+        var marks = EnglishRound.history(past, answered: answered, slots: EngMetrics.historySlots)
+        while marks.count < EngMetrics.historySlots { marks.append(.empty) }
+        return marks
     }
 }
 
 /// 見出し語(大きく・まっすぐ・墨)
-private struct HeadWord: View {
+private struct EngHeadWord: View {
     let text: String
     /// 考点词・词典は一回り小さく
     var quiz = false
@@ -271,44 +405,58 @@ private struct HeadWord: View {
     }
 }
 
-/// 卡の上の小さな札:黒い遮块に白字 / 橙の札に黒字 / 黒い遮喷の枠に黒字。欧文は Archivo の幅広、中文は直立のまま
-private struct CardTag: View {
-    enum Style { case solid, orange, frame }
+/// 卡の上の小さな札:黒い遮块に白字(B1 / 考点词 / 听写 / 词典 / 本轮)/ 橙の札に黒字(NEW)/ 黒い遮喷の枠に黒字(名词 / 听力)。
+/// 欧文は Archivo 900 の幅広、中文は直立のまま
+private struct EngTag: View {
+    enum Style { case black, orange, frame, longFrame }
 
     let text: String
-    var style: Style = .solid
+    var style: Style = .black
 
     var body: some View {
-        let latin = text.allSatisfy(\.isASCII)
+        let latin = text.unicodeScalars.allSatisfy { $0.isASCII }
         Text(text)
-            .font(latin ? Typeface.archivo(12, weight: 900, width: 112) : Typeface.cjk(12, weight: .black))
-            .tracking(latin ? 0.8 : 0)
-            .foregroundStyle(style == .solid ? Palette.white : Palette.black)
+            .font(latin ? TypeRole.tagLatin : Typeface.mixed(12.5, weight: 900))
+            .tracking(latin ? 0.8 : 0.2)
+            .foregroundStyle(style == .black ? Palette.white : Palette.black)
             .lineLimit(1)
             .padding(.horizontal, 8)
-            .frame(height: 22)
+            .frame(minWidth: 40)
+            .frame(height: 24)
             .background { paint }
     }
 
     @ViewBuilder
     private var paint: some View {
         switch style {
-        case .solid:
-            MaterialSlice(id: "band-black-night", fallback: Palette.black)
+        case .black:
+            BakedSlice(id: engFirstBaked(["tag-black-card", "band-black-night"]) ?? "tag-black-card",
+                       fallback: Palette.black)
         case .orange:
-            MaterialSlice(id: "tag-orange-night", fallback: Palette.orange)
+            BakedSlice(id: "tag-orange-night", fallback: Palette.orange)
         case .frame:
-            if Material.has("frame-black-night") {
-                MaterialSlice(id: "frame-black-night")
-            } else {
-                Rectangle().strokeBorder(Palette.black, lineWidth: 1.8)
-            }
+            EngFrame(ids: ["frame-black-night"])
+        case .longFrame:
+            EngFrame(ids: ["frame-black-long-night", "frame-black-night"])
         }
     }
 }
 
-/// キーの説明(Space / Enter / ⌘Z)。枠なしの等幅、次要色
-private struct Keycap: View {
+/// 白い卡の上の黒い遮喷の枠(素材がなければ墨の線)
+private struct EngFrame: View {
+    let ids: [String]
+
+    var body: some View {
+        if let id = engFirstBaked(ids) {
+            BakedSlice(id: id)
+        } else {
+            Rectangle().strokeBorder(Palette.black, lineWidth: 1.8)
+        }
+    }
+}
+
+/// キーの説明(Space / Enter / ⌘Z)。枠なしの等幅(⌘⏎⌫ があるので系统の等幅)、次要色
+private struct EngKeycap: View {
     let text: String
     var color: Color = Palette.textSecondary
 
@@ -322,17 +470,24 @@ private struct Keycap: View {
     }
 }
 
-/// 卡の上の区切り(墨の破線)
-private struct DashedRule: View {
+/// 卡の上の折痕(焼いた card-rule。素材がなければ墨の破線)
+private struct EngFoldRule: View {
     var body: some View {
-        RuleLine()
-            .stroke(Palette.cardText.opacity(0.28), style: StrokeStyle(lineWidth: 1.5, dash: [5, 4]))
-            .frame(height: 1.5)
-            .accessibilityHidden(true)
+        Group {
+            if Baked.has("card-rule") {
+                BakedSlice(id: "card-rule")
+                    .frame(height: 2)
+            } else {
+                EngRuleLine()
+                    .stroke(Palette.cardText.opacity(0.28), style: StrokeStyle(lineWidth: 1.5, dash: [5, 4]))
+                    .frame(height: 1.5)
+            }
+        }
+        .accessibilityHidden(true)
     }
 }
 
-private struct RuleLine: Shape {
+private struct EngRuleLine: Shape {
     func path(in rect: CGRect) -> Path {
         var path = Path()
         path.move(to: CGPoint(x: rect.minX, y: rect.midY))
@@ -342,15 +497,15 @@ private struct RuleLine: Shape {
 }
 
 /// 白い卡の上の小さな操作(発音・再生)。墨の色のまま、乗せると少し薄く
-private struct InkButtonStyle: ButtonStyle {
+private struct EngInkButtonStyle: ButtonStyle {
     var square: CGFloat?
 
     func makeBody(configuration: Configuration) -> some View {
-        InkButtonBody(configuration: configuration, square: square)
+        EngInkButtonBody(configuration: configuration, square: square)
     }
 }
 
-private struct InkButtonBody: View {
+private struct EngInkButtonBody: View {
     let configuration: ButtonStyleConfiguration
     let square: CGFloat?
     @State private var hovering = false
@@ -366,47 +521,48 @@ private struct InkButtonBody: View {
     }
 }
 
-/// 入力欄:焼いた黒い遮喷の枠(白い卡の上)。フォーカスは下辺の内側の 2pt の線
-private struct InputBox<Content: View>: View {
-    let focused: Bool
+/// 入力欄:焼いた黒い遮喷の枠(白い卡の上)。フォーカスがないときは枠を少し薄く(線は描き足さない)
+private struct EngInputBox<Content: View>: View {
+    /// 枠を濃く見せる(フォーカス中・採点の印を見せている間)
+    let active: Bool
+    /// 词典の幅広い入力欄(input-frame-wide-night 432 幅)
+    var wide = false
     @ViewBuilder var content: () -> Content
 
     var body: some View {
         content()
-            .padding(.horizontal, 14)
-            .frame(maxWidth: .infinity, minHeight: Turf.input, maxHeight: Turf.input, alignment: .leading)
-            .background { InputFrame() }
-            .overlay(alignment: .bottom) {
-                // .plain の入力欄は自分で描かないとフォーカスが分からない
-                if focused {
-                    Rectangle()
-                        .fill(Palette.cardText)
-                        .frame(height: 2)
-                        .padding(.horizontal, 10)
-                        .padding(.bottom, 6)
-                }
-            }
+            .padding(.horizontal, EngMetrics.letterInset)
+            .padding(.vertical, (EngMetrics.inputHeight - EngMetrics.letterHeight) / 2)
+            .frame(maxWidth: .infinity, minHeight: EngMetrics.inputHeight, alignment: .leading)
+            .background { EngInputFrame(active: active, wide: wide) }
     }
 }
 
-private struct InputFrame: View {
+private struct EngInputFrame: View {
+    let active: Bool
+    var wide = false
+
     var body: some View {
-        if Material.has("input-frame-night") {
-            MaterialSlice(id: "input-frame-night")
-        } else {
-            Rectangle().strokeBorder(Palette.cardText, lineWidth: 2)
+        Group {
+            if let id = engFirstBaked(wide ? ["input-frame-wide-night", "input-frame-night"] : ["input-frame-night"]) {
+                BakedSlice(id: id)
+            } else {
+                Rectangle().strokeBorder(Palette.cardText, lineWidth: 2)
+            }
         }
+        .opacity(active ? 1 : 0.6)
+        .animation(.easeOut(duration: 0.12), value: active)
     }
 }
 
 /// 直前の答え(結果の一言)と「↶ 撤销 ⌘Z」
-private struct UndoLine: View {
+private struct EngUndoLine: View {
     @ObservedObject var english: EnglishCoordinator
     /// 考点词:撤销を左に寄せる(右に「下一题」が来る)
     var compact = false
 
     var body: some View {
-        if let action = visibleUndo(english) {
+        if let action = engVisibleUndo(english) {
             HStack(spacing: 8) {
                 if compact {
                     undoButton
@@ -434,8 +590,8 @@ private struct UndoLine: View {
             HStack(spacing: 6) {
                 StencilIconView(icon: .undo, size: 14)
                 Text("撤销")
-                    .font(Typeface.cjk(13, weight: .bold))
-                Keycap(text: "⌘Z")
+                    .font(Typeface.mixed(13, weight: 700))
+                EngKeycap(text: "⌘Z")
             }
         }
         .buttonStyle(BareButtonStyle())
@@ -446,60 +602,66 @@ private struct UndoLine: View {
 
 /// 撤销の行に出す直前の答え。语料は次の語を打っているあいだは出さない(⌘Z を入力欄の取り消しに譲る)
 @MainActor
-private func visibleUndo(_ english: EnglishCoordinator) -> EnglishCoordinator.LastAction? {
+private func engVisibleUndo(_ english: EnglishCoordinator) -> EnglishCoordinator.LastAction? {
     guard let action = english.lastAction, action.mode == english.mode,
           english.mode != .spell || english.spellResult != nil || english.spellInput.isEmpty else { return nil }
     return action
 }
 
-private extension View {
-    /// 白漆の単語卡(焼いた喷块)。中の文字は濃い墨。入力欄のカーソル・選択の色が白く消えないよう、卡の中は明るい外観で描く
-    func wordCardSurface() -> some View {
-        self
-            .padding(Turf.heroPadding)
-            .frame(maxWidth: .infinity, alignment: .topLeading)
-            .foregroundStyle(Palette.cardText)
-            .environment(\.colorScheme, .light)
-            .material("card-white-night", fallback: Palette.white)
+/// 評分ボタンの見本の格:黒い遮块の小さな台(白卡用の素材)に 14pt の格。台の素材がなければ格だけ(黒の平塗りは使わない)
+private struct EngSwatch: View {
+    let kind: RoundMark
+
+    var body: some View {
+        RatingCell(kind: kind, size: 14)
+            .padding(3)
+            .background {
+                if let id = engFirstBaked(["swatch-black-card", "tag-black-card"]) {
+                    BakedSlice(id: id)
+                }
+            }
+            .accessibilityHidden(true)
     }
 }
 
 // MARK: - 单词
 
-private struct VocabView: View {
+private struct EngVocab: View {
     @ObservedObject var english: EnglishCoordinator
+    /// いま押した評分(少しのあいだ青く光らせてから記録する)
+    @State private var pressed: SRSRating?
 
     var body: some View {
         if let card = english.vocabCard {
             VStack(alignment: .leading, spacing: 0) {
-                CardStage(english: english, pending: !card.known) {
+                EngStage(english: english, pending: !card.known) {
                     content(card)
                 }
+                EngGap()
                 actions(card)
-                    .padding(.top, 36)
-                if visibleUndo(english) != nil {
-                    UndoLine(english: english)
+                if engVisibleUndo(english) != nil {
+                    EngUndoLine(english: english)
                         .padding(.top, 12)
                 }
             }
         } else {
-            StageClear(english: english, message: "今天的单词做完了")
+            EngStageClear(english: english, message: "今天的单词做完了")
         }
     }
 
     private func content(_ card: EnglishCoordinator.VocabCard) -> some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: 8) {
-                CardTag(text: card.level)
+                EngTag(text: card.level)
                 if card.isNew && !card.known {
-                    CardTag(text: "NEW", style: .orange)
+                    EngTag(text: "NEW", style: .orange)
                 }
                 if let pos = card.pos, !pos.isEmpty {
-                    CardTag(text: pos, style: .frame)
+                    EngTag(text: pos, style: .frame)
                 }
             }
-            HeadWord(text: card.word)
-                .padding(.top, 12)
+            EngHeadWord(text: card.word)
+                .padding(.top, 8)
             HStack(spacing: 8) {
                 if let phonetic = card.phonetic {
                     Text(phonetic)
@@ -512,19 +674,18 @@ private struct VocabView: View {
                 } label: {
                     StencilIconView(icon: .speaker, size: 16)
                 }
-                .buttonStyle(InkButtonStyle(square: 26))
+                .buttonStyle(EngInkButtonStyle(square: 26))
                 .keyboardShortcut("r", modifiers: .command)
                 .help("听发音（⌘R）")
                 .accessibilityLabel("听发音")
             }
-            .padding(.top, 4)
-            ReviewBand(id: card.id, isNew: card.isNew, answered: card.known,
-                       past: english.history(for: card.id).map { kindOf($0) })
+            .padding(.top, 2)
+            EngReviewBand(isNew: card.isNew, answered: card.known, past: english.history(for: card.id))
+                .padding(.top, 14)
+            EngFoldRule()
                 .padding(.top, 16)
-            DashedRule()
-                .padding(.top, 14)
             meaning(card)
-                .padding(.top, 14)
+                .padding(.top, 12)
             if card.known {
                 Text("你标记了「已经会了」，现在不会出题")
                     .font(TypeRole.caption)
@@ -535,31 +696,32 @@ private struct VocabView: View {
         }
     }
 
-    /// 释义:めくる前は黒い遮喷の帯 2 本(長さ違い)、めくったら 楼层 + 例文(見出し語に青の遮块)
+    /// 释义:めくる前は黒い遮喷の帯 2 本(長さ違い・少し傾く)、めくったら 楼层 + 例文(見出し語に青の遮块)
     @ViewBuilder
     private func meaning(_ card: EnglishCoordinator.VocabCard) -> some View {
         if english.revealed || card.known {
+            let short = card.meaning.count <= 10
             VStack(alignment: .leading, spacing: 10) {
                 HStack(alignment: .firstTextBaseline, spacing: 12) {
                     Text("释义")
                         .font(TypeRole.caption)
                         .foregroundStyle(Palette.cardTextSecondary)
                     Text(card.meaning)
-                        .font(card.meaning.count <= 10 ? TypeRole.definition : Typeface.cjk(20, weight: .black))
-                        .tracking(card.meaning.count <= 10 ? 32 * 0.06 : 0)
+                        .font(short ? TypeRole.definition : Typeface.mixed(20, weight: 900))
+                        .tracking(short ? 32 * 0.06 : 0)
                         .foregroundStyle(Palette.cardText)
                         .fixedSize(horizontal: false, vertical: true)
                         .textSelection(.enabled)
                 }
                 if let example = card.example {
-                    HStack(alignment: .firstTextBaseline, spacing: 6) {
-                        ExampleLine(example: example, word: card.word)
+                    HStack(alignment: .top, spacing: 6) {
+                        EngExample(example: example, word: card.word)
                         Button {
                             english.speakExample()
                         } label: {
                             StencilIconView(icon: .speaker, size: 14)
                         }
-                        .buttonStyle(InkButtonStyle(square: 22))
+                        .buttonStyle(EngInkButtonStyle(square: 22))
                         .keyboardShortcut("r", modifiers: [.command, .shift])
                         .help("听例句（⇧⌘R）")
                         .accessibilityLabel("听例句")
@@ -571,13 +733,13 @@ private struct VocabView: View {
                 Text("释义")
                     .font(TypeRole.caption)
                     .foregroundStyle(Palette.cardTextSecondary)
-                    .padding(.top, 8)
-                Redaction()
+                    .padding(.top, 10)
+                EngRedaction()
             }
         }
     }
 
-    /// 卡の下の 1 列:めくる前 = 已经会了 / Space 显示释义、めくった後 = 評分 1〜4、「已经会了」の卡 = 恢复出题
+    /// 卡の下の 1 列:めくる前 = 已经会了(文字だけ)/ Space 显示释义、めくった後 = 評分 1〜4、「已经会了」の卡 = 恢复出题
     @ViewBuilder
     private func actions(_ card: EnglishCoordinator.VocabCard) -> some View {
         if card.known {
@@ -595,7 +757,7 @@ private struct VocabView: View {
             }
             // 空格 = 记住了(1 問 1 キー:空格で見て、空格で次へ)
             .background {
-                Button("") { rate(.good) }
+                Button("") { press(.good) }
                     .keyboardShortcut(.space, modifiers: [])
                     .frame(width: 0, height: 0)
                     .opacity(0)
@@ -603,11 +765,16 @@ private struct VocabView: View {
             }
         } else {
             HStack(spacing: 12) {
-                Button("已经会了") { markKnown() }
-                    .buttonStyle(FrameButtonStyle(height: 50))
-                    .help("以后不再出这个词（可以在列表的「已掌握」里恢复）")
+                Button {
+                    english.markKnown()
+                } label: {
+                    Text("已经会了")
+                        .font(Typeface.mixed(14, weight: 700))
+                }
+                .buttonStyle(BareButtonStyle())
+                .help("以后不再出这个词（可以在列表的「已掌握」里恢复）")
                 Spacer(minLength: 8)
-                Keycap(text: "Space")
+                EngKeycap(text: "Space")
                 Button("显示释义") { english.reveal() }
                     .buttonStyle(SprayButtonStyle(height: 50))
                     .keyboardShortcut(.space, modifiers: [])
@@ -615,120 +782,204 @@ private struct VocabView: View {
         }
     }
 
-    /// 評分:灰の遮块(记住了 = 空格の既定なので青)+ 評分の格 + キー + 文字
+    /// 評分:平時は 4 つとも灰の遮块。押したものだけ少しのあいだ青(見本の格 + キー + 文字)
     private func rateButton(_ title: String, key: KeyEquivalent, rating: SRSRating) -> some View {
-        let look: BlockButtonStyle.Look = rating == .good ? .selected : .idle
+        let lit = pressed == rating
         return Button {
-            rate(rating)
+            press(rating)
         } label: {
             HStack(spacing: 5) {
-                // 格の下に黒い縁(青の遮块の上でも格が読める)
-                RatingCell(kind: kindOf(rating), size: 14)
-                    .padding(3)
-                    .background(Palette.black)
+                EngSwatch(kind: EnglishRound.mark(rating: rating))
                 Text(String(key.character))
                     .font(TypeRole.keycap)
-                    .foregroundStyle(look == .selected ? Palette.cardTextSecondary : Palette.textSecondary)
+                    .foregroundStyle(lit ? Palette.cardTextSecondary : Palette.textSecondary)
                     .accessibilityHidden(true)
                 Text(title)
-                    .font(Typeface.cjk(16, weight: .black))
+                    .font(Typeface.mixed(16, weight: 900))
                     .lineLimit(1)
                     .minimumScaleFactor(0.8)
             }
         }
-        .buttonStyle(BlockButtonStyle(state: look, height: Turf.ratingButton))
+        .buttonStyle(BlockButtonStyle(state: lit ? .selected : .idle, size: .rate))
         .keyboardShortcut(key, modifiers: [])
     }
 
-    private func rate(_ rating: SRSRating) {
-        english.rate(rating)
-    }
-
-    private func markKnown() {
-        english.markKnown()
+    /// 押した評分を 140ms 青く見せてから記録する(続けて押した分は無視)
+    private func press(_ rating: SRSRating) {
+        guard pressed == nil else { return }
+        pressed = rating
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(140))
+            english.rate(rating)
+            pressed = nil
+        }
     }
 }
 
-/// めくる前の释义:黒い遮喷の帯 2 本(長さ違い)
-private struct Redaction: View {
+/// めくる前の释义:黒い遮喷の帯 2 本(134×35 は −1.6°、226×15 は +0.8°。傾きは素材に焼いてあるので回さない)。
+/// 2 本目は「释义」の横に収まるよう少しだけ縮める(0.85 倍まで)
+private struct EngRedaction: View {
+    /// 帯を置ける幅(卡の中 244 − 「释义」と間 12)
+    private static let room: CGFloat = EngMetrics.cardInner - 38
+
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Color.clear
-                .frame(maxWidth: .infinity)
-                .frame(height: 30)
-                .material("redact-black-night", fallback: Palette.black)
-                .padding(.trailing, 38)
-            Color.clear
-                .frame(maxWidth: .infinity)
-                .frame(height: 14)
-                .material("redact-black-night", fallback: Palette.black)
+            bar("redact-black-1-night", width: 134, height: 35, angle: -1.6)
+            bar("redact-black-2-night", width: 226, height: 15, angle: 0.8)
         }
         .padding(.vertical, 2)
         .accessibilityHidden(true)
     }
+
+    @ViewBuilder
+    private func bar(_ id: String, width: CGFloat, height: CGFloat, angle: Double) -> some View {
+        let scale = max(0.85, min(1, Self.room / width))
+        if Baked.has(id) {
+            BakedSprite(id: id, scale: scale)
+        } else {
+            // 前の素材(傾いていない)で代えるときだけ、ここで傾ける
+            BakedSlice(id: "redact-black-night", fallback: Palette.black)
+                .frame(width: width * scale, height: height * scale)
+                .rotationEffect(.degrees(angle))
+        }
+    }
 }
 
-/// 例文(欧文の斜体)。見出し語は青の遮块の上に。1 行に収まらないときは折り返し(見出し語は青の地色)
-private struct ExampleLine: View {
+/// 例文(欧文の斜体)。語ごとに折り返し、見出し語は青の遮块(mark-teal-card)の上に。素材がなければ青の下線(平塗りはしない)
+private struct EngExample: View {
     let example: String
     let word: String
 
+    private struct Piece {
+        /// 普通の語(mark が空)か、見出し語の前にくっついた字
+        let lead: String
+        /// 見出し語(青の遮块の上)
+        let mark: String
+        /// 見出し語の後ろにくっついた字(storeys の s、句読点)
+        let tail: String
+    }
+
     var body: some View {
-        if let range = example.range(of: word, options: .caseInsensitive) {
-            ViewThatFits(in: .horizontal) {
-                HStack(alignment: .firstTextBaseline, spacing: 0) {
-                    Text(example[..<range.lowerBound])
-                    Text(example[range])
-                        .padding(.horizontal, 3)
-                        .background { MaterialSlice(id: "block-teal-night", fallback: Palette.teal) }
-                        .padding(.horizontal, 2)
-                    Text(example[range.upperBound...])
-                }
-                .font(TypeRole.example)
-                .foregroundStyle(Palette.cardText)
-                .lineLimit(1)
-                .fixedSize()
-                Text(highlighted)
-                    .font(TypeRole.example)
-                    .foregroundStyle(Palette.cardText)
-                    .fixedSize(horizontal: false, vertical: true)
+        let pieces = Self.pieces(example, word: word)
+        // Layout を値として呼ぶ(callAsFunction。初期化子の後ろ閉包と取り違えないように)
+        let flow = EngWordFlow(spacing: 4.5, lineSpacing: 4)
+        flow {
+            ForEach(Array(pieces.enumerated()), id: \.offset) { _, piece in
+                pieceView(piece)
             }
-            .textSelection(.enabled)
+        }
+        .font(TypeRole.example)
+        .foregroundStyle(Palette.cardText)
+        .textSelection(.enabled)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(example)
+    }
+
+    @ViewBuilder
+    private func pieceView(_ piece: Piece) -> some View {
+        if piece.mark.isEmpty {
+            Text(piece.lead)
         } else {
-            Text(example)
-                .font(TypeRole.example)
-                .foregroundStyle(Palette.cardText)
-                .fixedSize(horizontal: false, vertical: true)
-                .textSelection(.enabled)
+            HStack(spacing: 0) {
+                if !piece.lead.isEmpty {
+                    Text(piece.lead)
+                }
+                marked(piece.mark)
+                if !piece.tail.isEmpty {
+                    Text(piece.tail)
+                }
+            }
         }
     }
 
-    private var highlighted: AttributedString {
-        var text = AttributedString(example)
-        if let range = text.range(of: word, options: .caseInsensitive) {
-            // AppKit の backgroundColor(NSColor)と取り合わないよう、SwiftUI の属性を型で指定する
-            text[range][AttributeScopes.SwiftUIAttributes.BackgroundColorAttribute.self] = Palette.teal
+    @ViewBuilder
+    private func marked(_ text: String) -> some View {
+        if Baked.has("mark-teal-card") {
+            Text(text)
+                .padding(.horizontal, 3)
+                .background { BakedSlice(id: "mark-teal-card") }
+                .padding(.horizontal, 1)
+        } else {
+            Text(text)
+                .underline(true, color: Palette.teal)
         }
-        return text
+    }
+
+    /// 空白で語に分け、見出し語(大文字小文字は問わない)を前後にくっついた字ごと 1 つにする
+    private static func pieces(_ example: String, word: String) -> [Piece] {
+        func plain(_ text: Substring) -> [Piece] {
+            text.split(separator: Character(" ")).map { Piece(lead: String($0), mark: "", tail: "") }
+        }
+        guard !word.isEmpty, let range = example.range(of: word, options: .caseInsensitive) else {
+            return plain(example[...])
+        }
+        var before = example[..<range.lowerBound].split(separator: Character(" "), omittingEmptySubsequences: false)
+        var after = example[range.upperBound...].split(separator: Character(" "), omittingEmptySubsequences: false)
+        let lead = before.popLast().map { String($0) } ?? ""
+        let tail = after.isEmpty ? "" : String(after.removeFirst())
+        var result = before.filter { !$0.isEmpty }.map { Piece(lead: String($0), mark: "", tail: "") }
+        result.append(Piece(lead: lead, mark: String(example[range]), tail: tail))
+        result += after.filter { !$0.isEmpty }.map { Piece(lead: String($0), mark: "", tail: "") }
+        return result
+    }
+}
+
+/// 語を左から詰めて、入らなければ次の行へ(例文の折り返し)
+private struct EngWordFlow: Layout {
+    var spacing: CGFloat = 4
+    var lineSpacing: CGFloat = 4
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        arrange(subviews, width: proposal.width ?? .infinity).size
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        let layout = arrange(subviews, width: bounds.width)
+        for index in subviews.indices where index < layout.origins.count {
+            let origin = layout.origins[index]
+            subviews[index].place(at: CGPoint(x: bounds.minX + origin.x, y: bounds.minY + origin.y),
+                                  anchor: .topLeading, proposal: .unspecified)
+        }
+    }
+
+    private func arrange(_ subviews: Subviews, width: CGFloat) -> (origins: [CGPoint], size: CGSize) {
+        var origins: [CGPoint] = []
+        var x: CGFloat = 0
+        var y: CGFloat = 0
+        var lineHeight: CGFloat = 0
+        var widest: CGFloat = 0
+        for subview in subviews {
+            let size = subview.sizeThatFits(.unspecified)
+            if x > 0 && x + size.width > width {
+                x = 0
+                y += lineHeight + lineSpacing
+                lineHeight = 0
+            }
+            origins.append(CGPoint(x: x, y: y))
+            widest = max(widest, x + size.width)
+            x += size.width + spacing
+            lineHeight = max(lineHeight, size.height)
+        }
+        return (origins, CGSize(width: widest, height: y + lineHeight))
     }
 }
 
 // MARK: - 考点词
 
-private struct ParaphraseCard: View {
+private struct EngParaphrase: View {
     @ObservedObject var english: EnglishCoordinator
 
     var body: some View {
         if let q = english.question {
             VStack(alignment: .leading, spacing: 0) {
-                CardStage(english: english, pending: english.picked == nil) {
+                EngStage(english: english, pending: english.picked == nil) {
                     content(q)
                 }
+                EngGap()
                 options(q)
-                    .padding(.top, 36)
-                if visibleUndo(english) != nil || english.picked != nil {
+                if engVisibleUndo(english) != nil || english.picked != nil {
                     HStack(spacing: 12) {
-                        UndoLine(english: english, compact: true)
+                        EngUndoLine(english: english, compact: true)
                         Spacer(minLength: 8)
                         if english.picked != nil {
                             nextButton
@@ -738,43 +989,45 @@ private struct ParaphraseCard: View {
                 }
             }
         } else {
-            StageClear(english: english, message: "今天的考点词做完了")
+            EngStageClear(english: english, message: "今天的考点词做完了")
         }
     }
 
     private func content(_ q: ParaphraseQuestion) -> some View {
         let skill = q.entry.skill == "listening" ? "听力" : "阅读"
         let gloss = [q.entry.pos, q.entry.zh].compactMap { $0 }.joined(separator: " · ")
+        let id = engParaID(q)
         return VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: 8) {
-                CardTag(text: "考点词")
-                CardTag(text: skill, style: .frame)
+                EngTag(text: "考点词")
+                EngTag(text: skill, style: .frame)
             }
-            HeadWord(text: q.entry.w, quiz: true)
-                .padding(.top, 12)
+            EngHeadWord(text: q.entry.w, quiz: true)
+                .padding(.top, 10)
+            // 設計稿の文言のまま。読み上げは意味の分かる文に
             Text("（\(skill)）常被换成？")
-                .font(Typeface.cjk(20, weight: .bold))
+                .font(Typeface.mixed(20, weight: 800))
                 .foregroundStyle(Palette.cardText)
+                .accessibilityLabel("真题里它会被换成哪个词？")
                 .padding(.top, 2)
-            ReviewBand(id: paraID(q), isNew: false, answered: english.picked != nil,
-                       past: english.history(for: paraID(q)).map { kindOf($0) })
+            EngReviewBand(isNew: false, answered: english.picked != nil, past: english.history(for: id))
                 .padding(.top, 16)
-            DashedRule()
-                .padding(.top, 14)
+            EngFoldRule()
+                .padding(.top, 16)
             VStack(alignment: .leading, spacing: 4) {
                 if !gloss.isEmpty {
                     Text(gloss)
-                        .font(Typeface.cjk(13.5, weight: .medium))
+                        .font(Typeface.mixed(13.5, weight: 500))
                         .foregroundStyle(Palette.cardText)
                         .fixedSize(horizontal: false, vertical: true)
                 }
                 if let picked = english.picked {
                     Text(picked == q.answerIndex ? "正确" : "错了，今天还会再出")
-                        .font(Typeface.cjk(15, weight: .bold))
+                        .font(Typeface.mixed(15, weight: 700))
                         .foregroundStyle(Palette.cardText)
                         .padding(.top, 6)
                     Text("可替换为：" + q.entry.syn.joined(separator: " · "))
-                        .font(Typeface.cjk(13, weight: .medium))
+                        .font(Typeface.mixed(13, weight: 500))
                         .foregroundStyle(Palette.cardTextSecondary)
                         .fixedSize(horizontal: false, vertical: true)
                         .textSelection(.enabled)
@@ -784,7 +1037,7 @@ private struct ParaphraseCard: View {
         }
     }
 
-    /// 選択肢 2×2(灰の遮块。正解 = 青 + ✓、誤って選んだ = 灰 + 删除线 + ✕)
+    /// 選択肢 2×2(灰の遮块。正解 = 青 + ✓、誤って選んだ = 灰 + 語だけに删除线 + ✕)
     private func options(_ q: ParaphraseQuestion) -> some View {
         VStack(spacing: 10) {
             ForEach(Array(stride(from: 0, to: q.choices.count, by: 2)), id: \.self) { start in
@@ -812,10 +1065,12 @@ private struct ParaphraseCard: View {
             status = isWrongPick ? "你的选择，错误" : ""
         }
         return Button {
-            choose(index, question: q)
+            english.choose(index)
         } label: {
+            // 删除线は語だけ(番号・「你的选择」には引かない)
             Text(q.choices[index])
                 .font(Typeface.archivo(22, weight: 700))
+                .strikethrough(isWrongPick, color: Palette.black)
                 .lineLimit(1)
                 .minimumScaleFactor(0.6)
                 .padding(.leading, 20)
@@ -823,10 +1078,9 @@ private struct ParaphraseCard: View {
                 .padding(.trailing, isAnswer || isWrongPick ? 96 : 0)
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .buttonStyle(BlockButtonStyle(state: look, height: Turf.optionButton))
+        .buttonStyle(BlockButtonStyle(state: look, size: .option, height: Turf.optionButton, strikeLabel: false))
         .keyboardShortcut(KeyEquivalent(Character("\(index + 1)")), modifiers: [])
         .accessibilityValue(status)
-        // 番号と状態は削除線の外(選択肢の語だけに線を引く)
         .overlay(alignment: .leading) {
             Text("\(index + 1)")
                 .font(TypeRole.keycap)
@@ -839,7 +1093,7 @@ private struct ParaphraseCard: View {
             if isAnswer {
                 HStack(spacing: 8) {
                     Text(picked == index ? "你的选择" : "正确答案")
-                        .font(Typeface.cjk(13, weight: .bold))
+                        .font(Typeface.mixed(13, weight: 700))
                     StencilIconView(icon: .check, size: 14)
                 }
                 .foregroundStyle(Palette.black)
@@ -847,9 +1101,9 @@ private struct ParaphraseCard: View {
                 .allowsHitTesting(false)
                 .accessibilityHidden(true)
             } else if isWrongPick {
-                // ✕ は BlockButtonStyle が右端に置く
+                // 模板の ✕ は BlockButtonStyle が右端に置く
                 Text("你的选择")
-                    .font(Typeface.cjk(13, weight: .bold))
+                    .font(Typeface.mixed(13, weight: 700))
                     .foregroundStyle(Palette.black)
                     .padding(.trailing, 12 + 14 + 8)
                     .allowsHitTesting(false)
@@ -864,40 +1118,36 @@ private struct ParaphraseCard: View {
         } label: {
             HStack(spacing: 8) {
                 Text("下一题")
-                    .font(Typeface.cjk(14, weight: .bold))
-                Keycap(text: "Enter")
+                    .font(Typeface.mixed(14, weight: 700))
+                EngKeycap(text: "Enter")
             }
         }
         .buttonStyle(BareButtonStyle(color: Palette.text))
         .keyboardShortcut(.defaultAction)
     }
-
-    private func choose(_ index: Int, question q: ParaphraseQuestion) {
-        english.choose(index)
-    }
 }
 
 /// 考点词のカード id(EnglishCoordinator の出題と同じ形)
-private func paraID(_ q: ParaphraseQuestion) -> String {
+private func engParaID(_ q: ParaphraseQuestion) -> String {
     "para:\(q.entry.skill):\(q.entry.w)"
 }
 
 // MARK: - 语料(听写)
 
-private struct SpellCard: View {
+private struct EngSpell: View {
     @ObservedObject var english: EnglishCoordinator
     @FocusState private var focused: Bool
 
     var body: some View {
         if let item = english.spellItem {
             VStack(alignment: .leading, spacing: 0) {
-                CardStage(english: english, pending: english.spellResult == nil) {
+                EngStage(english: english, pending: english.spellResult == nil) {
                     content(item)
                 }
+                EngGap()
                 actions
-                    .padding(.top, 36)
-                if visibleUndo(english) != nil {
-                    UndoLine(english: english)
+                if engVisibleUndo(english) != nil {
+                    EngUndoLine(english: english)
                         .padding(.top, 12)
                 }
             }
@@ -910,32 +1160,32 @@ private struct SpellCard: View {
             }
             .onChange(of: english.spellItem) { _, _ in focused = true }
         } else {
-            StageClear(english: english, message: "今天的语料做完了")
+            EngStageClear(english: english, message: "今天的语料做完了")
         }
     }
 
     private func content(_ item: EnglishCoordinator.SpellItem) -> some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: 8) {
-                CardTag(text: "听写")
-                CardTag(text: item.word.set, style: .frame)
+                EngTag(text: "听写")
+                EngTag(text: item.word.set, style: .frame)
                 if item.isNew {
-                    CardTag(text: "NEW", style: .orange)
+                    EngTag(text: "NEW", style: .orange)
                 }
             }
             .help("王陆语料 · \(item.word.set)")
             playButton
                 .padding(.top, 14)
-            ReviewBand(id: item.id, isNew: item.isNew, answered: english.spellResult != nil,
-                       past: english.history(for: item.id).map { kindOf($0) })
+            EngReviewBand(isNew: item.isNew, answered: english.spellResult != nil,
+                          past: english.history(for: item.id))
                 .padding(.top, 16)
             Text("你的拼写")
                 .font(TypeRole.caption)
                 .foregroundStyle(Palette.cardText)
                 .padding(.top, 16)
-            InputBox(focused: focused && english.spellResult == nil) {
+            EngInputBox(active: focused || english.spellResult != nil) {
                 ZStack(alignment: .leading) {
-                    // 採点後も入力欄は残す(回车で次へ・焦点を保つ)。見た目は印を付けた綴りに置き換える
+                    // 採点後も入力欄は残す(回车で次へ・焦点を保つ)。見た目は採点した綴りの字の格に置き換える
                     TextField("", text: $english.spellInput,
                               prompt: Text("输入听到的单词，按回车").foregroundStyle(Palette.cardTextSecondary.opacity(0.6)))
                         .textFieldStyle(.plain)
@@ -944,7 +1194,7 @@ private struct SpellCard: View {
                         .autocorrectionDisabled(true)
                         .focused($focused)
                         .onSubmit {
-                            submit()
+                            english.submitSpelling()
                             focused = true
                         }
                         .opacity(english.spellResult == nil ? 1 : 0)
@@ -969,7 +1219,7 @@ private struct SpellCard: View {
         } label: {
             HStack(spacing: 12) {
                 ZStack {
-                    PlayDisc()
+                    EngPlayDisc()
                     StencilIconView(icon: .play, size: 20)
                         .foregroundStyle(Palette.black)
                 }
@@ -978,7 +1228,7 @@ private struct SpellCard: View {
                     HStack(alignment: .firstTextBaseline, spacing: 8) {
                         Text("播放")
                             .font(TypeRole.cardTitle)
-                        Keycap(text: "⌘R", color: Palette.cardTextSecondary)
+                        EngKeycap(text: "⌘R", color: Palette.cardTextSecondary)
                     }
                     Text("英式发音 · 建议戴耳机")
                         .font(TypeRole.caption)
@@ -988,7 +1238,7 @@ private struct SpellCard: View {
             }
             .contentShape(Rectangle())
         }
-        .buttonStyle(InkButtonStyle())
+        .buttonStyle(EngInkButtonStyle())
         .keyboardShortcut("r", modifiers: .command)
         .help("播放（⌘R）")
     }
@@ -1003,24 +1253,24 @@ private struct SpellCard: View {
             .buttonStyle(FrameButtonStyle(height: 50))
             if english.spellResult == nil {
                 Button {
-                    giveUp()
+                    english.giveUpSpelling()
                 } label: {
                     HStack(spacing: 8) {
                         Text("不知道")
-                        Keycap(text: "⌘⌫")
+                        EngKeycap(text: "⌘⌫")
                     }
                 }
                 .buttonStyle(FrameButtonStyle(height: 50))
                 .keyboardShortcut(.delete, modifiers: .command)
             }
             Spacer(minLength: 8)
-            Keycap(text: "Enter")
+            EngKeycap(text: "Enter")
             if english.spellResult == nil {
-                Button("检查") { submit() }
+                Button("检查") { english.submitSpelling() }
                     .buttonStyle(SprayButtonStyle(height: 50))
             } else {
                 Button("下一个") {
-                    submit()
+                    english.submitSpelling()
                     focused = true
                 }
                 .buttonStyle(SprayButtonStyle(height: 50))
@@ -1028,43 +1278,63 @@ private struct SpellCard: View {
         }
     }
 
-    /// 自分の綴り:余計な字・違う字に橙の地
+    /// 採点した綴り(gradedInput の控え):余計な字・違う字に橙の遮块
     @ViewBuilder
     private func typed(_ word: DictationWord) -> some View {
-        if english.spellInput.trimmingCharacters(in: .whitespaces).isEmpty {
+        let graded = english.gradedInput ?? english.spellInput
+        if graded.trimmingCharacters(in: .whitespaces).isEmpty {
             Text("—")
                 .font(TypeRole.input)
                 .foregroundStyle(Palette.cardTextSecondary)
                 .allowsHitTesting(false)
         } else {
-            Text(marks(word).typed)
-                .font(TypeRole.input)
-                .tracking(3)
-                .foregroundStyle(Palette.cardText)
-                .lineLimit(1)
-                .minimumScaleFactor(0.5)
+            let marks = Self.marks(graded, word)
+            EngLetterRow(letters: marks.typed, marked: marks.typedMarks, paint: .orange, width: EngMetrics.letterRow)
                 .allowsHitTesting(false)
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel("你的拼写：\(graded)")
         }
     }
 
-    /// 判定の一言 + 正しい綴り(足りない字・違う字に青の地)+ 発音と意味
+    /// 判定の一言 + 正しい綴り(足りない字・違う字に青の遮块)+ 発音と意味
     private func answer(_ result: SpellResult, _ word: DictationWord) -> some View {
-        let gloss = [word.ipa.map { "/\($0)/" }, word.zh].compactMap { $0 }.joined(separator: " · ")
+        let marks = Self.marks(english.gradedInput ?? english.spellInput, word)
         return VStack(alignment: .leading, spacing: 6) {
             Text(Self.title(result))
                 .font(TypeRole.caption)
                 .foregroundStyle(Palette.cardText)
-            Text(marks(word).answer)
-                .font(TypeRole.input)
-                .tracking(3)
-                .foregroundStyle(Palette.cardText)
-                .fixedSize(horizontal: false, vertical: true)
+            EngLetterRow(letters: marks.answer, marked: marks.answerMarks, paint: .teal, width: EngMetrics.letterRow)
+                .padding(.leading, EngMetrics.letterInset)
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel("正确拼写：\(word.w)")
+                .contextMenu {
+                    Button("拷贝单词") {
+                        NSPasteboard.general.clearContents()
+                        NSPasteboard.general.setString(word.w, forType: .string)
+                    }
+                }
+            if word.ipa != nil || word.zh != nil {
+                HStack(alignment: .firstTextBaseline, spacing: 6) {
+                    if let ipa = word.ipa {
+                        // Archivo に IPA が無いので系统字体
+                        Text("/\(ipa)/")
+                            .font(.system(size: 13, weight: .medium))
+                            .foregroundStyle(Palette.cardText)
+                            .fixedSize()
+                    }
+                    if word.ipa != nil && word.zh != nil {
+                        Text("·")
+                            .font(Typeface.mixed(13, weight: 600))
+                            .foregroundStyle(Palette.cardTextSecondary)
+                    }
+                    if let zh = word.zh {
+                        Text(zh)
+                            .font(Typeface.mixed(13, weight: 600))
+                            .foregroundStyle(Palette.cardText)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
                 .textSelection(.enabled)
-            if !gloss.isEmpty {
-                Text(gloss)
-                    .font(Typeface.cjk(13, weight: .semibold))
-                    .foregroundStyle(Palette.cardText)
-                    .fixedSize(horizontal: false, vertical: true)
             }
         }
     }
@@ -1077,30 +1347,72 @@ private struct SpellCard: View {
         }
     }
 
-    /// 入力と正解の食い違い(入力の字 = 橙、正解の字 = 青)
-    private func marks(_ word: DictationWord) -> (typed: AttributedString, answer: AttributedString) {
-        let typed = Array(SpellCheck.normalize(english.spellInput))
+    /// 採点した綴りと正解の食い違い(入力の字 = 橙、正解の字 = 青)
+    private static func marks(_ graded: String, _ word: DictationWord)
+        -> (typed: [Character], typedMarks: [Bool], answer: [Character], answerMarks: [Bool]) {
+        let typed = Array(SpellCheck.normalize(graded))
         let answer = Array(word.w)
-        let marks = spellingMarks(typed, answer)
-        return (markedText(typed, marks.input, color: Palette.orange),
-                markedText(answer, marks.answer, color: Palette.teal))
+        let marks = engSpellingMarks(typed, answer)
+        return (typed, marks.input, answer, marks.answer)
+    }
+}
+
+/// 聴写の字の格(20 × 32、Archivo 26pt)の列。印の字は焼いた橙 / 青の遮块(素材がなければ下線)。
+/// 長い語は 0.6 倍まで縮め、それでも入らなければ次の行へ
+private struct EngLetterRow: View {
+    enum Paint { case orange, teal }
+
+    let letters: [Character]
+    let marked: [Bool]
+    let paint: Paint
+    /// 並べられる幅
+    let width: CGFloat
+
+    var body: some View {
+        let count = max(letters.count, 1)
+        let scale = max(0.6, min(1, width / (CGFloat(count) * EngMetrics.letterWidth)))
+        // 割り算の誤差で最後の 1 字だけ次の行に落ちないよう、少しだけ余裕を見る
+        let perRow = max(1, Int((width / (EngMetrics.letterWidth * scale) + 0.001).rounded(.down)))
+        let rows = stride(from: 0, to: letters.count, by: perRow).map { start in
+            Array(start..<min(start + perRow, letters.count))
+        }
+        VStack(alignment: .leading, spacing: 4) {
+            ForEach(rows.indices, id: \.self) { row in
+                HStack(spacing: 0) {
+                    ForEach(rows[row], id: \.self) { index in
+                        cell(index, scale: scale)
+                    }
+                }
+            }
+        }
     }
 
-    /// 回车・检查・下一个:未採点なら採点、採点済みなら次へ
-    private func submit() {
-        english.submitSpelling()
-    }
+    private var asset: String { paint == .orange ? "letter-orange-card" : "letter-teal-card" }
+    private var markColor: Color { paint == .orange ? Palette.orange : Palette.teal }
 
-    private func giveUp() {
-        english.giveUpSpelling()
+    private func cell(_ index: Int, scale: CGFloat) -> some View {
+        let isMarked = index < marked.count && marked[index]
+        let baked = isMarked && Baked.has(asset)
+        return Text(String(letters[index]))
+            .font(scale < 1 ? Typeface.archivo(26 * scale, weight: 600) : TypeRole.letter)
+            .underline(isMarked && !baked, color: markColor)
+            .foregroundStyle(Palette.cardText)
+            .lineLimit(1)
+            .minimumScaleFactor(0.6)
+            .frame(width: EngMetrics.letterWidth * scale, height: EngMetrics.letterHeight * scale)
+            .background {
+                if baked {
+                    BakedSlice(id: asset)
+                }
+            }
     }
 }
 
 /// 再生ボタンの橙の円(白い卡の上に喷いた素材。なければ単色の円)
-private struct PlayDisc: View {
+private struct EngPlayDisc: View {
     var body: some View {
-        if Material.has("button-play-orange-night") {
-            MaterialSprite(id: "button-play-orange-night")
+        if Baked.has("button-play-orange-night") {
+            BakedSprite(id: "button-play-orange-night")
         } else {
             Circle().fill(Palette.orange)
         }
@@ -1108,7 +1420,7 @@ private struct PlayDisc: View {
 }
 
 /// 綴りの食い違い:編集距離の道筋をたどって、入力の余計・誤った字と、正解の足りない・違う字に印を付ける
-private func spellingMarks(_ input: [Character], _ answer: [Character]) -> (input: [Bool], answer: [Bool]) {
+private func engSpellingMarks(_ input: [Character], _ answer: [Character]) -> (input: [Bool], answer: [Bool]) {
     let n = input.count, m = answer.count
     var cost = Array(repeating: Array(repeating: 0, count: m + 1), count: n + 1)
     for i in 0...n { cost[i][0] = i }
@@ -1116,7 +1428,7 @@ private func spellingMarks(_ input: [Character], _ answer: [Character]) -> (inpu
     if n > 0 && m > 0 {
         for i in 1...n {
             for j in 1...m {
-                let step = sameLetter(input[i - 1], answer[j - 1]) ? 0 : 1
+                let step = engSameLetter(input[i - 1], answer[j - 1]) ? 0 : 1
                 cost[i][j] = min(cost[i - 1][j] + 1, cost[i][j - 1] + 1, cost[i - 1][j - 1] + step)
             }
         }
@@ -1126,7 +1438,7 @@ private func spellingMarks(_ input: [Character], _ answer: [Character]) -> (inpu
     var i = n, j = m
     while i > 0 || j > 0 {
         if i > 0, j > 0 {
-            let same = sameLetter(input[i - 1], answer[j - 1])
+            let same = engSameLetter(input[i - 1], answer[j - 1])
             if cost[i][j] == cost[i - 1][j - 1] + (same ? 0 : 1) {
                 if !same {
                     inputMarks[i - 1] = true
@@ -1151,27 +1463,14 @@ private func spellingMarks(_ input: [Character], _ answer: [Character]) -> (inpu
     return (inputMarks, answerMarks)
 }
 
-private func sameLetter(_ a: Character, _ b: Character) -> Bool {
+private func engSameLetter(_ a: Character, _ b: Character) -> Bool {
     String(a).lowercased() == String(b).lowercased()
-}
-
-/// 印の付いた字に地色を敷いた文字列
-private func markedText(_ characters: [Character], _ marks: [Bool], color: Color) -> AttributedString {
-    var text = AttributedString()
-    for (index, character) in characters.enumerated() {
-        var run = AttributedString(String(character))
-        if index < marks.count, marks[index] {
-            run[AttributeScopes.SwiftUIAttributes.BackgroundColorAttribute.self] = color
-        }
-        text.append(run)
-    }
-    return text
 }
 
 // MARK: - 词典
 
-/// 白い卡に入力欄と引けた語。単語卡へ足す操作は卡の下
-private struct DictionaryCard: View {
+/// 白い卡に入力欄と引けた語(引けたら広い卡、まだ・見つからないときは短い卡)。単語卡へ足す操作は卡の下
+private struct EngDictionary: View {
     @ObservedObject var english: EnglishCoordinator
     @FocusState private var focused: Bool
 
@@ -1180,8 +1479,8 @@ private struct DictionaryCard: View {
         let hit: DictHit? = empty ? nil : english.dictHit
         VStack(alignment: .leading, spacing: 0) {
             VStack(alignment: .leading, spacing: 0) {
-                CardTag(text: "词典")
-                InputBox(focused: focused) {
+                EngTag(text: "词典")
+                EngInputBox(active: focused, wide: true) {
                     TextField("", text: $english.dictQuery,
                               prompt: Text("输入英文单词（例：sustainable）").foregroundStyle(Palette.cardTextSecondary.opacity(0.6)))
                         .textFieldStyle(.plain)
@@ -1207,8 +1506,10 @@ private struct DictionaryCard: View {
                         .padding(.top, 12)
                 }
             }
-            .wordCardSurface()
+            .engCardSurface(hit == nil ? .short : .wide)
+            .zIndex(1)
             if let hit {
+                EngGap()
                 HStack(spacing: 12) {
                     Spacer(minLength: 0)
                     if english.isInDeck(hit) {
@@ -1216,14 +1517,13 @@ private struct DictionaryCard: View {
                             .font(TypeRole.caption)
                             .foregroundStyle(Palette.textSecondary)
                     } else {
-                        Keycap(text: "⌘⏎")
+                        EngKeycap(text: "⌘⏎")
                         Button("加入单词卡") { english.addToDeck(hit) }
                             .buttonStyle(SprayButtonStyle(height: 50))
                             .keyboardShortcut(.return, modifiers: .command)
                             .help("加入单词卡（⌘⏎）")
                     }
                 }
-                .padding(.top, 24)
             }
         }
         // onAppear の時点では入力欄がまだ窓に入っていないことがあるので、少し待ってから焦点を当てる
@@ -1238,7 +1538,7 @@ private struct DictionaryCard: View {
     private func entry(_ hit: DictHit) -> some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack(alignment: .firstTextBaseline, spacing: 10) {
-                HeadWord(text: hit.word, quiz: true)
+                EngHeadWord(text: hit.word, quiz: true)
                 Text("/\(hit.ipa)/")
                     .font(TypeRole.ipa)
                     .foregroundStyle(Palette.cardTextSecondary)
@@ -1247,13 +1547,13 @@ private struct DictionaryCard: View {
                 } label: {
                     StencilIconView(icon: .speaker, size: 16)
                 }
-                .buttonStyle(InkButtonStyle(square: 26))
+                .buttonStyle(EngInkButtonStyle(square: 26))
                 .help("听发音")
                 .accessibilityLabel("听发音")
                 Spacer(minLength: 0)
             }
             Text(hit.zh.replacingOccurrences(of: ";", with: "\n"))
-                .font(Typeface.cjk(15, weight: .semibold))
+                .font(Typeface.mixed(15, weight: 600))
                 .foregroundStyle(Palette.cardText)
                 .lineSpacing(3)
                 .fixedSize(horizontal: false, vertical: true)
@@ -1266,7 +1566,7 @@ private struct DictionaryCard: View {
 // MARK: - 列表
 
 /// 出现过的单词/考点词/语料。点一行就用卡片打开(提前复习、恢复「已掌握」都在卡片上)
-private struct WordList: View {
+private struct EngWordList: View {
     @ObservedObject var english: EnglishCoordinator
 
     var body: some View {
@@ -1284,7 +1584,7 @@ private struct WordList: View {
             } else {
                 VStack(spacing: 0) {
                     ForEach(rows) { row in
-                        WordRow(row: row) { english.focus(row.id) }
+                        EngWordRow(row: row) { english.focus(row.id) }
                     }
                 }
                 if rows.count >= 200 {
@@ -1305,8 +1605,8 @@ private struct WordList: View {
     }
 }
 
-/// 一覧の 1 行:混凝土の上の本物の文字。乗せると灰の遮块
-private struct WordRow: View {
+/// 一覧の 1 行:混凝土の上の本物の文字。乗せると焼いた悬停块(区切りの線は引かない)
+private struct EngWordRow: View {
     let row: EnglishCoordinator.ListRow
     let open: () -> Void
     @State private var hovering = false
@@ -1320,27 +1620,17 @@ private struct WordRow: View {
                     .lineLimit(1)
                     .frame(width: 150, alignment: .leading)
                 Text(row.gloss)
-                    .font(Typeface.cjk(13, weight: .medium))
+                    .font(Typeface.mixed(13, weight: 500))
                     .foregroundStyle(Palette.textSecondary)
                     .lineLimit(1)
                 Spacer(minLength: 8)
                 Text(row.dueLabel)
-                    .font(Typeface.cjk(12, weight: .bold))
+                    .font(Typeface.mixed(12, weight: 700))
                     .foregroundStyle(row.dueLabel == "今天" ? Palette.text : Palette.textSecondary)
             }
             .padding(.horizontal, 14)
             .frame(height: Turf.scheduleRow)
-            .background {
-                if hovering {
-                    MaterialSlice(id: "block-slate-night", fallback: Palette.rowHover)
-                }
-            }
-            .overlay(alignment: .bottom) {
-                Rectangle()
-                    .fill(Palette.rule.opacity(0.4))
-                    .frame(height: 1)
-                    .padding(.horizontal, 14)
-            }
+            .background { hover }
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -1348,95 +1638,119 @@ private struct WordRow: View {
         .pointerStyle(.link)
         .help("用卡片打开")
     }
+
+    /// 行の悬停块(row-hover-night)。まだ焼けていなければ選択肢の灰の遮块で代える
+    @ViewBuilder
+    private var hover: some View {
+        if Baked.has("row-hover-night") {
+            HoverPlate(active: hovering)
+        } else {
+            BakedSlice(id: engFirstBaked(["block-slate-option-night", "block-slate-night"]) ?? "block-slate-night")
+                .opacity(hovering ? 1 : 0)
+                .animation(.easeOut(duration: 0.12), value: hovering)
+        }
+    }
 }
 
 // MARK: - 做完了・没有素材
 
-/// 今日の分が終わった:白い卡に本轮の盤面(黒い台)、模板の 20/20、CLEAR、凡例。20 問そろったら奖章(神兽、説明なし)
-private struct StageClear: View {
+/// 今日の分が終わった:広い白卡(四隅に橙の对位角标)。左 = 黒い台に本轮の地盘・连续 N 天・明日の一言、
+/// 右 = 本轮 + CLEAR、模板の 20/20、凡例、20 問そろったら奖章(神兽、説明なし)
+private struct EngStageClear: View {
     @ObservedObject var english: EnglishCoordinator
     let message: String
     /// 「回到今日」:面板のタブ(MenuContentView と同じ保存先)
-    @AppStorage("panelTab") private var panelTab = "today"
+    @AppStorage(PanelTab.storageKey) private var panelTab: PanelTab = .today
 
     var body: some View {
         let goal = EnglishCoordinator.dailyGoal
         let count = min(english.todayCount, goal)
         let full = english.todayCount >= goal
-        let cells = roundCells(english.todayResults, answered: english.todayCount, goal: goal, pending: false)
+        let marks = EnglishRound.board(results: english.todayResults, answered: english.todayCount, goal: goal,
+                                       pending: false)
         VStack(alignment: .leading, spacing: 0) {
-            HStack(alignment: .top, spacing: 22) {
+            HStack(alignment: .top, spacing: 20) {
                 VStack(alignment: .leading, spacing: 12) {
-                    RoundBoard(english: english, pending: false)
-                        .padding(14)
-                        .material("plate-black-night", fallback: Palette.black)
+                    EngRoundBoard(english: english, pending: false)
+                        .padding(.horizontal, 18)
+                        .padding(.vertical, 16)
+                        .background { BakedSlice(id: "plate-black-night", fallback: Palette.black) }
                     if english.streak > 0 {
-                        StreakPlate(streak: english.streak)
+                        EngStreakChip(streak: english.streak)
                     }
-                    CardTag(text: "要复习的明天会再出现", style: .frame)
+                    EngTag(text: "要复习的明天会再出现", style: .longFrame)
                 }
                 .fixedSize()
                 VStack(alignment: .leading, spacing: 0) {
                     HStack(spacing: 8) {
-                        CardTag(text: "本轮")
+                        EngTag(text: "本轮")
                         PaintTag(text: "CLEAR", asset: "tag-teal-night", fallback: Palette.teal)
                     }
-                    StencilText(text: "\(count)/\(goal)", set: "big-black", scale: 0.45, fallbackColor: Palette.cardText)
-                        .padding(.top, 14)
+                    StencilText(text: "\(count)/\(goal)", set: "count-black", fallbackSize: 44,
+                                fallbackColor: Palette.cardText)
+                        .padding(.top, 20)
                     Text(message)
-                        .font(Typeface.cjk(15, weight: .bold))
+                        .font(Typeface.mixed(15, weight: 700))
                         .foregroundStyle(Palette.cardText)
-                        .padding(.top, 10)
+                        .padding(.top, 14)
                     if full {
                         Text("全部完成，地盘喷满了")
                             .font(TypeRole.caption)
                             .foregroundStyle(Palette.cardTextSecondary)
                             .padding(.top, 4)
                     }
-                    RoundLegend(cells: Array(cells.prefix(count)))
-                        .padding(.top, 14)
+                    EngLegend(marks: Array(marks.prefix(count)))
+                        .padding(.top, 16)
                     if full {
-                        ClearBadge()
-                            .padding(.top, 18)
+                        EngClearBadge()
+                            .padding(.top, 22)
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .wordCardSurface()
+            .engCardSurface(.wide)
+            .regMarks()
+            .zIndex(1)
 
-            HStack(spacing: 10) {
+            EngGap()
+            HStack(spacing: 6) {
                 Button {
                     english.addMoreNew()
                 } label: {
                     HStack(spacing: 8) {
                         Text("再来 10 个新的")
-                        Keycap(text: "⌘N")
+                            .font(Typeface.mixed(14, weight: 700))
+                        EngKeycap(text: "⌘N")
                     }
                 }
-                .buttonStyle(FrameButtonStyle(height: 50))
+                .buttonStyle(BareButtonStyle())
                 .keyboardShortcut("n", modifiers: .command)
                 .help("还想继续的话，可以再加 10 个新的")
-                Button("查看列表") { english.presentation = .list }
-                    .buttonStyle(FrameButtonStyle(height: 50))
+                Button {
+                    english.presentation = .list
+                } label: {
+                    Text("查看列表")
+                        .font(Typeface.mixed(14, weight: 700))
+                }
+                .buttonStyle(BareButtonStyle())
                 Spacer(minLength: 8)
-                Button("回到今日") { panelTab = "today" }
-                    .buttonStyle(SprayButtonStyle(height: 50))
+                Button("回到今日") { panelTab = .today }
+                    .buttonStyle(SprayButtonStyle(kind: .orange, height: 50))
             }
-            .padding(.top, 28)
-            if visibleUndo(english) != nil {
-                UndoLine(english: english)
+            if engVisibleUndo(english) != nil {
+                EngUndoLine(english: english)
                     .padding(.top, 12)
             }
         }
     }
 }
 
-/// 凡例:记住了 / 太简单 / 模糊 / 忘了 と本轮の数
-private struct RoundLegend: View {
-    let cells: [RatingCell.Kind]
+/// 凡例:记住了 / 太简单 / 模糊 / 忘了 と本轮の数(14pt の格)
+private struct EngLegend: View {
+    let marks: [RoundMark]
 
     var body: some View {
-        Grid(alignment: .leading, horizontalSpacing: 22, verticalSpacing: 10) {
+        Grid(alignment: .leading, horizontalSpacing: 20, verticalSpacing: 10) {
             GridRow {
                 entry(.good, "记住了")
                 entry(.easy, "太简单")
@@ -1448,25 +1762,25 @@ private struct RoundLegend: View {
         }
     }
 
-    private func entry(_ kind: RatingCell.Kind, _ title: String) -> some View {
-        let number = cells.filter { $0 == kind }.count
+    private func entry(_ kind: RoundMark, _ title: String) -> some View {
+        let number = marks.filter { $0 == kind }.count
         return HStack(spacing: 8) {
             RatingCell(kind: kind, size: 14)
             Text(title)
-                .font(Typeface.cjk(13, weight: .bold))
+                .font(Typeface.mixed(13.5, weight: 800))
                 .foregroundStyle(Palette.cardText)
-            Spacer(minLength: 8)
+            Spacer(minLength: 6)
             Text("\(number)")
-                .font(TypeRole.count)
+                .font(Typeface.mono(14, weight: 700))
                 .foregroundStyle(Palette.cardText)
         }
-        .frame(width: 112)
+        .frame(width: 104)
         .accessibilityElement(children: .combine)
     }
 }
 
-/// 黒い遮块に 橙の炎 + 连续 N 天
-private struct StreakPlate: View {
+/// 黒い遮块(白卡用の小牌)に 橙の炎 + 连续 N 天
+private struct EngStreakChip: View {
     let streak: Int
 
     var body: some View {
@@ -1474,37 +1788,69 @@ private struct StreakPlate: View {
             StencilIconView(icon: .flame, size: 14)
                 .foregroundStyle(Palette.orange)
             Text("连续 \(streak) 天")
-                .font(Typeface.cjk(13, weight: .bold))
+                .font(Typeface.mixed(13, weight: 700))
                 .foregroundStyle(Palette.white)
         }
-        .padding(.horizontal, 10)
+        .padding(.horizontal, 12)
         .frame(height: 30)
-        .material("plate-black-night", fallback: Palette.black)
+        .background {
+            BakedSlice(id: engFirstBaked(["chip-black-card", "plate-black-night"]) ?? "chip-black-card",
+                       fallback: Palette.black)
+        }
+        .accessibilityElement(children: .combine)
     }
 }
 
-/// 20/20 の奖章:切り角の黒い底板(−2° は素材に焼き込み済み)+ 曜日の神兽(青漆)。文字は付けない
-private struct ClearBadge: View {
+/// 20/20 の奖章:切り角の黒い底板 + 曜日の神兽(青漆)。どちらも −2° で焼いてあるので回さない。文字は付けない。
+/// 出たときに 1 回(⑤ 650ms):底板が喷かれ(badge-mask の 4 枚)→ 神兽がふっと出る。減らす動きでは最後の絵
+private struct EngClearBadge: View {
+    private static let total: Double = 650
+
     var body: some View {
-        ZStack {
-            if Material.has("badge-plate-night") {
-                MaterialSlice(id: "badge-plate-night")
-            } else {
-                ChamferedPlate()
-                    .fill(Palette.black)
-                    .rotationEffect(.degrees(-2))
-            }
-            MaterialSprite.height(Myth.badgeCreature(for: Date()), 89)
-                .frame(width: 119, height: 89)
-                .rotationEffect(.degrees(-2))
+        MotionPlayer(trigger: 0, durationMs: Self.total, playOnAppear: true) { progress in
+            badge(progress)
         }
         .frame(width: 142, height: 105)
         .accessibilityHidden(true)
     }
+
+    @ViewBuilder
+    private func badge(_ progress: Double) -> some View {
+        let spray = motionPhase(progress, totalMs: Self.total, from: 0, to: 420)
+        let reveal = motionPhase(progress, totalMs: Self.total, from: 420, to: Self.total)
+        ZStack {
+            plate
+                .mask { plateMask(spray) }
+            BakedSprite(id: Myth.badgeCreature(for: Date()))
+                .opacity(reveal)
+        }
+    }
+
+    @ViewBuilder
+    private var plate: some View {
+        if Baked.has("badge-plate-night") {
+            BakedSlice(id: "badge-plate-night")
+        } else {
+            EngChamferedPlate()
+                .fill(Palette.black)
+                .rotationEffect(.degrees(-2))
+        }
+    }
+
+    @ViewBuilder
+    private func plateMask(_ spray: Double) -> some View {
+        if spray < 1 && Baked.frames("badge-mask-", count: 4) != nil {
+            BakedFrame(prefix: "badge-mask-", count: 4, progress: spray)
+        } else {
+            Rectangle()
+                .opacity(spray)
+                .padding(-30)
+        }
+    }
 }
 
 /// 模板の底板の形(四隅を切り落とす)。素材がないときだけ使う
-private struct ChamferedPlate: Shape {
+private struct EngChamferedPlate: Shape {
     var cut: CGFloat = 12
 
     func path(in rect: CGRect) -> Path {
@@ -1522,7 +1868,8 @@ private struct ChamferedPlate: Shape {
     }
 }
 
-private struct MissingData: View {
+/// 素材が無い(IELTS app から取り込む前):短い白卡に手順
+private struct EngMissingData: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text("还没有英语素材")
@@ -1538,46 +1885,12 @@ private struct MissingData: View {
                 .textSelection(.enabled)
                 .padding(10)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .material("band-black-night", fallback: Palette.black)
+                .background {
+                    BakedSlice(id: engFirstBaked(["band-black-wide-night", "band-black-night"]) ?? "band-black-night",
+                               fallback: Palette.black)
+                }
                 .padding(.top, 4)
         }
-        .wordCardSurface()
-    }
-}
-
-// MARK: - 本轮の漆
-
-/// 本轮の盤面:今日答えた順に goal マス + いまの 1 問(橙の破線)+ 空き。結果は english_log(同期した分も入る)
-private func roundCells(_ results: [String], answered: Int, goal: Int, pending: Bool) -> [RatingCell.Kind] {
-    (0..<max(goal, 0)).map { index -> RatingCell.Kind in
-        if index < answered {
-            return results.indices.contains(index) ? kindOf(result: results[index]) : .good
-        }
-        return index == answered && pending ? .current : .empty
-    }
-}
-
-/// english_log の結果 → 格の漆(「知ってる」は太简单と同じ満 + 星)
-private func kindOf(result: String) -> RatingCell.Kind {
-    if result == "known" { return .easy }
-    return SRSRating(rawValue: result).map { kindOf($0) } ?? .good
-}
-
-/// 評分 → 格の漆(忘了 = 灰 ✕、模糊 = まばら、记住了 = 満、太简单 = 満 + 星)
-private func kindOf(_ rating: SRSRating) -> RatingCell.Kind {
-    switch rating {
-    case .again: return .forgot
-    case .hard: return .fuzzy
-    case .good: return .good
-    case .easy: return .easy
-    }
-}
-
-/// 聴写の判定 → 格の漆(差一点 = 模糊)
-private func kindOf(_ result: SpellResult) -> RatingCell.Kind {
-    switch result {
-    case .correct: return .good
-    case .almost: return .fuzzy
-    case .wrong: return .forgot
+        .engCardSurface(.short)
     }
 }

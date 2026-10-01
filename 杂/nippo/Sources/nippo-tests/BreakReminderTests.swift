@@ -53,6 +53,10 @@ func runBreakReminderTests() {
         T.expectEqual(BreakReminder.illustration(for: list[4]), "shoulder-rolls", "转肩")
         T.expectEqual(BreakReminder.illustration(for: list[5]), "belly-breathing", "呼吸")
         T.expectEqual(BreakReminder.illustration(for: list[6]), "walk", "走")
+        T.expectEqual(BreakReminder.illustration(for: list[7]), "shoulder-blades", "肩颈三步 starts with 肩胛")
+        // 肩颈三步:手順ごとに別の姿勢(站立中の壁画带になる)
+        T.expectEqual(list[7].steps.map { BreakReminder.illustration(for: BreakReminder.Stretch(name: $0, steps: [])) },
+                      ["shoulder-blades", "shoulder-rolls", "chin-tuck"], "one pose per step")
         T.expectEqual(BreakReminder.illustration(for: BreakReminder.Stretch(name: "自定义", steps: ["随便动一动"])),
                       "stretch", "fallback")
     }
@@ -75,9 +79,9 @@ func runBreakReminderTests() {
         T.expect(!BreakReminder.stretch(at: 0, in: []).name.isEmpty, "fallback when empty")
     }
 
-    T.run("defaults: 7 gentle stretches, each with concrete steps, nothing overhead") {
+    T.run("defaults: 8 gentle stretches, each with concrete steps, nothing overhead") {
         let defaults = BreakReminder.stretches(from: BreakReminder.defaultStretches)
-        T.expectEqual(defaults.count, 7)
+        T.expectEqual(defaults.count, 8)
         T.expect(defaults.allSatisfy { $0.steps.count >= 2 }, "every default has steps")
         T.expect(!BreakReminder.defaultStretches.contains("举过头")
                  && !BreakReminder.defaultStretches.contains("举起双手"), "no overhead moves")
@@ -100,5 +104,71 @@ func runBreakReminderTests() {
         T.expectEqual(BreakReminder.desiredPrompt(posture: .standing, current: nil, now: now, dueAt: later,
                                                   inMeeting: false, guideDismissed: true),
                       nil, "closed by hand stays closed")
+    }
+
+    T.run("stretch guide: name split into title · duration") {
+        T.expectEqual(StretchGuide.split("夹肩胛骨（约 1 分钟）").title, "夹肩胛骨")
+        T.expectEqual(StretchGuide.split("夹肩胛骨（约 1 分钟）").note, "1 分钟", "约 dropped")
+        T.expectEqual(StretchGuide.split("走一走（1〜2 分钟）").note, "1〜2 分钟")
+        T.expectEqual(StretchGuide.split("肩回し(約 30 秒)").title, "肩回し", "half-width brackets")
+        T.expectEqual(StretchGuide.split("自定义").note, nil, "no brackets")
+        T.expectEqual(StretchGuide.displayName("夹肩胛骨（约 1 分钟）"), "夹肩胛骨 · 1 分钟")
+        T.expectEqual(StretchGuide.displayName("  自定义 "), "自定义")
+    }
+
+    T.run("stretch guide: 肩颈三步 = one pose per step, a frieze, names and numbers") {
+        let list = BreakReminder.stretches(from: BreakReminder.defaultStretches)
+        let combo = list[7]
+        let steps = StretchGuide.steps(of: combo)
+        T.expectEqual(steps.map(\.pose), ["shoulder-blades", "shoulder-rolls", "chin-tuck"])
+        T.expectEqual(steps.map(\.name), ["夹肩胛骨", "转肩", "收下巴"], "frieze labels")
+        T.expectEqual(steps.map(\.text), ["保持 5 秒 × 10 次", "向后转 10 次", "保持 5 秒 × 5 次"],
+                      "the heading's name is not repeated at the start of the line")
+        T.expectEqual(steps.map(\.meta), ["5 秒 · 10 次", "10 次", "5 秒 · 5 次"], "number chips")
+        T.expect(StretchGuide.showsFrieze(steps), "the frieze shows by default")
+        T.expectEqual(StretchGuide.heading(of: combo, steps: steps, at: 1), "转肩", "heading = this step's pose")
+        T.expectEqual(StretchGuide.heading(of: combo, steps: steps, at: 3), "肩颈三步", "done → stretch title")
+    }
+
+    T.run("stretch guide: single-pose stretches keep 第 N 步 and no frieze") {
+        let list = BreakReminder.stretches(from: BreakReminder.defaultStretches)
+        let blades = StretchGuide.steps(of: list[0])
+        T.expectEqual(Set(blades.map(\.pose)), ["shoulder-blades"], "same pose all through")
+        T.expectEqual(blades.map(\.name), ["第 1 步", "第 2 步", "第 3 步"])
+        T.expectEqual(blades.map(\.text), list[0].steps, "lines unchanged")
+        T.expectEqual(blades[2].meta, "5 秒 · 10 次")
+        T.expectEqual(blades[0].meta, nil, "no numbers → no chip")
+        T.expect(!StretchGuide.showsFrieze(blades), "one figure repeated is not a frieze")
+        T.expectEqual(StretchGuide.heading(of: list[0], steps: blades, at: 0), "夹肩胛骨", "stretch title")
+        T.expectEqual(list.filter { StretchGuide.showsFrieze(StretchGuide.steps(of: $0)) }.map(\.name),
+                      ["肩颈三步（约 2 分钟）"], "only the combo is a frieze among the defaults")
+    }
+
+    T.run("stretch guide: a frieze needs 2–3 different poses that all have frieze art") {
+        func guide(_ steps: [String]) -> [StretchGuide.Step] {
+            StretchGuide.steps(of: BreakReminder.Stretch(name: "自定义", steps: steps))
+        }
+        T.expect(StretchGuide.showsFrieze(guide(["夹肩胛骨 10 次", "收下巴 5 次"])), "two figures")
+        T.expect(!StretchGuide.showsFrieze(guide(["夹肩胛骨 10 次", "扩胸 20 秒"])),
+                 "扩胸 has no frieze figure → the stretch's pose repeats")
+        T.expect(!StretchGuide.showsFrieze(guide(["夹肩胛骨 10 次"])), "one step")
+        T.expect(!StretchGuide.showsFrieze(guide(["夹肩胛骨", "转肩", "收下巴", "夹肩胛骨 again"])), "four steps")
+        T.expect(!StretchGuide.showsFrieze(guide([])), "no steps")
+        T.expectEqual(guide(["夹肩胛骨：", "转肩: 向后 10 次"]).map(\.text), ["夹肩胛骨：", "向后 10 次"],
+                      "the name prefix is dropped only when something is left")
+    }
+
+    T.run("stretch guide: step numbers and the countdown clock") {
+        T.expectEqual(StretchGuide.metaText("保持 5 秒后放松。做 10 次"), "5 秒 · 10 次")
+        T.expectEqual(StretchGuide.metaText("向后转 10 次"), "10 次")
+        T.expectEqual(StretchGuide.metaText("看窗外等远处 20 秒"), "20 秒")
+        T.expectEqual(StretchGuide.metaText("走 2 分钟"), "2 分钟")
+        T.expectEqual(StretchGuide.metaText("放松肩膀"), nil)
+        let now = tokyoDate(2026, 10, 1, 10, 0)
+        T.expectEqual(StretchGuide.clock(until: now.addingTimeInterval(750), now: now), "12:30")
+        T.expectEqual(StretchGuide.clock(until: now.addingTimeInterval(599.2), now: now), "10:00", "seconds round up")
+        T.expectEqual(StretchGuide.clock(until: now.addingTimeInterval(59), now: now), "00:59", "minutes keep 2 digits")
+        T.expectEqual(StretchGuide.clock(until: now.addingTimeInterval(-30), now: now), "00:00", "overdue")
+        T.expectEqual(StretchGuide.clock(until: now.addingTimeInterval(100 * 60), now: now), "100:00")
     }
 }

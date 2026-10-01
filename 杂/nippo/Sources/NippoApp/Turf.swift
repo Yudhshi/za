@@ -80,26 +80,6 @@ enum Turf {
     static let checkbox: CGFloat = 17
 }
 
-// MARK: - 静 / 動
-
-/// 画面の強さ。静 = 黒漆の主角卡 + 青の模板字、飛沫は卡の縁だけ・垂れなし。
-/// 動(会議 10 分前・進行中・00・坐站の通知・章)= 青の満喷 + 黒の模板字 + 垂れ(卡 1 枚に 3 本まで)
-enum Intensity: Equatable {
-    case calm
-    case event
-}
-
-private struct IntensityKey: EnvironmentKey {
-    static let defaultValue: Intensity = .calm
-}
-
-extension EnvironmentValues {
-    var intensity: Intensity {
-        get { self[IntensityKey.self] }
-        set { self[IntensityKey.self] = newValue }
-    }
-}
-
 // MARK: - 曜日の神兽(名前・文化・説明は画面のどこにも出さない)
 
 /// 一週間の七つの神兽。素材の名前に使う曜日の略号を返すだけ(神兽が何かは書かない)

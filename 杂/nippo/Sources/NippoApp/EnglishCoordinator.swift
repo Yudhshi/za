@@ -133,15 +133,23 @@ final class EnglishCoordinator: ObservableObject {
     @Published private(set) var loaded = false
     @Published private(set) var library = EnglishLibrary()
 
-    @Published private(set) var vocabCard: VocabCard?
+    @Published private(set) var vocabCard: VocabCard? {
+        didSet { refreshHistories() }
+    }
     @Published private(set) var revealed = false
 
     @Published private(set) var question: ParaphraseQuestion?
     @Published private(set) var picked: Int?
 
-    @Published private(set) var spellItem: SpellItem?
+    @Published private(set) var spellItem: SpellItem? {
+        didSet { refreshHistories() }
+    }
     @Published var spellInput = ""
-    @Published private(set) var spellResult: SpellResult?
+    @Published private(set) var spellResult: SpellResult? {
+        didSet { if spellResult == nil { gradedInput = nil } }
+    }
+    /// 採点したときの綴り(判定のあとで入力欄を触っても、印は採点した綴りに付ける)
+    @Published private(set) var gradedInput: String?
 
     @Published var dictQuery = ""
 
@@ -164,7 +172,11 @@ final class EnglishCoordinator: ObservableObject {
     @Published private(set) var syncStatus: String?
     private var syncing = false
     private var exportTask: Task<Void, Never>?
-    private var questionID: String?
+    private var questionID: String? {
+        didSet { refreshHistories() }
+    }
+    /// いま出ている問題(単語・考点词・語料)の評分の履歴。卡の复习记录を描くたびに DB を読まないよう、ここに控える
+    @Published private(set) var histories: [String: [SRSRating]] = [:]
     /// 語料で一度でも自分で再生したら、以後は「次へ」で自動再生する(職場でいきなり音を出さない)
     private var listened = false
     /// いま Meet の会議中か(AppCoordinator が注入)。会議中は語料を自動再生しない
@@ -529,6 +541,7 @@ final class EnglishCoordinator: ObservableObject {
         guard !spellInput.trimmingCharacters(in: .whitespaces).isEmpty else { return }
         let result = SpellCheck.check(spellInput, answer: item.word.w)
         spellResult = result
+        gradedInput = spellInput
         let rating: SRSRating
         switch result {
         case .correct: rating = .good
@@ -554,6 +567,7 @@ final class EnglishCoordinator: ObservableObject {
     func giveUpSpelling() {
         guard let item = spellItem, spellResult == nil else { return }
         spellResult = .wrong
+        gradedInput = spellInput
         let point = try? store.undoPoint(for: item.id)
         record(item.id, kind: .spell, rating: .again)
         remember(.spell, point, "\(item.word.w) → 今天再来一次")
@@ -699,6 +713,7 @@ final class EnglishCoordinator: ObservableObject {
         let today = DayKey.key(for: now)
         todayCount = (try? store.answeredCount(day: today)) ?? 0
         todayResults = (try? store.results(day: today)) ?? []
+        refreshHistories()
         streak = (try? store.streak(today: now)) ?? 0
         guard loaded else { return }
         resetExtraIfNewDay()
@@ -715,9 +730,18 @@ final class EnglishCoordinator: ObservableObject {
         remaining = counts
     }
 
-    /// そのカードの評分の履歴(古い順。卡の复习记录)
+    /// そのカードの評分の履歴(古い順。卡の复习记录)。いま出ている問題の分だけ控えから返す
     func history(for id: String) -> [SRSRating] {
-        (try? store.ratings(card: id)) ?? []
+        histories[id] ?? []
+    }
+
+    /// いま出ている問題の履歴を読み直す(問題が替わったとき・答えた / 取り消した / 取り込んだあと)
+    private func refreshHistories() {
+        var next: [String: [SRSRating]] = [:]
+        for id in [vocabCard?.id, questionID, spellItem?.id].compactMap({ $0 }) {
+            next[id] = (try? store.ratings(card: id)) ?? []
+        }
+        if next != histories { histories = next }
     }
 
     /// タブの見出しに出す、今日の残り(復習 + 新規)

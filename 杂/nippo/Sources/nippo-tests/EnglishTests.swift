@@ -159,3 +159,20 @@ func runEnglishTests() {
         T.expectEqual(try store.cards(kind: .spell).count, 0)
     }
 }
+
+func runEnglishRoundTests() {
+    print("EnglishRound")
+    T.run("round board paints answers in order, then the current one, then empty") {
+        let board = EnglishRound.board(results: ["good", "again", "known", "hard"], answered: 4, goal: 6, pending: true)
+        T.expectEqual(board, [.good, .forgot, .easy, .fuzzy, .current, .empty])
+        T.expectEqual(EnglishRound.board(results: [], answered: 2, goal: 3, pending: false), [.good, .good, .empty],
+                      "answers without a result (before sync) read as good")
+    }
+
+    T.run("review history keeps the last slots and marks the current question") {
+        let ratings: [SRSRating] = [.again, .good, .easy]
+        T.expectEqual(EnglishRound.history(ratings, answered: false, slots: 3), [.good, .easy, .current])
+        T.expectEqual(EnglishRound.history(ratings, answered: true, slots: 2), [.good, .easy])
+        T.expectEqual(EnglishRound.history([], answered: false, slots: 0), [])
+    }
+}

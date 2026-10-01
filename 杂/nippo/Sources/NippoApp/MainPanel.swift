@@ -17,7 +17,7 @@ final class MainPanelController: NSObject, NSWindowDelegate {
 
     init(coordinator: AppCoordinator) {
         self.coordinator = coordinator
-        panel = KeyablePanel(contentRect: NSRect(x: 0, y: 0, width: Theme.panelWidth, height: 400),
+        panel = KeyablePanel(contentRect: NSRect(x: 0, y: 0, width: Turf.panelWidth, height: 400),
                              styleMask: [.borderless, .nonactivatingPanel, .fullSizeContentView],
                              backing: .buffered, defer: false)
         super.init()
@@ -25,8 +25,8 @@ final class MainPanelController: NSObject, NSWindowDelegate {
         panel.level = .floating
         panel.backgroundColor = .clear
         panel.isOpaque = false
-        // 影は面板の縁の素材(panel-frame)に焼いてある。システムの大きなぼかし影は使わない
-        panel.hasShadow = false
+        // 影は面板の縁の素材(panel-frame)に焼いてある。素材が無いときだけシステムの影
+        panel.hasShadow = !Baked.has("panel-frame-night")
         panel.hidesOnDeactivate = false
         panel.isReleasedWhenClosed = false
         panel.isMovableByWindowBackground = true
@@ -53,7 +53,7 @@ final class MainPanelController: NSObject, NSWindowDelegate {
         host.sizingOptions = []
         panel.contentView = host
         place(size: initial.width > 0 && initial.height > 0 ? initial
-                    : CGSize(width: Theme.panelWidth, height: 400))
+                    : CGSize(width: Turf.panelWidth, height: 400))
         panel.makeKeyAndOrderFront(nil)
         panel.orderFrontRegardless()
         installMonitors()
@@ -65,7 +65,17 @@ final class MainPanelController: NSObject, NSWindowDelegate {
         panel.contentView = nil   // onDisappear(英語の再生の状態を戻す)
     }
 
-    /// 動かした位置(左上)。画面の外なら忘れる
+    /// 焼いた影の分だけ窓は面板より広い。位置を覚える・画面に収めるのは見えている面板(窓 − bleed)で
+    private var bleed: EdgeInsets { Baked.asset("panel-frame-night")?.bleedInsets ?? EdgeInsets() }
+
+    /// 見えている面板の矩形(画面の座標)
+    private func visibleRect(_ frame: NSRect) -> NSRect {
+        let b = bleed
+        return NSRect(x: frame.minX + b.leading, y: frame.minY + b.bottom,
+                      width: frame.width - b.leading - b.trailing, height: frame.height - b.top - b.bottom)
+    }
+
+    /// 動かした位置(見えている面板の左上。影を足す前の版の値もそのまま使える)。画面の外なら忘れる
     private var savedTopLeft: CGPoint? {
         get {
             guard let a = UserDefaults.standard.array(forKey: Self.topLeftKey) as? [Double], a.count == 2 else { return nil }
@@ -85,19 +95,21 @@ final class MainPanelController: NSObject, NSWindowDelegate {
     private func place(size: CGSize) {
         let mouse = NSEvent.mouseLocation
         let mouseScreen = NSScreen.screens.first { $0.frame.contains(mouse) } ?? NSScreen.main
+        let b = bleed
         var origin: CGPoint
         let bounds: NSRect
         if let topLeft = savedTopLeft,
            let screen = NSScreen.screens.first(where: { $0.visibleFrame.insetBy(dx: -20, dy: -20).contains(topLeft) }) {
             bounds = screen.visibleFrame
-            origin = CGPoint(x: topLeft.x, y: topLeft.y - size.height)
+            origin = CGPoint(x: topLeft.x - b.leading, y: topLeft.y + b.top - size.height)
         } else {
             guard let visible = mouseScreen?.visibleFrame else { return }
             bounds = visible
             origin = CGPoint(x: visible.midX - size.width / 2, y: visible.midY - size.height / 2)
         }
-        origin.x = max(bounds.minX, min(origin.x, bounds.maxX - size.width))
-        origin.y = max(bounds.minY, min(origin.y, bounds.maxY - size.height))
+        // 画面に収めるのは見えている面板。影は画面の外へはみ出してよい
+        origin.x = max(bounds.minX - b.leading, min(origin.x, bounds.maxX - size.width + b.trailing))
+        origin.y = max(bounds.minY - b.bottom, min(origin.y, bounds.maxY - size.height + b.top))
         setFrame(NSRect(origin: origin, size: size))
     }
 
@@ -107,7 +119,7 @@ final class MainPanelController: NSObject, NSWindowDelegate {
         let frame = panel.frame
         var origin = CGPoint(x: frame.minX, y: frame.maxY - size.height)
         if let visible = panel.screen?.visibleFrame {
-            origin.y = max(visible.minY, origin.y)
+            origin.y = max(visible.minY - bleed.bottom, origin.y)
         }
         setFrame(NSRect(origin: origin, size: size))
     }
@@ -120,7 +132,8 @@ final class MainPanelController: NSObject, NSWindowDelegate {
 
     func windowDidMove(_ notification: Notification) {
         guard !programmaticMove, panel.isVisible else { return }
-        savedTopLeft = CGPoint(x: panel.frame.minX, y: panel.frame.maxY)
+        let visible = visibleRect(panel.frame)
+        savedTopLeft = CGPoint(x: visible.minX, y: visible.maxY)
     }
 
     // MARK: 外を押したら閉じる・Esc で閉じる
@@ -144,7 +157,10 @@ final class MainPanelController: NSObject, NSWindowDelegate {
                 }
                 return event
             }
-            if event.window !== self.panel, event.window !== self.ignoredWindow {
+            // 窓の外、または焼いた影の帯(窓の中だが面板の外)を押したら閉じる
+            let inShadow = event.window === self.panel
+                && !NSRect(origin: .zero, size: self.panel.frame.size).insetBy(edges: self.bleed).contains(event.locationInWindow)
+            if (event.window !== self.panel && event.window !== self.ignoredWindow) || inShadow {
                 Task { @MainActor in self.hide() }
             }
             return event
@@ -173,15 +189,24 @@ private struct PanelRoot: View {
     var body: some View {
         MenuContentView(coordinator: coordinator)
             // 焼いた接地影が窓の外で切れないように、その分だけ窓を広げる
-            .padding(Material.asset("panel-frame-night")?.bleedInsets ?? EdgeInsets())
+            .padding(Baked.asset("panel-frame-night")?.bleedInsets ?? EdgeInsets())
             .background(GeometryReader { geo in
                 Color.clear.preference(key: PanelSizeKey.self, value: geo.size)
             })
-            .onPreferenceChange(PanelSizeKey.self) { sizeChanged($0) }
+            // perform は @Sendable のことがあるので、閉包は外で捕まえておく(self を跨がない)
+            .onPreferenceChange(PanelSizeKey.self) { [sizeChanged = self.sizeChanged] size in sizeChanged(size) }
     }
 }
 
 private struct PanelSizeKey: PreferenceKey {
     static let defaultValue: CGSize = .zero
     static func reduce(value: inout CGSize, nextValue: () -> CGSize) { value = nextValue() }
+}
+
+private extension NSRect {
+    /// 窓の座標(左下が原点)で、上・左・下・右を内側へ
+    func insetBy(edges e: EdgeInsets) -> NSRect {
+        NSRect(x: minX + e.leading, y: minY + e.bottom,
+               width: width - e.leading - e.trailing, height: height - e.top - e.bottom)
+    }
 }

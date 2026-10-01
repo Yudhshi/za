@@ -28,3 +28,40 @@ func runDayTimelineTests() {
                                         calendar: tokyoCalendar).count, 0)
     }
 }
+
+func runCreatureFitTests() {
+    print("CreatureFit")
+    // 100 × 100 の枠、墨は全面、左の輪郭は全部 x = 0(四角い神兽)
+    let art = CreatureFit.Art(box: CGSize(width: 100, height: 100),
+                              ink: CGRect(x: 0, y: 0, width: 100, height: 100),
+                              contour: Array(repeating: CGFloat(0), count: 10))
+
+    T.run("creature takes 76% of the card when nothing is in the way") {
+        let p = CreatureFit.place(art: art, card: CGSize(width: 400, height: 200), avoid: [])
+        T.expect(p != nil, "placed")
+        T.expectEqual(p.map { Double($0.scale * 100).rounded() }, 152, "ink height = 0.76 × 200")
+        T.expectEqual(p.map { Double($0.origin.x + 100 * $0.scale).rounded() }, 394, "ink right = card − 6")
+    }
+
+    T.run("creature shrinks to keep 9pt away from the numeral, or is dropped") {
+        let numeral = CGRect(x: 20, y: 60, width: 240, height: 100)
+        let p = CreatureFit.place(art: art, card: CGSize(width: 400, height: 200), avoid: [numeral])
+        if let p {
+            T.expect(p.origin.x >= numeral.maxX + 9 - 0.001, "clear of the numeral")
+            T.expect(p.scale * 100 >= 200 * 0.6 - 0.001, "not below the minimum")
+        }
+        let wide = CGRect(x: 20, y: 20, width: 360, height: 160)
+        T.expect(CreatureFit.place(art: art, card: CGSize(width: 400, height: 200), avoid: [wide]) == nil,
+                 "no room → no creature")
+    }
+
+    T.run("a holey contour lets the creature sit next to a short line") {
+        // 上半分は墨が右寄り(x = 70)、下半分は左まで(x = 0)
+        let bird = CreatureFit.Art(box: CGSize(width: 100, height: 100),
+                                   ink: CGRect(x: 0, y: 0, width: 100, height: 100),
+                                   contour: Array(repeating: CGFloat(70), count: 5) + Array(repeating: CGFloat(0), count: 5))
+        let title = CGRect(x: 20, y: 30, width: 270, height: 26)
+        let p = CreatureFit.place(art: bird, card: CGSize(width: 400, height: 200), avoid: [title])
+        T.expect(p != nil && p!.scale * 100 >= 0.76 * 200 - 0.001, "full size: the title only meets the right-leaning upper half")
+    }
+}

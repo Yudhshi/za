@@ -10,6 +10,8 @@ final class AppCoordinator: ObservableObject {
     let quietDays: QuietDayChecker
 
     @Published var todayEvents: [MeetingEvent] = []
+    /// 明日の予定(今日の会議がもう無いとき、主角卡で明日の最初の会議を予告する。読み込みは今日の分と一緒)
+    @Published private(set) var tomorrowEvents: [MeetingEvent] = []
     @Published var statusBarTitle: String?
     /// 次のシャチョケン(90 日先まで。件名キーワードは設定で変更可)
     @Published var nextShachoken: MeetingEvent?
@@ -184,6 +186,7 @@ final class AppCoordinator: ObservableObject {
                 guard let self else { return }
                 self.eventsRefreshInFlight = false
                 self.todayEvents = events
+                self.tomorrowEvents = tomorrow
                 self.statusBarTitle = NextEventPolicy.statusTitle(events: events, now: Date())
                 self.scheduleMeetingReminders(for: events + tomorrow)
             }

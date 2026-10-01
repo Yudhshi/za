@@ -102,3 +102,44 @@ func runNextEventTests() {
         T.expectEqual(c(tokyoDate(2026, 7, 10, 11, 0)), "进行中")
     }
 }
+
+func runHeroPolicyTests() {
+    print("HeroPolicy")
+    let base = tokyoDate(2026, 10, 1, 14, 0)
+    let e = MeetingEvent(id: "m", title: "Design review", start: base, end: base.addingTimeInterval(3600),
+                         attendees: [], isAllDay: false)
+
+    T.run("phase: calm until 10 min before, event, 00 for the first minute, event, ended") {
+        T.expectEqual(HeroPolicy.phase(for: e, now: base.addingTimeInterval(-601)), .calm)
+        T.expectEqual(HeroPolicy.phase(for: e, now: base.addingTimeInterval(-600)), .event)
+        T.expectEqual(HeroPolicy.phase(for: e, now: base), .zero)
+        T.expectEqual(HeroPolicy.phase(for: e, now: base.addingTimeInterval(59)), .zero)
+        T.expectEqual(HeroPolicy.phase(for: e, now: base.addingTimeInterval(60)), .event)
+        T.expectEqual(HeroPolicy.phase(for: e, now: base.addingTimeInterval(3600)), .ended)
+    }
+
+    T.run("display: two-digit minutes, clock when an hour or more away") {
+        T.expectEqual(HeroPolicy.display(for: e, now: base.addingTimeInterval(-230), calendar: tokyoCalendar),
+                      HeroPolicy.Display(value: "04", unit: .minutesUntil))
+        T.expectEqual(HeroPolicy.display(for: e, now: base.addingTimeInterval(-7200), calendar: tokyoCalendar),
+                      HeroPolicy.Display(value: "14:00", unit: .startsAt))
+        T.expectEqual(HeroPolicy.display(for: e, now: base.addingTimeInterval(30), calendar: tokyoCalendar),
+                      HeroPolicy.Display(value: "00", unit: .zero))
+        T.expectEqual(HeroPolicy.display(for: e, now: base.addingTimeInterval(12 * 60), calendar: tokyoCalendar),
+                      HeroPolicy.Display(value: "48", unit: .minutesLeft))
+    }
+
+    T.run("duration cells: 15 min each, elapsed share while running") {
+        T.expect(HeroPolicy.durationCells(for: e, now: base.addingTimeInterval(-60)) == (4, 0), "4 cells, none elapsed")
+        T.expect(HeroPolicy.durationCells(for: e, now: base.addingTimeInterval(1800)) == (4, 2), "half way")
+    }
+
+    T.run("ticks land exactly on the minute flips and the phase changes") {
+        let now = base.addingTimeInterval(-605)
+        let ticks = HeroPolicy.ticks(for: e, after: now)
+        T.expectEqual(ticks.first, base.addingTimeInterval(-600), "the 10-minute mark comes first")
+        T.expect(ticks.contains(base) && ticks.contains(base.addingTimeInterval(60)), "00 starts and ends")
+        T.expect(ticks.contains(base.addingTimeInterval(3600 - 60)), "last running minute")
+        T.expectEqual(ticks, ticks.sorted(), "sorted")
+    }
+}

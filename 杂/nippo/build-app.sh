@@ -21,11 +21,18 @@ cp .build/release/NippoApp "$APP/Contents/MacOS/Yudh"
 cp Resources/Info.plist "$APP/Contents/Info.plist"
 # アイコンの元絵は Resources/AppIcon/AppIcon.svg(描き直したら node scripts/make-icon.mjs で icns を作り直す)
 cp Resources/AppIcon/AppIcon.icns "$APP/Contents/Resources/AppIcon.icns"
-# 小窓の説明の絵(scripts/make-illustrations.py で描く。PNG は 2 倍)
-mkdir -p "$APP/Contents/Resources/Stretches"
-cp Resources/Stretches/*.png "$APP/Contents/Resources/Stretches/"
-# 画面の材質(scripts/material/ で焼く。PNG は 2 倍)と同梱の字体(Archivo / JetBrains Mono、OFL)
-[ -d Resources/Material ] && cp -R Resources/Material "$APP/Contents/Resources/Material"
+# 画面の材質(scripts/material/ で焼く。PNG は 2 倍)と同梱の字体(Archivo / JetBrains Mono、OFL)。どちらも無ければ止める
+for dir in Resources/Material Resources/Fonts; do
+    if [ ! -d "$dir" ]; then
+        echo "エラー: $dir がありません(材質は python3 scripts/material/make.py で焼く)" >&2
+        exit 1
+    fi
+done
+if [ ! -f Resources/Material/manifest.json ]; then
+    echo "エラー: Resources/Material/manifest.json がありません" >&2
+    exit 1
+fi
+cp -R Resources/Material "$APP/Contents/Resources/Material"
 cp -R Resources/Fonts "$APP/Contents/Resources/Fonts"
 # 英語タブの素材(scripts/import-english.mjs で作る。教材由来なのでリポジトリには入れていない)
 if [ -d Resources/English ]; then

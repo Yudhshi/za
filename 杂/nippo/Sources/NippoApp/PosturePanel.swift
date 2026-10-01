@@ -83,7 +83,7 @@ final class PosturePanelController {
 
     /// 牛皮纸の素材に bleed(焼いた影・飛沫)があれば、システムの影は重ねない
     private static var shadowIsBaked: Bool {
-        guard let b = Material.asset("kraft-sheet-night")?.bleedInsets else { return false }
+        guard let b = Baked.asset("kraft-sheet-night")?.bleedInsets else { return false }
         return b.top > 0 || b.leading > 0 || b.bottom > 0 || b.trailing > 0
     }
 }
@@ -95,15 +95,15 @@ private final class PromptPanel: NSPanel {
 
 // MARK: - 小窓の中身
 
-/// 小窓の寸法(pt)。tokens の size.popup* / illustration.sizes と posture-v3 の実寸から
+/// 小窓の寸法(pt)。tokens の size.popup* と posture-v3 の実寸から
 private enum PostureMetrics {
     /// 胶带(tape-handle-night の配置の枠は 26pt)と、紙の上端からはみ出す分
     static let tapeHeight: CGFloat = 26
     static let tapeOverhang: CGFloat = 12
-    /// 問いの姿勢(09 / 10 / 11)と、09 の拉伸の小さな姿勢(240pt の母版を縮める)
+    /// 問いの姿勢(09 / 11、10 の今の手順。pose-<name> はこの大きさで焼く)と、09 の拉伸の小さな姿勢(pose-<name>-s)
     static let questionPose: CGFloat = 132
     static let stepPose: CGFloat = 96
-    /// 数字の札
+    /// 数字の札(chip-black-kraft / tag-orange-kraft は 100 × 32 で焼いてある)
     static let chip: CGFloat = 32
     /// 次ボタン(15 分钟后 / 再站 5 分钟 / 结束拉伸)の幅。主ボタンは残り(169)
     static let secondaryWidth: CGFloat = 135
@@ -119,9 +119,9 @@ private enum PostureMetrics {
     static let ghostTop: CGFloat = 84
 }
 
-/// デスクトップの上に浮く小窓(v12「Stencil Turf」夜):牛皮纸の台紙 1 枚を混凝土に貼り、上端を胶带で留める。
-/// 胶带に STAND UP / STRETCH / SIT DOWN、紙には黒漆の剪影 + 本物の黒い文字 + 青の主ボタン(坐站は青)+ 白漆枠の次ボタン。
-/// 09 / 11 は今日の神兽がうっすら残る(彩蛋。名前は出さない)。坐站の通知は「動」の強さ
+/// デスクトップの上に浮く小窓(v12.1「Stencil Turf」夜):牛皮纸の台紙 1 枚を混凝土に貼り、上端を皱纹纸胶带で留める。
+/// 胶带に STAND UP / STRETCH / SIT DOWN、紙には黒漆の剪影 + 本物の黒い文字 + 焼いた数字の札 + 青の主ボタン + 白漆枠の次ボタン。
+/// 区切りは紙の折り目(kraft-score)、手順の点は模板の点(StepDots)。09 / 11 は今日の神兽がうっすら残る(彩蛋。名前は出さない)
 struct PosturePromptView: View {
     @ObservedObject var coordinator: AppCoordinator
 
@@ -131,7 +131,6 @@ struct PosturePromptView: View {
                 sheet(prompt)
             }
         }
-        .environment(\.intensity, .event)
         .environment(\.colorScheme, .dark)
         .environment(\.locale, Theme.locale)
         .typesettingLanguage(Theme.language)
@@ -176,8 +175,8 @@ struct PosturePromptView: View {
 
     /// 窓の余白 = 牛皮纸の bleed(焼いた影)。上は胶带のはみ出しと胶带自身の bleed も見る
     private var outerInsets: EdgeInsets {
-        let sheet = Material.asset("kraft-sheet-night")?.bleedInsets ?? EdgeInsets()
-        let tape = Material.asset("tape-handle-night")?.bleedInsets ?? EdgeInsets()
+        let sheet = Baked.asset("kraft-sheet-night")?.bleedInsets ?? EdgeInsets()
+        let tape = Baked.asset("tape-handle-night")?.bleedInsets ?? EdgeInsets()
         return EdgeInsets(top: max(0, sheet.top - PostureMetrics.tapeOverhang, tape.top),
                           leading: sheet.leading, bottom: sheet.bottom, trailing: sheet.trailing)
     }
@@ -188,13 +187,15 @@ struct PosturePromptView: View {
 
     // MARK: 09 站起来了吗？
 
-    /// 上:立つ人の剪影 + 問い + 座った分。破線の下:今回の拉伸(小さな剪影・名前・90° と分の札)。指令 2 つ
+    /// 上:立つ人の剪影 + 問い + 座った分(ここ全体が持ち手)。折り目の下:今回の拉伸(小さな剪影・名前・90° と分の札・
+    /// 顺便喝杯水)。指令 2 つ
     @ViewBuilder
     private var askStand: some View {
         let stretch = coordinator.promptStretch
         // 分の数字は 30 秒ごとに読み直す
         TimelineView(.periodic(from: .now, by: 30)) { context in
             let sitting = Self.minutes(since: coordinator.postureSince, now: context.date)
+            let name = StretchGuide.displayName(stretch.name)
             VStack(alignment: .leading, spacing: 0) {
                 PostureQuestion(pose: "stand-up", symbol: "figure.stand",
                                 title: "站起来\n了吗？", spoken: "站起来了吗？") {
@@ -203,26 +204,28 @@ struct PosturePromptView: View {
                 PostureRule()
                     .padding(.vertical, PostureMetrics.ruleGap)
                 HStack(alignment: .center, spacing: 20) {
-                    PosturePose(name: BreakReminder.illustration(for: stretch),
-                                height: PostureMetrics.stepPose, symbol: "figure.cooldown")
+                    PosturePose(name: BreakReminder.illustration(for: stretch), height: PostureMetrics.stepPose,
+                                small: true, symbol: "figure.cooldown")
                     VStack(alignment: .leading, spacing: 10) {
-                        Text(PostureCopy.displayName(stretch.name))
-                            .font(Typeface.cjk(18, weight: .black))
+                        Text(name)
+                            .font(Typeface.mixed(18, weight: 900, japanese: Typeface.isJapanese(name)))
+                            .typesetting(for: name)
                             .foregroundStyle(Palette.kraftText)
                             .lineLimit(2)
                             .fixedSize(horizontal: false, vertical: true)
                         HStack(spacing: 10) {
-                            PostureChip(asset: "plate-black-night", fallback: Palette.black) {
-                                Text("90°")
-                                    .font(Typeface.archivo(17, weight: 900, width: 108))
-                                    .foregroundStyle(Palette.white)
+                            PostureChip(asset: "chip-black-kraft", fallback: Palette.black) {
+                                PostureNumbers(text: "90°", color: Palette.white)
                             }
                             .help("把桌子升到手肘 90° 的高度")
-                            PostureChip(asset: "tag-orange-night", fallback: Palette.orange) {
-                                PostureCount(number: sitting, unit: "分钟", color: Palette.black)
+                            PostureChip(asset: "tag-orange-kraft", fallback: Palette.orange) {
+                                PostureNumbers(text: "\(sitting) 分钟", color: Palette.black)
                             }
                             .help("已经坐了 \(sitting) 分钟")
                         }
+                        Text("顺便喝杯水")
+                            .font(Typeface.cjk(13, weight: .semibold))
+                            .foregroundStyle(Palette.kraftTextSecondary)
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
                 }
@@ -249,7 +252,7 @@ struct PosturePromptView: View {
 
     // MARK: 11 坐下了吗？
 
-    /// 上:座る人の剪影 + 問い + 立った分。破線の下:已站(黒漆)と目標(橙)の札。指令 2 つ
+    /// 上:座る人の剪影 + 問い + 立った分(ここ全体が持ち手)。折り目の下:已站(黒漆)と目標(橙)の札 + 坐深，双脚踩实。指令 2 つ
     @ViewBuilder
     private var askSit: some View {
         TimelineView(.periodic(from: .now, by: 30)) { context in
@@ -262,14 +265,17 @@ struct PosturePromptView: View {
                 PostureRule()
                     .padding(.vertical, PostureMetrics.ruleGap)
                 HStack(spacing: 10) {
-                    PostureChip(asset: "plate-black-night", fallback: Palette.black) {
-                        PostureCount(prefix: "已站", number: standing, unit: "分钟", color: Palette.white)
+                    PostureChip(asset: "chip-black-kraft", fallback: Palette.black) {
+                        PostureNumbers(text: "已站 \(standing) 分钟", color: Palette.white)
                     }
-                    PostureChip(asset: "tag-orange-night", fallback: Palette.orange) {
-                        PostureCount(prefix: "目标", number: coordinator.settings.standMinutes, unit: "分钟",
-                                     color: Palette.black)
+                    PostureChip(asset: "tag-orange-kraft", fallback: Palette.orange) {
+                        PostureNumbers(text: "目标 \(coordinator.settings.standMinutes) 分钟", color: Palette.black)
                     }
                 }
+                Text("坐深，双脚踩实")
+                    .font(Typeface.cjk(13, weight: .semibold))
+                    .foregroundStyle(Palette.kraftTextSecondary)
+                    .padding(.top, 10)
                 HStack(spacing: 12) {
                     Button {
                         coordinator.confirmSat()
@@ -294,23 +300,21 @@ struct PosturePromptView: View {
 
 // MARK: - 10 站立中(拉伸の手順)
 
-/// 站立中:上に「站立中」+ 模板字の残り時間 + 手順の点、姿勢の大きな剪影と今の手順。
-/// 手順がどれも壁画带の素材のある姿勢(夹肩胛骨・转肩・收下巴)なら、破線の下に古埃及の壁画带(同じ地平線に 2〜3 人)。
-/// それ以外は大きな剪影だけ。指令:下一步(青)/ 结束拉伸(白漆枠)
+/// 站立中:上に「站立中」+ 模板字の残り時間 + 手順の点、姿勢の大きな剪影と今の手順(数字の札つき)。上の 2 段は持ち手。
+/// 手順がどれも壁画带の素材のある姿勢(夹肩胛骨・转肩・收下巴 = 既定の「肩颈三步」)なら、折り目の下に古埃及の壁画带
+/// (同じ地平線に 2〜3 人)。それ以外は大きな剪影だけ。指令:下一步(青)/ 结束拉伸(白漆枠)
 private struct PostureStandingGuide: View {
     @ObservedObject var coordinator: AppCoordinator
 
     var body: some View {
         let stretch = coordinator.promptStretch
-        let count = stretch.steps.count
+        let steps = StretchGuide.steps(of: stretch)
+        let count = steps.count
         let step = min(max(0, coordinator.stretchStep), count)
         let done = step >= count
-        let steps = PostureCopy.steps(of: stretch)
-        let distinct = Set(steps.map(\.pose)).count > 1
-        // 同じ人が並ぶだけになるので、手順ごとに姿勢が全部違うときだけ壁画带にする
-        let showsFrieze = (2...3).contains(steps.count)
-            && Set(steps.map(\.pose)).count == steps.count
-            && steps.allSatisfy { PostureCopy.friezeNames[$0.pose] != nil && Material.has("frieze-\($0.pose)-current") }
+        // 同じ人が並ぶだけになるので、手順ごとに姿勢が全部違うときだけ壁画带にする(人の絵が焼いてあれば)
+        let showsFrieze = StretchGuide.showsFrieze(steps)
+            && steps.allSatisfy { Baked.has("frieze-\($0.pose)-current") }
         VStack(alignment: .leading, spacing: 0) {
             header(count: count, step: step)
             HStack(alignment: .center, spacing: 14) {
@@ -320,12 +324,13 @@ private struct PostureStandingGuide: View {
                     if done {
                         finished
                     } else {
-                        instruction(title: heading(of: stretch, pose: steps[step].pose, distinct: distinct),
-                                    line: stretch.steps[step], step: step, count: count)
+                        instruction(title: StretchGuide.heading(of: stretch, steps: steps, at: step),
+                                    step: steps[step], index: step, count: count)
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
+            .background(WindowDragArea())   // 剪影と手順の段も持ち手
             .padding(.top, 6)
             if showsFrieze {
                 PostureRule()
@@ -338,7 +343,7 @@ private struct PostureStandingGuide: View {
         }
     }
 
-    /// 站立中 + 残り時間(timer-black の模板字。秒を刻むのはこの行だけ)+ 手順の点
+    /// 站立中 + 残り時間(timer-black の模板字。秒を刻むのはこの行だけ)+ 手順の点。行ぜんぶが持ち手
     private func header(count: Int, step: Int) -> some View {
         let due = coordinator.postureDueAt
         return TimelineView(.periodic(from: .now, by: 1)) { context in
@@ -347,28 +352,22 @@ private struct PostureStandingGuide: View {
                     Text("站立中")
                         .font(Typeface.cjk(15, weight: .black))
                         .foregroundStyle(Palette.kraftText)
-                    StencilText(text: PostureCopy.clock(until: due, now: context.date), set: "timer-black",
-                                fallbackSize: 40, fallbackColor: Palette.kraftText)
+                    PostureTimer(text: StretchGuide.clock(until: due, now: context.date))
                 }
                 .accessibilityElement(children: .combine)
                 Spacer(minLength: 8)
                 PostureStepDots(count: count, index: step)
             }
+            .background(WindowDragArea())
         }
     }
 
-    /// 今の手順の見出し:姿勢が混ざる組み立てなら姿勢の名前(转肩)、それ以外はストレッチの名前(括弧の前)
-    private func heading(of stretch: BreakReminder.Stretch, pose: String, distinct: Bool) -> String {
-        if distinct, let name = PostureCopy.friezeNames[pose] { return name }
-        return PostureCopy.split(stretch.name).title
-    }
-
-    /// 第 2 步 / 共 3 步・名前・手順の一行・注意
-    private func instruction(title: String, line: String, step: Int, count: Int) -> some View {
+    /// 第 2 步 / 共 3 步・見出し・数字の札(秒 / 次。壁画带が無くても出す)・手順の一行・注意
+    private func instruction(title: String, step: StretchGuide.Step, index: Int, count: Int) -> some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack(alignment: .firstTextBaseline, spacing: 4) {
                 Text("第")
-                Text("\(step + 1)")
+                Text("\(index + 1)")
                     .font(Typeface.mono(13, weight: 700))
                     .foregroundStyle(Palette.kraftText)
                 Text("步 / 共")
@@ -382,15 +381,23 @@ private struct PostureStandingGuide: View {
             .accessibilityElement(children: .combine)
             if !title.isEmpty {
                 Text(title)
-                    .font(TypeRole.titleZh)
+                    .font(Typeface.mixed(30, weight: 900, japanese: Typeface.isJapanese(title)))
                     .tracking(30 * 0.02)
+                    .typesetting(for: title)
                     .foregroundStyle(Palette.kraftText)
                     .lineLimit(2)
                     .fixedSize(horizontal: false, vertical: true)
                     .padding(.top, 6)
             }
-            Text(line)
-                .font(Typeface.cjk(14, weight: .bold))
+            if let meta = step.meta {
+                PostureChip(asset: "chip-black-kraft", fallback: Palette.black) {
+                    PostureNumbers(text: meta, color: Palette.white)
+                }
+                .padding(.top, 10)
+            }
+            Text(step.text)
+                .font(Typeface.mixed(14, weight: 700, japanese: Typeface.isJapanese(step.text)))
+                .typesetting(for: step.text)
                 .foregroundStyle(Palette.kraftText)
                 .fixedSize(horizontal: false, vertical: true)
                 .padding(.top, 8)
@@ -402,7 +409,7 @@ private struct PostureStandingGuide: View {
         }
     }
 
-    /// 手順を全部終えた
+    /// 手順を全部終えた(剪影は走一走)
     private var finished: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text("完成！接下来站着工作吧")
@@ -457,63 +464,69 @@ private struct PostureStandingGuide: View {
     }
 }
 
-/// 手順の点:済み = 黒、今 = 青(黒い縁)、まだ = 黒の輪
+/// 残り時間の模板字(timer-black)。数字ごとに送り幅が違うので、いちばん広い数字の幅で枠を取る
+/// (毎秒・毎分で枠の幅が変わらず、横の手順の点が揺れない)。図集が無ければ Archivo の等幅数字
+private struct PostureTimer: View {
+    let text: String
+
+    var body: some View {
+        StencilText(text: text, set: "timer-black", fallbackSize: 40, fallbackColor: Palette.kraftText)
+            .fixedSize()
+            .frame(width: Self.reservedWidth(for: text), alignment: .leading)
+    }
+
+    /// 数字はどれも最も広い数字の送り幅、ほかの字(:)はその字の送り幅。図集が無い・字が無ければ nil(枠を決めない)
+    @MainActor
+    private static func reservedWidth(for text: String) -> CGFloat? {
+        guard let set = Baked.glyphSet("timer-black") else { return nil }
+        let widest = "0123456789".compactMap { set.glyphs[String($0)]?.advance }.max() ?? 0
+        var width: CGFloat = 0
+        for character in text {
+            if character.isNumber {
+                width += widest
+            } else if let glyph = set.glyphs[String(character)] {
+                width += glyph.advance
+            } else {
+                return nil
+            }
+        }
+        return width
+    }
+}
+
+/// 手順の点(焼いた模板の点:済み = 黒、今 = 青 + 黒い輪、まだ = 模板の浅い印)。読み上げは「第 N 步，共 M 步」
 private struct PostureStepDots: View {
     let count: Int
     /// count と同じなら全部済み
     let index: Int
 
     var body: some View {
-        HStack(spacing: 8) {
-            ForEach(0..<count, id: \.self) { i in
-                dot(i)
+        StepDots(count: count, index: index)
+            .accessibilityRepresentation {
+                Text(spoken)
             }
-        }
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel(spoken)
     }
 
     private var spoken: String {
         index < count ? "第 \(index + 1) 步，共 \(count) 步" : "\(count) 步都做完了"
     }
-
-    @ViewBuilder
-    private func dot(_ i: Int) -> some View {
-        if i < index {
-            Circle()
-                .fill(Palette.kraftText)
-                .frame(width: 12, height: 12)
-        } else if i == index {
-            Circle()
-                .fill(Palette.teal)
-                .overlay { Circle().strokeBorder(Palette.kraftText, lineWidth: 1.5) }
-                .frame(width: 16, height: 16)
-        } else {
-            Circle()
-                .strokeBorder(Palette.kraftText, lineWidth: 2)
-                .frame(width: 12, height: 12)
-        }
-    }
 }
 
 /// 古埃及の壁画带:同じ地平線に手順の人が並ぶ(済み = 淡く + ✓、今 = 漆満ち、まだ = ごく淡い)。下に本物の文字の札。
-/// 帯は frieze-ground の配置の枠(316 × 113)で、どの人の精灵も同じ高さ・同じ地平線に焼いてある
+/// 帯は frieze-ground の配置の枠(316 × 113)。人の置き場所は焼いた frieze-* の origin(帯の左上からの pt)
 private struct PostureFrieze: View {
-    let steps: [PostureStepInfo]
+    let steps: [StretchGuide.Step]
     let current: Int
 
-    /// 3 人のときの各人の中心 x(焼いた frieze-* の origin + 幅の半分。316pt の帯で)
-    private static let canon: [CGFloat] = [48.25, 159, 273]
-
     var body: some View {
-        let band = Material.asset("frieze-ground")?.layoutSize ?? CGSize(width: 316, height: 113)
-        let xs = Self.centres(count: steps.count, width: band.width)
+        let band = Baked.asset("frieze-ground")?.layoutSize ?? CGSize(width: 316, height: 113)
+        let centres = Self.centres(of: steps.map(\.pose), band: band)
         VStack(spacing: 6) {
             ZStack(alignment: .topLeading) {
                 ground
                 ForEach(steps.indices, id: \.self) { i in
-                    MaterialSprite(id: "frieze-\(steps[i].pose)-\(state(i))")
-                        .position(x: xs[i], y: band.height / 2)
+                    BakedSprite(id: "frieze-\(steps[i].pose)-\(state(i))")
+                        .position(centres[i])
                 }
             }
             .frame(width: band.width, height: band.height)
@@ -522,7 +535,7 @@ private struct PostureFrieze: View {
                     label(i)
                         .frame(width: PostureMetrics.friezeLabelWidth, height: PostureMetrics.friezeLabelHeight,
                                alignment: .top)
-                        .position(x: xs[i], y: PostureMetrics.friezeLabelHeight / 2)
+                        .position(x: centres[i].x, y: PostureMetrics.friezeLabelHeight / 2)
                 }
             }
             .frame(width: band.width, height: PostureMetrics.friezeLabelHeight)
@@ -530,13 +543,28 @@ private struct PostureFrieze: View {
         .frame(maxWidth: .infinity)
     }
 
-    /// 3 人は焼いた格子の位置、それ以外は等分
-    private static func centres(count: Int, width: CGFloat) -> [CGFloat] {
-        if count == canon.count {
-            return canon.map { $0 * width / 316 }
+    /// 人の中心(帯の左上から)。人数が焼いた人数と同じなら、焼いた置き場所を左から順に使う
+    /// (既定の「肩颈三步」なら全員が自分の焼いた場所に立つ)。2 人、または origin の無い古い目録なら帯を等分
+    @MainActor
+    private static func centres(of poses: [String], band: CGSize) -> [CGPoint] {
+        let slots = StretchGuide.friezeNames.keys.compactMap { bakedCentre($0) }.sorted { $0.x < $1.x }
+        if slots.count == poses.count {
+            return slots
         }
-        let n = CGFloat(max(count, 1))
-        return (0..<count).map { (CGFloat($0) + 0.5) * width / n }
+        let n = CGFloat(max(poses.count, 1))
+        return poses.indices.map { i in
+            CGPoint(x: (CGFloat(i) + 0.5) * band.width / n, y: bakedCentre(poses[i])?.y ?? band.height / 2)
+        }
+    }
+
+    /// 焼いた人の配置の枠の中心 = origin + 大きさの半分(どの状態の絵も同じ枠なので current で測る)
+    @MainActor
+    private static func bakedCentre(_ pose: String) -> CGPoint? {
+        guard let asset = Baked.asset("frieze-\(pose)-current"), let origin = asset.origin, origin.count >= 2 else {
+            return nil
+        }
+        let size = asset.layoutSize
+        return CGPoint(x: origin[0] + size.width / 2, y: origin[1] + size.height / 2)
     }
 
     private func state(_ i: Int) -> String {
@@ -546,8 +574,8 @@ private struct PostureFrieze: View {
     /// 地平線(素材が無ければ帯の下端に黒い細線)
     @ViewBuilder
     private var ground: some View {
-        if Material.has("frieze-ground") {
-            MaterialSprite(id: "frieze-ground")
+        if Baked.has("frieze-ground") {
+            BakedSprite(id: "frieze-ground")
         } else {
             Rectangle()
                 .fill(Palette.kraftText)
@@ -557,11 +585,12 @@ private struct PostureFrieze: View {
         }
     }
 
-    /// 名前(今のは太く)+ 回数・秒。札の文字は淡くしない(≥ 4.5:1)
+    /// 名前(今のは太く)+ 回数・秒(数字は等幅)。札の文字は淡くしない(≥ 4.5:1)
     private func label(_ i: Int) -> some View {
         let step = steps[i]
         let isCurrent = i == current
         let progress: String = i < current ? "完成" : (isCurrent ? "进行中" : "")
+        let color = isCurrent ? Palette.kraftText : Palette.kraftTextSecondary
         return VStack(spacing: 2) {
             HStack(spacing: 3) {
                 if i < current {
@@ -571,12 +600,12 @@ private struct PostureFrieze: View {
                     .font(Typeface.cjk(13, weight: isCurrent ? .black : .bold))
             }
             if let meta = step.meta {
-                Text(meta)
-                    .font(Typeface.cjk(12, weight: .semibold))
+                PostureNumbers(text: meta, color: color, digits: Typeface.mono(12, weight: 700),
+                               words: Typeface.cjk(12, weight: .semibold))
             }
         }
         .lineLimit(1)
-        .foregroundStyle(isCurrent ? Palette.kraftText : Palette.kraftTextSecondary)
+        .foregroundStyle(color)
         .accessibilityElement(children: .combine)
         .accessibilityValue(progress)
     }
@@ -601,12 +630,12 @@ private struct PostureTape: View {
             .padding(.horizontal, 20)
             .frame(height: PostureMetrics.tapeHeight)
             .background(WindowDragArea())   // 胶带を掴むと窓が動く
-            .background { MaterialSlice(id: "tape-handle-night", fallback: Palette.tape) }
+            .background { BakedSlice(id: "tape-handle-night", fallback: Palette.tape) }
             .accessibilityAddTraits(.isHeader)
     }
 }
 
-/// 問いの段:左に姿勢の剪影(132pt)、右に問い(2 行)と一行の補足
+/// 問いの段:左に姿勢の剪影(132pt)、右に問い(2 行)と一行の補足。段ぜんぶが窓の持ち手(胶带だけでは小さい)
 private struct PostureQuestion<Detail: View>: View {
     let pose: String
     let symbol: String
@@ -630,23 +659,34 @@ private struct PostureQuestion<Detail: View>: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         }
+        .background(WindowDragArea())
     }
 }
 
-/// 姿勢の剪影(焼いた pose-<name>、240pt の母版を縮める)。素材が無ければ旧い絵(Resources/Stretches)
+/// 姿勢の剪影。表示の大きさで焼いた素材をほぼ 1 倍で置く(pose-<name> = 132pt、small なら pose-<name>-s = 96pt)。
+/// 小さい版が無ければ pose-<name> を、古い 240pt の母版しか無ければそれを縮める。素材が無ければ SF Symbols の人形
 private struct PosturePose: View {
     let name: String
     let height: CGFloat
+    var small = false
     var symbol = "figure.stand"
 
     var body: some View {
-        let id = "pose-\(name)"
-        if Material.has(id) {
-            MaterialSprite.height(id, height)
+        if let id = Self.asset(name, small: small) {
+            BakedSprite.height(id, height)
         } else {
-            Illustration(name: name, size: height, fallback: symbol)
+            Image(systemName: symbol)
+                .font(.system(size: height * 0.55, weight: .regular))
+                .frame(width: height, height: height)
                 .foregroundStyle(Palette.kraftText)
+                .accessibilityHidden(true)
         }
+    }
+
+    @MainActor
+    private static func asset(_ name: String, small: Bool) -> String? {
+        let candidates = small ? ["pose-\(name)-s", "pose-\(name)"] : ["pose-\(name)"]
+        return candidates.first { Baked.has($0) }
     }
 }
 
@@ -669,29 +709,29 @@ private struct PostureMinutesLine: View {
     }
 }
 
-/// 札の中の「已站 32 分钟」(数字は等幅)
-private struct PostureCount: View {
-    var prefix: String? = nil
-    let number: Int
-    let unit: String
+/// 数の入った短い札の文(已站 32 分钟 / 5 秒 · 10 次 / 90°)。空白で区切り、数字で始まる語は JetBrains Mono、ほかは中文
+private struct PostureNumbers: View {
+    let text: String
     let color: Color
+    var digits: Font = Typeface.mono(16, weight: 700)
+    var words: Font = Typeface.cjk(13, weight: .bold)
 
     var body: some View {
+        let tokens = text.split(separator: " ").map(String.init)
         HStack(alignment: .firstTextBaseline, spacing: 4) {
-            if let prefix {
-                Text(prefix)
+            ForEach(Array(tokens.enumerated()), id: \.offset) { _, token in
+                Text(token)
+                    .font(token.first?.isNumber == true ? digits : words)
             }
-            Text("\(number)")
-                .font(Typeface.mono(16, weight: 700))
-            Text(unit)
         }
-        .font(Typeface.cjk(13, weight: .bold))
         .foregroundStyle(color)
-        .accessibilityElement(children: .combine)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(text)
     }
 }
 
-/// 遮喷の札(黒漆 plate-black / 橙 tag-orange)。高さ 32
+/// 牛皮纸の上の焼いた札(黒漆 chip-black-kraft / 橙 tag-orange-kraft、どちらも 100 × 32)。高さ 32、幅は中身なり。
+/// 焼いた幅の 0.8 倍より狭い札(90° など)は中央を縮めずに敷き詰める(漆の粒が横に潰れない)
 private struct PostureChip<Content: View>: View {
     let asset: String
     let fallback: Color
@@ -702,22 +742,29 @@ private struct PostureChip<Content: View>: View {
             .lineLimit(1)
             .padding(.horizontal, 12)
             .frame(height: PostureMetrics.chip)
-            .background { MaterialSlice(id: asset, fallback: fallback) }
+            .background {
+                GeometryReader { geo in
+                    let baked = Baked.asset(asset)?.layoutSize.width ?? 0
+                    BakedSlice(id: asset, fallback: fallback, tile: geo.size.width < baked * 0.8)
+                }
+            }
             .fixedSize()
     }
 }
 
-/// 段の区切り:牛皮纸の折り目の破線(焼いた kraft-score。無ければ細い破線を描く)
+/// 段の区切り:牛皮纸の折り目(焼いた kraft-score を横に伸ばす。無ければ細い線)
 private struct PostureRule: View {
     var body: some View {
         Group {
-            if Material.has("kraft-score") {
-                MaterialSlice(id: "kraft-score")
+            if Baked.has("kraft-score") {
+                BakedSlice(id: "kraft-score")
             } else {
-                PostureRuleLine()
-                    .stroke(Palette.kraftRule, style: StrokeStyle(lineWidth: 1, dash: [5, 4]))
+                Rectangle()
+                    .fill(Palette.kraftRule)
+                    .frame(height: 1)
             }
         }
+        .frame(maxWidth: .infinity)
         .frame(height: PostureMetrics.ruleHeight)
         .accessibilityHidden(true)
     }
@@ -728,101 +775,15 @@ private struct PostureGhost: View {
     let id: String
 
     var body: some View {
-        if Material.has(id) {
+        if Baked.has(id) {
             Color.clear
                 .overlay(alignment: .topLeading) {
-                    MaterialSprite(id: id)
+                    BakedSprite(id: id)
                         .offset(y: PostureMetrics.ghostTop)
                 }
                 .clipShape(RoundedRectangle(cornerRadius: PostureMetrics.sheetRadius, style: .continuous))
                 .allowsHitTesting(false)
                 .accessibilityHidden(true)
         }
-    }
-}
-
-private struct PostureRuleLine: Shape {
-    func path(in rect: CGRect) -> Path {
-        var path = Path()
-        path.move(to: CGPoint(x: rect.minX, y: rect.midY))
-        path.addLine(to: CGPoint(x: rect.maxX, y: rect.midY))
-        return path
-    }
-}
-
-// MARK: - 文言と手順の読み方
-
-/// 手順 1 つ:姿勢(pose-<name> / frieze-<name>-*)と、壁画带の札の名前・回数
-private struct PostureStepInfo {
-    let pose: String
-    let name: String
-    let meta: String?
-}
-
-private enum PostureCopy {
-    /// 壁画带の素材がある姿勢と、その短い名前
-    static let friezeNames: [String: String] = [
-        "shoulder-blades": "夹肩胛骨",
-        "shoulder-rolls": "转肩",
-        "chin-tuck": "收下巴",
-    ]
-
-    /// 「夹肩胛骨（约 1 分钟）」→(夹肩胛骨, 1 分钟)。括弧が無ければそのまま
-    static func split(_ name: String) -> (title: String, note: String?) {
-        guard let open = name.firstIndex(where: { $0 == "（" || $0 == "(" }) else {
-            return (name.trimmingCharacters(in: .whitespaces), nil)
-        }
-        let title = name[..<open].trimmingCharacters(in: .whitespaces)
-        var inside = name[name.index(after: open)...]
-        if let close = inside.lastIndex(where: { $0 == "）" || $0 == ")" }) {
-            inside = inside[..<close]
-        }
-        var note = inside.trimmingCharacters(in: .whitespaces)
-        if note.hasPrefix("约") {
-            note = String(note.dropFirst()).trimmingCharacters(in: .whitespaces)
-        }
-        return (title.isEmpty ? name : title, note.isEmpty ? nil : note)
-    }
-
-    /// 「夹肩胛骨 · 1 分钟」
-    static func displayName(_ name: String) -> String {
-        let parts = split(name)
-        guard let note = parts.note else { return parts.title }
-        return "\(parts.title) · \(note)"
-    }
-
-    /// 手順ごとの姿勢。基本はストレッチ全体の絵で、手順の文が壁画带の姿勢を名指ししているときだけそれに替える
-    /// (「夹肩胛骨 1 分钟 / 转肩 10 次 / 收下巴 10 次」のような 3 歩の組み立てを、1 歩 1 人で並べるため)。
-    /// 札の名前は姿勢が混ざるときは姿勢の名前、全部同じなら「第 N 步」
-    static func steps(of stretch: BreakReminder.Stretch) -> [PostureStepInfo] {
-        let base = BreakReminder.illustration(for: stretch)
-        let poses = stretch.steps.map { line -> String in
-            let own = BreakReminder.illustration(for: BreakReminder.Stretch(name: line, steps: []))
-            return friezeNames[own] != nil ? own : base
-        }
-        let distinct = Set(poses).count > 1
-        var result: [PostureStepInfo] = []
-        for (i, line) in stretch.steps.enumerated() {
-            let pose = poses[i]
-            let named: String? = distinct ? friezeNames[pose] : nil
-            result.append(PostureStepInfo(pose: pose, name: named ?? "第 \(i + 1) 步", meta: metaText(line)))
-        }
-        return result
-    }
-
-    /// 手順の文の中の数を札の一行に(5 秒 · 10 次 / 10 次 / 1 分钟)
-    static func metaText(_ line: String) -> String? {
-        let meta = BreakReminder.StepMeta.parse(line)
-        if let s = meta.seconds, let r = meta.reps { return "\(s) 秒 · \(r) 次" }
-        if let s = meta.seconds { return "\(s) 秒" }
-        if let r = meta.reps { return "\(r) 次" }
-        if let m = meta.minutes { return "\(m) 分钟" }
-        return nil
-    }
-
-    /// 残り時間「12:30」(分は桁を詰める)
-    static func clock(until due: Date, now: Date) -> String {
-        let seconds = max(0, Int(due.timeIntervalSince(now).rounded(.up)))
-        return String(format: "%ld:%02ld", seconds / 60, seconds % 60)
     }
 }

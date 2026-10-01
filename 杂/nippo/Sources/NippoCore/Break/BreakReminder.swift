@@ -58,6 +58,11 @@ public enum BreakReminder {
     离开座位去接杯水
     手臂自然摆动地走
     看窗外等远处 20 秒
+
+    肩颈三步（约 2 分钟）
+    夹肩胛骨：保持 5 秒 × 10 次
+    转肩：向后转 10 次
+    收下巴：保持 5 秒 × 5 次
     """
 
     public static let caution = "※ 如有麻木或疼痛请停止"
@@ -89,8 +94,8 @@ public enum BreakReminder {
         }
     }
 
-    /// ストレッチの絵(Resources/Stretches/<name>@2x.png の名前)。名前と手順のキーワードで選ぶので、設定で書き換えたものにも絵が付く。
-    /// 絵は scripts/make-illustrations.py で描いている
+    /// ストレッチの絵(Resources/Material/pose-<name>@2x.png の name)。名前と手順のキーワードで選ぶので、設定で書き換えたものにも絵が付く。
+    /// 絵は scripts/material/(src/poses/*.svg)で焼いている
     public static func illustration(for stretch: Stretch) -> String {
         let text = ([stretch.name] + stretch.steps).joined()
         let table: [(keys: [String], name: String)] = [
