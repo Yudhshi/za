@@ -144,7 +144,8 @@ def today_calm(m):
     hx, hy, hw, hh = x0, 92, 472, 230
     b.slice('hero-calm-night', hx, hy, hw, hh)
     e = b.e('creature-tue-grey')
-    ix, iy, iw, ih = e['ink']
+    ix, iy, ix1, iy1 = e['ink']            # [x0, y0, x1, y1] in the layout rect
+    iw, ih = ix1 - ix, iy1 - iy
     sc = hh * 0.74 / ih
     cx = hx + hw - 10 - (ix + iw) * sc
     cy = hy + hh - 8 - (iy + ih) * sc
@@ -212,7 +213,8 @@ def tomorrow(m):
     hx, hy, hw, hh = 44, 40, 472, 190
     b.slice('hero-calm-night', hx, hy, hw, hh)
     e = b.e('creature-wed-grey')
-    ix, iy, iw, ih = e['ink']
+    ix, iy, ix1, iy1 = e['ink']            # [x0, y0, x1, y1] in the layout rect
+    iw, ih = ix1 - ix, iy1 - iy
     sc = hh * 0.76 / ih
     b.sprite('creature-wed-grey', hx + hw - 10 - (ix + iw) * sc, hy + hh - 8 - (iy + ih) * sc, sc)
     end = b.word('shout-tomorrow-teal-night', hx + 20, hy + 34)

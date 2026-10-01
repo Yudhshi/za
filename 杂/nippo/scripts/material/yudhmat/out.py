@@ -1,12 +1,16 @@
 """Output registry: writes @2x PNGs into Resources/Material, optimises them, and builds manifest.json.
 
-manifest.json (schema v1, agreed with the Swift loader):
+manifest.json (schema v1, agreed with the Swift loader — Sources/NippoApp/Baked.swift BakedManifest):
   version, scale
   assets: {id: {file, kind: tile|slice|sprite, size [w,h] pt (whole image), bleed [t,l,b,r] pt outside the layout rect,
                 insets [t,l,b,r] pt from the image edge (slice only), anchor [x,y] pt (sprite, optional),
-                baseline / capHeight pt (word sprites), purpose}}
-  glyphs: {set: {file, pt, lineHeight [ascent, descent] pt, glyphs {ch: {rect [x,y,w,h] px, advance pt, bearing pt}}}}
-  words:  {alias: asset id}
+                baseline / capHeight pt (word sprites), purpose,
+                ink [x0,y0,x1,y1] pt + contour [32 × x|null] pt (creature-*-grey: layout-rect coordinates; contour[i] =
+                leftmost stencil ink in the i-th of 32 equal horizontal bands of the layout rect, top to bottom),
+                frames / durationMs (motion sequences), origin (frieze), ground (informative)}}
+  glyphs: {set: {file, pt, lineHeight [ascent, descent] pt, capTop pt (cell top -> cap top), capHeight pt (cap top ->
+                 baseline), glyphs {ch: {rect [x,y,w,h] px, advance pt, bearing pt}}}}
+(v12.1: the `words` alias table is gone — use the asset ids.)
 """
 import io
 import json
@@ -23,8 +27,9 @@ except ImportError:          # optional: plain zlib level 9 without it
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', '..'))
 DEST = os.path.join(ROOT, 'Resources', 'Material')
-ASSETS, GLYPHS, WORDS, LOG = {}, {}, {}, {}
+ASSETS, GLYPHS, LOG = {}, {}, {}
 OPTIMISE = True
+RETIRED = set()          # ids a group no longer bakes (removed from a merged manifest + their PNG deleted)
 
 
 def _png_bytes(im):
@@ -125,49 +130,57 @@ def save(aid, arr, kind, purpose, bleed=(0, 0, 0, 0), insets=None, anchor=None, 
     if anchor is not None:
         e['anchor'] = [_r(v) for v in anchor]
     for k, v in extra.items():
-        e[k] = [_r(x) for x in v] if isinstance(v, (list, tuple)) else (_r(v) if isinstance(v, float) else v)
+        e[k] = ([None if x is None else _r(x) for x in v] if isinstance(v, (list, tuple))
+                else (_r(v) if isinstance(v, float) else v))
     e['purpose'] = purpose
     ASSETS[aid] = e
     LOG[aid] = (len(data), mode)
     return e
 
 
-def glyph_set(sid, aid, arr, pt, line_height, glyphs, purpose):
-    """One atlas PNG per glyph set; glyphs = {ch: dict(rect=[x,y,w,h] px, advance=pt, bearing=pt)}."""
+def glyph_set(sid, aid, arr, pt, line_height, glyphs, purpose, cap=None):
+    """One atlas PNG per glyph set; glyphs = {ch: dict(rect=[x,y,w,h] px, advance=pt, bearing=pt)};
+    cap = (capTop, capHeight) pt, measured from the cell top at nominal size (capTop + capHeight = ascent)."""
     os.makedirs(DEST, exist_ok=True)
     data, mode = encode(arr)
     fn = f'{aid}@2x.png'
     with open(os.path.join(DEST, fn), 'wb') as f:
         f.write(data)
-    GLYPHS[sid] = dict(file=fn, pt=pt, lineHeight=[_r(v) for v in line_height],
-                       glyphs={c: dict(rect=[int(v) for v in g['rect']], advance=_r(g['advance']), bearing=_r(g['bearing']))
-                               for c, g in glyphs.items()}, purpose=purpose)
+    e = dict(file=fn, pt=pt, lineHeight=[_r(v) for v in line_height])
+    if cap is not None:
+        e['capTop'], e['capHeight'] = _r(cap[0]), _r(cap[1])
+    e['glyphs'] = {c: dict(rect=[int(v) for v in g['rect']], advance=_r(g['advance']), bearing=_r(g['bearing']))
+                   for c, g in glyphs.items()}
+    e['purpose'] = purpose
+    GLYPHS[sid] = e
     LOG[aid] = (len(data), mode)
-
-
-def word(alias, aid):
-    WORDS[alias] = aid
 
 
 def total_bytes():
     return sum(v[0] for v in LOG.values())
 
 
-def write_manifest(merge=False):
-    """merge=True (a partial --only run): keep the other groups' entries of the existing manifest."""
-    a, g, w = {}, {}, {}
+def write_manifest(merge=False, drop=()):
+    """merge=True (a partial --only run): keep the other groups' entries of the existing manifest, except the ids a
+    group retired (`drop`, whose PNGs are deleted too)."""
+    a, g = {}, {}
     path = os.path.join(DEST, 'manifest.json')
     if merge and os.path.exists(path):
         old = json.load(open(path))
-        a, g, w = old.get('assets', {}), old.get('glyphs', {}), old.get('words', {})
+        a, g = old.get('assets', {}), old.get('glyphs', {})
+    for aid in drop:
+        a.pop(aid, None)
+        fp = os.path.join(DEST, f'{aid}@2x.png')
+        if aid not in ASSETS and os.path.exists(fp):
+            os.remove(fp)
     a.update(ASSETS)
     g.update(GLYPHS)
-    w.update(WORDS)
     m = dict(version=1, scale=2,
              assets={k: a[k] for k in sorted(a)},
-             glyphs={k: g[k] for k in sorted(g)},
-             words={k: w[k] for k in sorted(w)})
-    with open(os.path.join(DEST, 'manifest.json'), 'w') as f:
+             glyphs={k: g[k] for k in sorted(g)})
+    tmp = path + f'.{os.getpid()}.tmp'          # atomic: a parallel --only run never reads a half-written file
+    with open(tmp, 'w') as f:
         json.dump(m, f, ensure_ascii=False, indent=1)
         f.write('\n')
+    os.replace(tmp, path)
     return m

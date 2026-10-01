@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """Yudh v12 「Stencil Turf」 production material pipeline (night version).
 
-    python3 scripts/material/make.py                 # bake everything into Resources/Material + manifest.json
-    python3 scripts/material/make.py --only concrete stencil   # some groups (manifest is rewritten from them only)
+    python3 scripts/material/make.py                 # bake everything; manifest.json is rebuilt from scratch
+    python3 scripts/material/make.py --only concrete stencil   # some groups; their entries are MERGED into the
+                                                     # existing manifest (other groups' entries are kept as they are)
     python3 scripts/material/make.py --sheet /path/material-sheet.png   # + review contact sheet (not in the repo)
 
 Deterministic: every random draw is seeded; same inputs + same numpy/scipy/Pillow -> same pixels.
@@ -19,7 +20,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from yudhmat import out  # noqa: E402
 
-GROUPS = ['concrete', 'paint', 'masked', 'stencil', 'drips', 'cells', 'creatures', 'poses', 'kraft']
+GROUPS = ['concrete', 'paint', 'masked', 'stencil', 'drips', 'cells', 'creatures', 'poses', 'kraft', 'motion']
 
 
 def run(group):
@@ -46,7 +47,7 @@ def main():
                 if k not in seen:
                     print(f"   {k:40s} {n // 1024:5d} KB  {mode}")
                     seen.add(k)
-    m = out.write_manifest(merge=bool(a.only))
+    m = out.write_manifest(merge=bool(a.only), drop=out.RETIRED)
     n = len(m['assets']) + len(m['glyphs'])
     print(f'{n} images, {out.total_bytes() / 1e6:.2f} MB')
     if a.sheet:

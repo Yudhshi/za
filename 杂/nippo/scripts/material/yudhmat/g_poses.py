@@ -1,4 +1,4 @@
-"""Pose silhouettes (11, 240pt master; 转肩 = 哪吒 混天绫 sash) and the Egyptian frieze (three figures × done /
+"""Pose silhouettes (10, baked at 132pt and 96pt; 转肩 = 哪吒 混天绫 sash) and the Egyptian frieze (three figures × done /
 current / future + the shared ground line).  Black ink + orange accent sprayed on kraft relief, transparent ground.
 Recipes: merge2/posture/popups.py (pose spray, tame bleed) and merge2/posture/v3/v3bake.py (frieze)."""
 import os
@@ -10,33 +10,40 @@ from .g_paint import border_fade
 
 S = 2
 SRC = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'src'))
-POSES = ['stretch', 'walk', 'chest-doorway', 'belly-breathing', 'shoulder-blades', 'shoulder-rolls', 'standing',
-         'neck-side', 'chin-tuck', 'sit-down', 'stand-up']
+POSES = ['stretch', 'walk', 'chest-doorway', 'belly-breathing', 'shoulder-blades', 'shoulder-rolls', 'neck-side',
+         'chin-tuck', 'sit-down', 'stand-up']
 NAMES = {'stretch': '拉伸', 'walk': '走一走', 'chest-doorway': '扩胸', 'belly-breathing': '腹式呼吸',
-         'shoulder-blades': '夹肩胛骨', 'shoulder-rolls': '转肩（混天绫）', 'standing': '站立中', 'neck-side': '颈部侧拉',
+         'shoulder-blades': '夹肩胛骨', 'shoulder-rolls': '转肩（混天绫）', 'neck-side': '颈部侧拉',
          'chin-tuck': '收下巴', 'sit-down': '坐下', 'stand-up': '站起来'}
-K = 480 / 264      # the popup recipe was tuned at 132pt (264px); the master is 240pt (480px)
+# v12.1: baked at the size the popup shows them (sprite scale stays 1): the question / current pose at 132pt, the
+# step pose at 96pt (`-s`).  pose-standing is gone (no code path draws it).
+SIZES = [(132, ''), (96, '-s')]
+out.RETIRED.add('pose-standing')
 
 
-def pose(i, name):
+def pose(i, name, size=132, suffix=''):
     f = 'shoulder-rolls-sash' if name == 'shoulder-rolls' else name
     groups = svg.parse(os.path.join(SRC, 'poses', f + '.svg'))[2]
-    b = 12
-    W = H = (240 + 2 * b) * S
-    ink = svg.raster(groups['ink'], W, H, 2.0, b * S, b * S)
-    acc = svg.raster(groups['accent'], W, H, 2.0, b * S, b * S)
-    seed = 8000 + 37 * i
+    K = size / 132                           # the popup recipe was tuned at 132pt (264px)
+    b = int(round(8 * K)) or 1
+    W = H = (size + 2 * b) * S
+    sc = size * S / 240                      # art box = 240 units
+    ink = svg.raster(groups['ink'], W, H, sc, b * S, b * S)
+    acc = svg.raster(groups['accent'], W, H, sc, b * S, b * S)
+    seed = 8000 + 37 * i + (0 if size == 132 else 500)
     rng = np.random.default_rng(seed)
     L = ext.Layer(W, H, seed, 'kraft')
-    L.spray(ink, 'black', seed + 1, passes=3, angle=rng.uniform(-12, 12), sheet_pad=int(12 * K), k=5.0,
+    L.spray(ink, 'black', seed + 1, passes=3, angle=rng.uniform(-9, -2), sheet_pad=int(12 * K), k=5.0,
             droplets=0.32, reach=9 * K, spits=0, sheen=0.02, under=(int(rng.choice([-1, 1])), 1), keep_bleed=0.45)
     if acc.max() > 0.5:
-        L.spray(acc, 'orange', seed + 2, passes=2, angle=rng.uniform(-8, 8), sheet_pad=int(8 * K), k=4.2,
+        L.spray(acc, 'orange', seed + 2, passes=2, angle=rng.uniform(-9, -2), sheet_pad=int(8 * K), k=4.2,
                 droplets=0.25, reach=7 * K, spits=0, sheen=0.04, keep_bleed=0.5)
-    border_fade(L, 8)
-    out.save(f'pose-{name}', ext.export(L.col, L.A, 'kraft'), 'sprite',
-             f'Pose silhouette {NAMES[name]}: black ink + orange accent sprayed (bridges per the illustration spec), '
-             f'transparent; layout rect = the 240pt art box (popup step 120pt, current pose 132pt — scale down).',
+    border_fade(L, max(3, int(round(6 * K))))
+    where = 'the question pose of popups 09 / 11 and the current step of popup 10' if size == 132 else \
+        'the small step pose (popup 09 stretch line, list rows)'
+    out.save(f'pose-{name}{suffix}', ext.export(L.col, L.A, 'kraft'), 'sprite',
+             f'Pose silhouette {NAMES[name]}: black ink + orange accent sprayed on kraft (bridges per the illustration '
+             f'spec), transparent; baked at {size}pt for {where} — layout rect = the {size}pt art box, draw at scale 1.',
              bleed=(b, b, b, b), ground='kraft')
 
 
@@ -101,7 +108,7 @@ def frieze():
                 cut[:reg_px, X0:X1] = m[:reg_px, X0:X1]
                 if cut.max() < 0.5:
                     continue
-                L.spray(cut, colr, int(rng.integers(1, 1 << 30)), passes=3, angle=rng.uniform(-12, 12), sheet_pad=10,
+                L.spray(cut, colr, int(rng.integers(1, 1 << 30)), passes=3, angle=rng.uniform(-9, -2), sheet_pad=10,
                         k=k, droplets=0.22 if state == 'current' else 0.0, reach=7, spits=0, sheen=0.02,
                         under=(int(rng.choice([-1, 1])), 1), keep_bleed=0.45)
             L.fade(FADE[state])
@@ -132,5 +139,6 @@ def frieze():
 
 def bake_all():
     for i, name in enumerate(POSES):
-        pose(i, name)
+        for size, suffix in SIZES:
+            pose(i, name, size, suffix)
     frieze()

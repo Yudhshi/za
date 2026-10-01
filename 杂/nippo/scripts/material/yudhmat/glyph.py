@@ -36,7 +36,7 @@ def row_metrics(prefix):
         x, y, w, h, size, _ = bake.CELLS[f'{prefix}:{ch}']
         g = bake.ATLAS[2 * y:2 * (y + h), 2 * x:2 * (x + w)]
         rows = np.where(g.max(1) > 0.5)[0]
-        if ch not in ':/!':
+        if ch not in ':/!-':
             bots.append(int(rows.max()) + 1)
             tops.append(int(rows.min()))
     return Counter(bots).most_common(1)[0][0], Counter(tops).most_common(1)[0][0]

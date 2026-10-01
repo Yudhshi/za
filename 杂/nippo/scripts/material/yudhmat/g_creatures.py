@@ -34,15 +34,34 @@ def grey(i, day, name):
     m = svg.raster(paths(name), W, H, bw * S / 400, ox, oy)
     seed = 7000 + 31 * i
     L = ext.Layer(W, H, seed, 'concrete')
-    L.spray(m, 'creature', seed + 600, side=SIDES[i] + 180, side_min=0.0, passes=3, angle=-8 + (seed + 600) % 9,
+    L.spray(m, 'creature', seed + 600, side=SIDES[i] + 180, side_min=0.0, passes=3, angle=-9 + (seed + 600) % 8,
             sheet_pad=8, k=1.5, droplets=0.10, reach=7, spits=0, sheen=0.03, under=(0.6, 0.6), relief=1.0)
     border_fade(L, 6)
     x0, y0, x1, y1 = svg.ink_box(m)
     out.save(f'creature-{day}-grey', ext.export(L.col, L.A, BLACK_SLAB), 'sprite',
              f'Calm hero second stencil ({day.upper()}): non-fluorescent grey paint, faces left; layout rect = the '
-             f'400×300 art box (280×210pt master) — scale so the ink is 70–80% of the slab height, ≥9pt clear of '
-             f'text / numerals / cells. Never in event states.', bleed=bleed,
-             ink=[(x0 - ox) / S, (y0 - oy) / S, (x1 - x0) / S, (y1 - y0) / S], feetY=286 * bh / 300, ground='black slab')
+             f'400×300 art box (280×210pt master). ink = stencil-ink box [x0, y0, x1, y1] and contour = leftmost '
+             f'stencil ink per band ({BANDS} equal horizontal bands of the layout rect, top to bottom; null = no ink), '
+             f'both in layout-rect pt (overspray excluded) — CreatureFit scales the ink to 0.76 × card height and '
+             f'shrinks until ≥9pt clear of text / numerals / cells. Never in event states.', bleed=bleed,
+             ink=[(x0 - ox) / S, (y0 - oy) / S, (x1 - ox) / S, (y1 - oy) / S], contour=contour(m, ox, oy, bw, bh),
+             feetY=286 * bh / 300, ground='black slab')
+
+
+BANDS = 32
+
+
+def contour(m, ox, oy, bw, bh, thr=0.5):
+    """Leftmost stencil ink (pt, layout-rect x) in each of BANDS equal horizontal bands of the bw × bh pt layout
+    rect; None where a band has no ink.  A band includes every pixel row it touches."""
+    ink = m > thr
+    res = []
+    for i in range(BANDS):
+        r0 = int(math.floor(oy + i * bh * S / BANDS))
+        r1 = int(math.ceil(oy + (i + 1) * bh * S / BANDS))
+        cols = np.nonzero(ink[r0:r1, int(ox):int(ox + bw * S)].any(0))[0]
+        res.append(None if len(cols) == 0 else round(float(cols.min()) / S, 2))
+    return res
 
 
 def teal(i, day, name):
@@ -57,7 +76,7 @@ def teal(i, day, name):
     seed = 7300 + 31 * i
     rng = np.random.default_rng(seed)
     L = ext.Layer(W, H, seed, 'concrete', quiet=(0, 0, W, H, 0.4))
-    L.spray(m, 'teal', seed + 1, passes=3, angle=rng.uniform(-12, -4), sheet_pad=4, k=3.2, droplets=0.08, reach=4,
+    L.spray(m, 'teal', seed + 1, passes=3, angle=rng.uniform(-9, -2), sheet_pad=4, k=3.2, droplets=0.08, reach=4,
             spits=0, sheen=0.04, relief=0.75)
     border_fade(L, 4)
     out.save(f'creature-{day}-teal', ext.export(L.col, L.A, BLACK_PLATE), 'sprite',

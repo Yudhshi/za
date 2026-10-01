@@ -107,7 +107,51 @@ def score():
              insets=(0, 2, 0, 2))
 
 
+def dots():
+    """Popup 10 step dots (V4 §2.5), sprayed through a tiny stencil on the kraft: done = black dot (10pt); current =
+    a black ring sprayed first, then teal inside it (16pt outer, as posture-v3); future = only the faint imprint the
+    empty stencil left (10pt)."""
+    from .g_paint import border_fade
+    b = 4
+    for state, seed, d in (('done', 9301, 10), ('current', 9311, 16), ('future', 9321, 10)):
+        W = H = (d + 2 * b) * S
+        c = W / 2
+        r = d / 2 * S
+        rng = np.random.default_rng(seed)
+        L = ext.Layer(W, H, seed, 'kraft')
+
+        def circle(rad, jit=0.35):
+            pts = [(c + math.cos(2 * math.pi * k / 28) * rad, c + math.sin(2 * math.pi * k / 28) * rad)
+                   for k in range(28)]
+            return ext.rough_polygon(W, H, pts, rng, jitter=jit)
+        if state == 'done':
+            L.spray(circle(r), 'black', seed + 1, passes=2, angle=rng.uniform(-9, -2), sheet_pad=4, k=5.0,
+                    droplets=0.25, reach=4, spits=0, sheen=0.02, keep_bleed=0.4)
+        elif state == 'current':
+            inner = r - 2.2 * S
+            ring = np.clip(circle(r) - circle(inner + 0.4 * S), 0, 1)
+            L.spray(ring, 'black', seed + 1, passes=2, angle=rng.uniform(-9, -2), sheet_pad=4, k=5.0,
+                    droplets=0.15, reach=4, spits=0, sheen=0.02, keep_bleed=0.4)
+            L.spray(circle(inner + 0.35 * S, 0.25), 'teal', seed + 2, passes=3, angle=rng.uniform(-9, -2), sheet_pad=3,
+                    k=3.6, droplets=0.0, spits=0, sheen=0.03, relief=0.45, keep_bleed=0.4)
+        else:
+            ring = np.clip(circle(r) - circle(r - 1.1 * S), 0, 1)
+            L.spray(ring, 'black', seed + 1, passes=2, angle=rng.uniform(-9, -2), sheet_pad=3, k=1.1,
+                    droplets=0.0, spits=0, sheen=0.0, keep_bleed=0.3)
+            L.fade(0.55)
+        border_fade(L, 3)
+        out.save(f'dot-{state}-kraft', ext.export(L.col, L.A, 'kraft'), 'sprite',
+                 {'done': 'Step dot, done: black dot sprayed through a stencil on the kraft. Layout 10×10pt.',
+                  'current': 'Step dot, current: teal dot (≈11.6pt) inside a 2pt black sprayed ring; layout 16×16pt '
+                             '(the ring\'s outside), centred on the row with the 10pt dots.',
+                  'future': 'Step dot, future: only the faint imprint of the empty stencil (a pale ring). Layout '
+                            '10×10pt.'}[state]
+                 + ' Popup 10, right of 站立中 12:30; 6pt between dots.',
+                 bleed=(b, b, b, b), ground='kraft')
+
+
 def bake_all():
     sheet()
     tape()
     score()
+    dots()

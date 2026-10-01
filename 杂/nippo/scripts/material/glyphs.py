@@ -22,15 +22,20 @@ import sys
 HERE = os.path.dirname(os.path.abspath(__file__))
 OUT = os.path.join(HERE, 'src', 'glyphs')
 
-# (row prefix, size pt, wdth axis %, glyphs) — sizes are tokens.json type.* sizes
+# (row prefix, size pt, wdth axis %, glyphs) — sizes are tokens.json type.* sizes.  New glyphs go at the END of a row
+# and new rows at the END of the list, so every existing cell keeps its place in the atlas.
 ROWS = [
-    ('big', 132, 104, '0123456789:/'),         # bigNumber: hero countdown, 20/20
-    ('n56', 56, 104, '0123456789/'),           # English 20/20 (stage clear)
-    ('tm', 40, 104, '0123456789:'),            # posture popup timer 12:30
+    ('big', 132, 104, '0123456789:/-'),        # bigNumber: hero countdown, 20/20
+    ('n56', 56, 104, '0123456789/-'),          # English 20/20 (stage clear)
+    ('tm', 40, 104, '0123456789:-'),           # posture popup timer 12:30
     ('day', 31, 125, 'MONDAYTUESWHRFI'),       # shoutDay: header weekday
-    ('sm', 21, 125, 'NEXTOWMRDAYSUHFI'),       # shoutSmall: NEXT / NOW / TOMORROW / small weekday
+    ('sm', 21, 125, 'NEXTOWMRDAYSUHFIL'),      # shoutSmall: NEXT / NOW / TOMORROW / LATER / DONE / small weekday
     ('st', 32, 125, 'NICE!MS'),                # stamp letters
+    ('mid', 80, 104, '0123456789:-'),          # hero moment 10:00 / 16:30 (v12.1: mid-teal / mid-black)
 ]
+# what is typeset in a cell when it differs from the key: the '-' cell holds an en dash (a hyphen is too short to read
+# as "—" next to 132pt numerals; the app types '-' for "nothing / just ended")
+SHOW = {'-': '\u2013'}
 
 
 def page():
@@ -42,7 +47,7 @@ def page():
             cells[f'{name}:{c}'] = [x, y, cw, ch, size, wd]
             html.append(f'<div style="position:absolute;left:{x}px;top:{y}px;width:{cw}px;height:{ch}px;'
                         f'font:900 {size}px/{ch}px Archivo;font-stretch:{wd}%;color:#fff;padding-left:{int(size * .12)}px">'
-                        f'{c}</div>')
+                        f'{SHOW.get(c, c)}</div>')
         y += ch
     W = max(c[0] + c[2] for c in cells.values()) + 10
     doc = ('<!doctype html><meta charset="utf-8"><link rel="stylesheet" '

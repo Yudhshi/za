@@ -55,15 +55,15 @@ def calm_film(L, cov, dens, r, rng):
     L.col = L.col * (1 + 1.0 * thin)[..., None]
 
 
-def hero(aid, paint, seed, event, purpose, side=20):
-    w, h = 472, 230
+def hero(aid, paint, seed, event, purpose, side=20, w=472, h=270):
+    """v12.1: baked at the real layout size (472 × 270, used 250–300; short 472 × 150) — ≤ ±20 % stretch."""
     bleed = (14, 14, 30, 24) if event else (6, 6, 18, 24)   # right: the panel padding — overspray never leaves the slab
     W, H, r = canvas(w, h, bleed)
     rng = np.random.default_rng(seed)
     L = ext.Layer(W, H, seed + 1, 'concrete', quiet=interior(r, 26, 0.45))
     cut = ext.knife_rect(W, H, *r, rng, 0.9)
     cov, dens = L.spray(cut, paint, seed + 2, side=side, side_min=0.10 if event else 0.0, box=r,
-                        passes=4, angle=rng.uniform(-10, 6), sheet_pad=26,
+                        passes=4 if h > 200 else 3, angle=rng.uniform(-9, -2), sheet_pad=26,
                         droplets=0.9 if event else 0.45, reach=34 if event else 22,
                         sheen=0.05 if event else 0.06, k=2.2 if event else 1.55)
     if not event:
@@ -74,25 +74,28 @@ def hero(aid, paint, seed, event, purpose, side=20):
              insets=tuple(b + c for b, c in zip(bleed, caps)), ground='concrete')
 
 
-def card_white():
-    w, h = 330, 300
-    bleed = (12, 30, 26, 12)
+def card_white(aid='card-white-night', w=308, h=380, seed=4410, purpose=None):
+    """eng_bake card: white sprayed through a hand-cut sheet, overspray left / down (inside the 24pt panel padding)."""
+    bleed = (12, 22, 26, 12)
     W, H, r = canvas(w, h, bleed)
-    seed = 4410
     rng = np.random.default_rng(seed)
     L = ext.Layer(W, H, seed + 1, 'concrete', quiet=interior(r, 18, 0.6))
     cut = ext.knife_rect(W, H, *r, rng, 1.0)
-    L.spray(cut, 'white', seed + 2, side=156, side_min=0.12, box=r, passes=4, angle=-5, sheet_pad=24, k=2.6,
-            droplets=0.36, reach=14, spits=1, sheen=0.035, relief=0.55, pore_dark=0.4)
+    L.spray(cut, 'white', seed + 2, side=156, side_min=0.12, box=r, passes=4 if h > 200 else 3,
+            angle=rng.uniform(-9, -2), sheet_pad=24, k=2.6, droplets=0.36, reach=14, spits=1, sheen=0.035,
+            relief=0.55, pore_dark=0.4)
     border_fade(L)
     caps = (28, 28, 28, 28)
-    out.save('card-white-night', ext.export(L.col, L.A, ground_hex()), 'slice',
-             'English word card: white paint sprayed through a hand-cut sheet (thin spots, pores, overspray left / '
-             'down). Hang 1–2 drip-white-* from its lower edge in the event states.', bleed=bleed,
+    out.save(aid, ext.export(L.col, L.A, ground_hex()), 'slice',
+             purpose or (f'English word card (card mode, {w}×{h}pt): white paint sprayed through a hand-cut sheet (thin '
+                         f'spots, pores, overspray left / down inside the panel padding). Hang 1–2 drip-white-* from '
+                         f'its lower edge in the event states.'), bleed=bleed,
              insets=tuple(b + c for b, c in zip(bleed, caps)), ground='concrete')
 
 
-def button(aid, w, h, paint, seed, purpose, ring=None, kind='concrete', ground=None, recipe='today'):
+def button(aid, w, h, paint, seed, purpose, ring=None, kind='concrete', ground=None, recipe='today', label=None, k=2.6):
+    """Sprayed primary button.  ground = hex / palette name the alpha is solved against (default: the concrete);
+    label = the manifest `ground` text."""
     rb = 3 if ring else 0
     bleed = (9 + rb, 9 + rb, 10 + rb, 10 + rb)
     W, H, r = canvas(w, h, bleed)
@@ -107,13 +110,35 @@ def button(aid, w, h, paint, seed, purpose, ring=None, kind='concrete', ground=N
         L.spray(cut, paint, seed + 2, passes=3, angle=rng.uniform(-9, -2), sheet_pad=8, k=3.0, droplets=0.42,
                 reach=10, spits=1, sheen=0.035, under=(1, 1), keep_bleed=0.45)
     else:
-        L.spray(cut, paint, seed + 2, passes=3, angle=rng.uniform(-6, 2), sheet_pad=6, k=2.6, droplets=0.18,
-                reach=6, spits=0, sheen=0.05)
+        L.spray(cut, paint, seed + 2, passes=3 if h > 40 else 2, angle=rng.uniform(-9, -2), sheet_pad=6, k=k,
+                droplets=0.18, reach=6, spits=0, sheen=0.05)
     border_fade(L, 6)
-    caps = (14, 16, 14, 16)
+    caps = (14, 16, 14, 16) if h > 40 else (11, 14, 11, 14)
+    if label is None:
+        label = kind if ground is None else ('teal paint' if ground == 'teal' else kind)
     out.save(aid, ext.export(L.col, L.A, ground or ground_hex()), 'slice', purpose, bleed=bleed,
-             insets=tuple(b + c for b, c in zip(bleed, caps)),
-             ground=kind if ground is None else ('teal paint' if ground == 'teal' else kind))
+             insets=tuple(b + c for b, c in zip(bleed, caps)), ground=label)
+
+
+def strip_black():
+    """English page meeting strip: a narrow calm slab — black sprayed through a long hand-cut sheet, satin film with
+    pass banding, overspray only a whisker beyond the cut (it sits in the column, 472 wide)."""
+    w, h = 472, 50
+    bleed = (5, 5, 9, 8)
+    W, H, r = canvas(w, h, bleed)
+    seed = 4495
+    rng = np.random.default_rng(seed)
+    L = ext.Layer(W, H, seed + 1, 'concrete', quiet=interior(r, 9, 0.5))
+    cut = ext.knife_rect(W, H, *r, rng, 0.8)
+    cov, dens = L.spray(cut, 'black', seed + 2, side=30, side_min=0.0, box=r, passes=2, angle=rng.uniform(-9, -2),
+                        sheet_pad=8, droplets=0.25, reach=8, sheen=0.06, k=1.7)
+    calm_film(L, cov, dens, r, rng)
+    border_fade(L, 5)
+    caps = (14, 40, 14, 40)
+    out.save('strip-black-night', ext.export(L.col, L.A, ground_hex()), 'slice',
+             'English page meeting strip (next meeting at the top of 英语): black sprayed on the concrete like a thin '
+             'calm hero, satin film; live white text on it. 472×50pt.', bleed=bleed,
+             insets=tuple(b + c for b, c in zip(bleed, caps)), ground='concrete')
 
 
 def play_button():
@@ -126,7 +151,7 @@ def play_button():
     cx, cy, rr = (r[0] + r[2]) / 2, (r[1] + r[3]) / 2, d
     pts = [(cx + math.cos(2 * math.pi * k / 28) * rr, cy + math.sin(2 * math.pi * k / 28) * rr) for k in range(28)]
     cut = ext.rough_polygon(W, H, pts, rng, jitter=0.7)
-    L.spray(cut, 'orange', seed + 2, passes=3, angle=rng.uniform(-6, 2), sheet_pad=6, k=3.6, droplets=0.26,
+    L.spray(cut, 'orange', seed + 2, passes=3, angle=rng.uniform(-9, -2), sheet_pad=6, k=3.6, droplets=0.26,
             reach=6, spits=0, sheen=0.05, relief=0.7)
     border_fade(L, 5)
     out.save('button-play-orange-night', ext.export(L.col, L.A, '#F4F3EE'), 'sprite',
@@ -159,20 +184,38 @@ def badge_plate():
 def bake_all():
     hero('hero-calm-night', 'black', 4401, False,
          'Today hero, calm: black paint sprayed through a hand-cut sheet, satin film with pass banding (concrete '
-         'reads through); overspray only to the right. Nominal 472×230pt.')
+         'reads through); overspray only to the right. Layout 472×270pt (used 250–300); the weekday creature is a '
+         'separate layer.')
     hero('hero-event-night', 'teal', 4421, True,
          'Today hero, event (≤10 min / in progress): teal flood with overspray all round (heavier right / down); '
-         'hang ≤3 drip-teal-* from the lower edge. Nominal 472×230pt.')
+         'hang ≤3 drip-teal-* from the lower edge. Layout 472×270pt (used 250–300).')
     hero('hero-zero-night', 'orange', 4441, True,
-         'Today hero at countdown 00: orange flood (black stencil numerals on it). Nominal 472×230pt.', side=-25)
+         'Today hero at countdown 00: orange flood (black stencil numerals on it). Layout 472×270pt (used 250–300).',
+         side=-25)
+    hero('hero-calm-short-night', 'black', 4405, False,
+         'Today hero, short calm slab 472×150pt (no meetings today / no calendar access): black spray, satin film; '
+         'the weekday creature fills its right side.', h=150)
     card_white()
+    card_white('card-white-wide-night', 472, 340, 4415,
+               'Wide white card 472×340pt (English stage clear, dictionary result): white paint sprayed through a '
+               'hand-cut sheet, overspray left / down. Orange regmark-orange-night at its four corners on stage clear.')
+    card_white('card-white-short-night', 472, 160, 4418,
+               'Short white card 472×160pt (dictionary empty state, missing-material notice): white spray, '
+               'overspray left / down.')
     button('button-orange-night', 120, 50, 'orange', 4451,
            'Primary button (orange spray, live label); nominal = hero max 120×50pt, also English 显示释义 / 下一个 / 回到今日.')
     button('button-orange-ringed-night', 120, 50, 'orange', 4461,
            'Primary button on the teal event hero: 3pt black masked ring first, then orange spray '
-           '(orange never touches teal).', ring='black', ground='teal')
+           '(orange never touches teal). 120×50pt (camera icon 19pt + 加入会议 / 回到会议).', ring='black', ground='teal')
+    button('button-orange-small-night', 100, 34, 'orange', 4466,
+           'Small primary button 100×34pt (task 完成 and other small main actions): orange spray on the concrete, '
+           'live black label.')
+    button('button-black-zero', 104, 50, 'black', 4468,
+           'Countdown-00 button 104×50pt: black paint sprayed on the ORANGE flood (hero-zero-night), live white '
+           '「马上加入」.', ground='orange', label='orange paint', k=9.0)
     button('button-teal-night', 169, 50, 'teal', 4491,
            'Posture popup primary button: teal spray on kraft (bleed tamed); 169×50pt.', kind='kraft',
            ground='kraft', recipe='popup')
+    strip_black()
     play_button()
     badge_plate()

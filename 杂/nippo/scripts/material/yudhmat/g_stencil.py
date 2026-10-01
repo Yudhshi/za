@@ -31,8 +31,10 @@ RECIPES = {
 }
 
 
-def spray_mask(m, pad, color, seed, recipe, kind='concrete', ground=None, angle=None, side=None, tame=None):
-    """Spray one stencil mask (cell-high, ink-cropped) on a transparent canvas with `pad` = (t, l, b, r) px."""
+def spray_mask(m, pad, color, seed, recipe, kind='concrete', ground=None, angle=None, side=None, tame=None,
+               second=None):
+    """Spray one stencil mask (cell-high, ink-cropped) on a transparent canvas with `pad` = (t, l, b, r) px.
+    second = (colour, dx px, dy px, k): a faint second pass through the same sheet, re-laid misregistered."""
     t, l, b, r = pad
     H, W = m.shape[0] + t + b, m.shape[1] + l + r
     cut = np.zeros((H, W), np.float32)
@@ -42,7 +44,14 @@ def spray_mask(m, pad, color, seed, recipe, kind='concrete', ground=None, angle=
     side_min = kw.pop('side_min', 0.12)
     L = ext.Layer(W, H, seed + 1, kind)
     L.spray(cut, color, seed + 2, side=side, side_min=side_min,
-            angle=angle if angle is not None else rng.uniform(-12, -3), keep_bleed=tame, **kw)
+            angle=angle if angle is not None else rng.uniform(-9, -2), keep_bleed=tame, **kw)
+    if second is not None:
+        c2, dx, dy, k2 = second
+        cut2 = np.zeros((H, W), np.float32)
+        cut2[t + dy:t + dy + m.shape[0], l + dx:l + dx + m.shape[1]] = m[:H - t - dy, :W - l - dx]
+        # a light dusting through the re-laid sheet: crisp stencil edge (no creep halo, or it reads as a drop
+        # shadow), uneven coverage from the pass banding
+        L.masked(cut2, c2, seed + 5, coverage=k2, ridge=0.0, thin=0.22, jitter=0.10, relief=0.5)
     border_fade(L, 4)
     return ext.export(L.col, L.A, ground)
 
@@ -59,14 +68,14 @@ def glyph_set(sid, aid, prefix, chars, color, bridge, recipe, ground, kind='conc
         pieces.append((ch, m, base, ctop, inkw, gap))
     rows = np.where(np.max([p[1].max(1) for p in pieces], 0) > 0.05)[0]
     top, bot = int(rows.min()), int(rows.max()) + 1
-    base = pieces[0][2]
+    base, ctop = pieces[0][2], pieces[0][3]
     cells, x = [], 0
     rng = np.random.default_rng(seed)
     for i, (ch, m, _, _, inkw, gap) in enumerate(pieces):
         side = None
         if recipe == 'big':
             side = 20 + rng.uniform(-40, 40)
-        angle = {'big': rng.uniform(-12, -3), 'timer': -5.0, 'count': -8.0}.get(recipe, rng.uniform(-6, 2))
+        angle = {'big': rng.uniform(-9, -2), 'timer': -5.0, 'count': -8.0}.get(recipe, rng.uniform(-9, -2))
         img = spray_mask(m[top:bot], (t, l, b, r), color, seed + 101 * i, recipe, kind, ground, angle=angle,
                          side=side, tame=tame)
         cells.append((ch, img, inkw, gap))
@@ -80,22 +89,25 @@ def glyph_set(sid, aid, prefix, chars, color, bridge, recipe, ground, kind='conc
         x += img.shape[1] + 2
     ascent = (t + base - top) / S
     descent = (Hc - t - (base - top)) / S
-    out.glyph_set(sid, aid, atlas, glyph.size_of(prefix), (ascent, descent), glyphs, purpose)
+    cap_top = (t + ctop - top) / S              # cell top -> cap top (the row's flat-glyph ink top)
+    out.glyph_set(sid, aid, atlas, glyph.size_of(prefix), (ascent, descent), glyphs, purpose,
+                  cap=(cap_top, ascent - cap_top))
 
 
 def word_sprite(aid, prefix, text, color, bridge, recipe, ground, seed, purpose, pad_pt=(8, 8, 8, 8), over=None,
-                track=0.03, side=None):
+                track=0.03, side=None, second=None):
     m, base, ctop, inkw, gap = glyph.word(prefix, text, bridge_em=bridge, track_em=track, seed=seed, over=over)
     rows = np.where(m.max(1) > 0.05)[0]
     top, bot = int(rows.min()), int(rows.max()) + 1
     t, l, b, r = (int(v * S) for v in pad_pt)
     img = spray_mask(m[top:bot], (t, l, b, r), color, seed + 7, recipe, 'concrete', ground,
-                     angle=np.random.default_rng(seed).uniform(-6, 2), side=side)
+                     angle=np.random.default_rng(seed).uniform(-9, -2), side=side, second=second)
     H, W = img.shape[:2]
     cap_top = (t + ctop - top) / S
     baseline = (t + base - top) / S
     bleed = (cap_top, l / S, H / S - baseline, r / S)
-    out.save(aid, img, 'sprite', purpose, bleed=bleed, baseline=baseline, capHeight=baseline - cap_top)
+    label = {BLACK_SLAB: 'black slab', 'teal': 'teal paint', WHITE_CARD: 'white card'}.get(ground, 'concrete')
+    out.save(aid, img, 'sprite', purpose, bleed=bleed, baseline=baseline, capHeight=baseline - cap_top, ground=label)
 
 
 def stamp(kind):
@@ -167,35 +179,71 @@ def _place(H, W, m, x, y):
     return o
 
 
+def regmark():
+    """Stencil registration corner (stage-clear card, V4 §2.4): an L of orange sprayed through a hand-cut sheet on the
+    concrete just outside a card corner.  Baked as the top-left corner (arms run right and down from the vertex)."""
+    arm, sw = 12, 2.0
+    bleed = 5
+    W = H = int(round((arm + 2 * bleed) * S))
+    o = bleed * S
+    rng = np.random.default_rng(5950)
+    a, w = arm * S, sw * S
+    pts = [(o, o), (o + a, o), (o + a, o + w), (o + w, o + w), (o + w, o + a), (o, o + a)]
+    pts = [(x + rng.normal(0, 0.25), y + rng.normal(0, 0.25)) for x, y in pts]
+    cut = ext.rough_polygon(W, H, pts, rng, jitter=0.5)
+    L = ext.Layer(W, H, 5951, 'concrete')
+    L.spray(cut, 'orange', 5952, passes=2, angle=rng.uniform(-9, -2), sheet_pad=5, k=3.0, droplets=0.35, reach=6,
+            spits=0, sheen=0.03, relief=0.7, side=-35, side_min=0.15)
+    border_fade(L, 4)
+    out.save('regmark-orange-night', ext.export(L.col, L.A, ground_hex()), 'sprite',
+             'Stage-clear registration corner (white card, 4×): orange L sprayed through a stencil on the concrete, '
+             f'arms {arm}pt × {sw:g}pt, baked as the TOP-LEFT corner. anchor = the outer vertex: put it ~6pt outside '
+             'the card corner and rotate 90 / 180 / 270° about the anchor for the other three corners.',
+             bleed=(bleed,) * 4, anchor=(bleed, bleed), ground='concrete')
+
+
 def bake_all():
     glyph.load()
-    glyph_set('big-teal', 'glyph-big-teal-night', 'big', '0123456789:/', 'teal', 0.06, 'big', BLACK_SLAB,
+    glyph_set('big-teal', 'glyph-big-teal-night', 'big', '0123456789:/-', 'teal', 0.06, 'big', BLACK_SLAB,
               pad_pt=(16, 18, 18, 20), seed=5100,
-              purpose='Hero numerals on the black slab (calm): teal stencil, YudhStencil bridges 0.06em, 132pt.')
-    glyph_set('big-black', 'glyph-big-black-night', 'big', '0123456789:/', 'black', 0.06, 'big', 'teal',
+              purpose='Hero numerals on the black slab (calm): teal stencil, YudhStencil bridges 0.06em, 132pt. '
+                      "'-' = en dash (nothing / just ended).")
+    glyph_set('big-black', 'glyph-big-black-night', 'big', '0123456789:/-', 'black', 0.06, 'big', 'teal',
               pad_pt=(16, 18, 18, 20), seed=5200,
               purpose='Hero numerals on the teal / orange flood (event, 00): black stencil, 132pt.')
-    glyph_set('timer-black', 'glyph-timer-black', 'tm', '0123456789:', 'black', 0.075, 'timer', 'kraft', kind='kraft',
+    glyph_set('mid-teal', 'glyph-mid-teal-night', 'mid', '0123456789:-', 'teal', 0.06, 'big', BLACK_SLAB,
+              pad_pt=(10, 11, 11, 12), seed=5150,
+              purpose='Hero moment (10:00 / 16:30, tomorrow) on the calm black slab: teal stencil, 80pt — use at 1×, '
+                      'never the 132pt set scaled down.')
+    glyph_set('mid-black', 'glyph-mid-black-night', 'mid', '0123456789:-', 'black', 0.06, 'big', 'teal',
+              pad_pt=(10, 11, 11, 12), seed=5250,
+              purpose='Hero moment on the teal / orange flood: black stencil, 80pt.')
+    glyph_set('timer-black', 'glyph-timer-black', 'tm', '0123456789:-', 'black', 0.075, 'timer', 'kraft', kind='kraft',
               pad_pt=(7, 7, 7, 7), tame=0.3, seed=5300,
               purpose='Posture popup timer 12:30: black stencil on kraft, 40pt, bridges 0.075em.')
-    glyph_set('count-black', 'glyph-count-black-night', 'n56', '0123456789/', 'black', 0.065, 'count', WHITE_CARD,
+    glyph_set('count-black', 'glyph-count-black-night', 'n56', '0123456789/-', 'black', 0.065, 'count', WHITE_CARD,
               pad_pt=(8, 8, 8, 8), seed=5400,
-              purpose='English 20/20 (stage clear): black stencil on the white card, 56pt.')
-    for w, wid in (('NEXT', 'next'), ('NOW', 'now'), ('TOMORROW', 'tomorrow')):
-        for color, ground in (('teal', BLACK_SLAB), ('black', 'teal')):
+              purpose='English 20/20 (stage clear, progress): black stencil on the white card, 56pt.')
+    shouts = [('NEXT', 'next', ('teal', 'black')), ('NOW', 'now', ('teal', 'black')),
+              ('TOMORROW', 'tomorrow', ('teal', 'black')), ('LATER', 'later', ('teal', 'black')),
+              ('DONE', 'done', ('teal',))]
+    for w, wid, colours in shouts:
+        for color in colours:
+            ground = BLACK_SLAB if color == 'teal' else 'teal'
             aid = f'shout-{wid}-{color}-night'
-            word_sprite(aid, 'sm', w, color, 0.08, 'shout', ground, 5500 + len(w) * 7 + (color == 'black'),
+            seed = {'later': 5900, 'done': 5920}.get(wid, 5500 + len(w) * 7) + (color == 'black')
+            word_sprite(aid, 'sm', w, color, 0.08, 'shout', ground, seed,
                         f'Hero shout {w} (21pt stencil, {color}{" on the calm black slab" if color == "teal" else " on the teal event flood"}).',
                         over=NO_I)
-            out.word(f'shout-{wid}-{color}', aid)
     for i, d in enumerate(DAYS):
         aid = f'day-{d.lower()}-white-night'
         word_sprite(aid, 'day', d, 'white', 0.065, 'day', ground_hex(), 5700 + 13 * i,
-                    f'Header weekday {d}: white stencil sprayed on concrete, 31pt.', pad_pt=(7, 7, 8, 9), over=NO_I)
-        out.word(f'day-{d.lower()}', aid)
+                    f'Header weekday {d}: white stencil sprayed on concrete, 31pt, with a faint second pass of '
+                    f'meeting grey re-laid 1pt right / 0.5pt down (two-pass misregistration, V4 §2.6).',
+                    pad_pt=(7, 7, 8, 9), over=NO_I, second=('grey', 2, 1, 0.34))
         aid = f'dayshout-{d.lower()}-white-night'
         word_sprite(aid, 'sm', d, 'white', 0.08, 'shout', BLACK_SLAB, 5800 + 13 * i,
                     f'{d} after TOMORROW on the calm hero: white stencil, 21pt.', over=NO_I)
-        out.word(f'dayshout-{d.lower()}', aid)
     stamp('nice')
     stamp('miss')
+    regmark()

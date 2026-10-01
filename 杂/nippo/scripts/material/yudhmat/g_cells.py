@@ -82,7 +82,8 @@ def now_notch():
 
 
 # ---------------------------------------------------------------- rating cells
-GROUND = {'black': dict(empty='#6A6F74', ecov=0.70, efill=0.0, hex=BLACK_PLATE),
+GROUND = {'concrete': dict(empty='#80858A', ecov=0.72, efill=0.035, hex=None),
+          'black': dict(empty='#6A6F74', ecov=0.70, efill=0.0, hex=BLACK_PLATE),
           'band': dict(empty='#6A6F74', ecov=0.70, efill=0.0, hex=BLACK_PLATE),
           'light': dict(empty='#7B7A77', ecov=0.80, efill=0.03, hex=WHITE_CARD)}
 
@@ -135,13 +136,17 @@ def rate_cell(size, state, ground, seed):
             mm = ndi.gaussian_filter(mm, 0.35)
             L.mpaint(mm, 'black', rng, cov=0.97, thin=0.04, ridge=0, rough=0.03, noise=0.01)
     border_fade(L, 1)
-    return ext.export(L.col, L.A, g['hex']), bleed
+    return ext.export(L.col, L.A, g['hex'] or ground_hex()), bleed
 
 
 RATE_TEXT = dict(easy='太简单 (4): teal solid + black stencil star', good='记住了 (3): teal solid',
                  fuzzy='模糊 (2): sparse teal paint dots', forgot='忘了 (1): meeting-grey + black stencil ✕',
                  empty='not answered yet', current='current question: orange dashed tape frame')
-RATE_WHERE = {24: ('black', 'session board (4×5) on the black plate'), 18: ('band', 'review history on the black band'),
+RATE_WHERE = {30: ('concrete', 'this round\'s turf (4×5, gap 6) on the concrete beside the card; the stage-clear '
+                               'board may lay the same cells on plate-black-night'),
+              20: ('band', 'review history (10 cells, gap 4) on band-black-night'),
+              24: ('black', 'v12 session board on the black plate — superseded by rate-30-*'),
+              18: ('band', 'v12 review history — superseded by rate-20-*'),
               14: ('light', 'legend swatch on the white card (1pt black paint edge)')}
 
 
@@ -165,4 +170,4 @@ def bake_all():
         for j, state in enumerate(('easy', 'good', 'fuzzy', 'forgot', 'empty', 'current')):
             img, bleed = rate_cell(size, state, ground, 6600 + size * 31 + j * 7)
             out.save(f'rate-{size}-{state}', img, 'sprite', f'Rating cell {size}pt, {RATE_TEXT[state]} — {where}.',
-                     bleed=bleed, ground={'light': 'white card'}.get(ground, 'black plate'))
+                     bleed=bleed, ground={'light': 'white card', 'concrete': 'concrete'}.get(ground, 'black plate'))
