@@ -17,6 +17,8 @@ struct MaterialManifest: Decodable {
         /// 九宮格の端(画像の縁から測る。上・左・下・右)
         let insets: [CGFloat]?
         let anchor: [CGFloat]?
+        /// 組み絵の中での置き場所(壁画带の人:帯の左上からの pt)
+        let origin: [CGFloat]?
         /// 模板字の精灵:画像の上端から基線まで / 大文字の高さ
         let baseline: CGFloat?
         let capHeight: CGFloat?

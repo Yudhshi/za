@@ -22,20 +22,15 @@ struct QuietConcrete: View {
     }
 }
 
-/// 坐站の小窓:牛皮纸の台紙(九宮格)。神兽の残影は彩蛋としてうっすら
+/// 坐站の小窓:牛皮纸の台紙(九宮格、角 10pt は焼いてある)。神兽の残影は小窓の側で台紙の上に置く
 struct KraftSurface: ViewModifier {
-    var ghost: String?
-
     func body(content: Content) -> some View {
         content
             .background {
-                ZStack(alignment: .bottomTrailing) {
-                    MaterialSlice(id: "kraft-sheet-night", fallback: Palette.kraft)
-                    if let ghost, Material.has(ghost) {
-                        MaterialSprite(id: ghost)
-                            .padding(.trailing, 14)
-                            .padding(.bottom, 10)
-                    }
+                if Material.has("kraft-sheet-night") {
+                    MaterialSlice(id: "kraft-sheet-night")
+                } else {
+                    RoundedRectangle(cornerRadius: 10, style: .continuous).fill(Palette.kraft)
                 }
             }
     }
@@ -43,7 +38,7 @@ struct KraftSurface: ViewModifier {
 
 extension View {
     func panelSurface() -> some View { modifier(PanelSurface()) }
-    func kraftSurface(ghost: String? = nil) -> some View { modifier(KraftSurface(ghost: ghost)) }
+    func kraftSurface() -> some View { modifier(KraftSurface()) }
 }
 
 // MARK: - ボタン
@@ -339,7 +334,7 @@ struct PaintTag: View {
             .font(Typeface.cjk(12, weight: .black))
             .foregroundStyle(foreground)
             .padding(.horizontal, 7)
-            .frame(height: 22)
+            .frame(height: 24)
             .background { MaterialSlice(id: asset, fallback: fallback) }
     }
 }
