@@ -19,12 +19,15 @@ final class PosturePanelController {
 
     /// posturePrompt に合わせて出し入れ。内容が変わったら高さを合わせる(上端は固定)
     func update() {
-        guard coordinator.posturePrompt != nil else {
+        guard let prompt = coordinator.posturePrompt else {
             panel?.orderOut(nil)
             return
         }
         let panel = self.panel ?? makePanel()
         self.panel = panel
+        // 牛皮纸の接地影は素材の bleed に焼いてある(窓はその分広げてある)。いま敷く台紙の素材が無いときだけシステムの影
+        panel.hasShadow = !Self.shadowIsBaked(
+            tall: PosturePromptView.usesTallSheet(prompt, stretch: coordinator.promptStretch))
         // SwiftUI の再レイアウト後に測る
         DispatchQueue.main.async { [weak self] in
             // 出すと決めたあとに閉じられていたら、空の窓を出し直さない
@@ -63,8 +66,8 @@ final class PosturePanelController {
         panel.level = .floating
         panel.backgroundColor = .clear
         panel.isOpaque = false
-        // 牛皮纸の接地影は素材の bleed に焼いてある(窓はその分広げてある)。素材が無いときだけシステムの影
-        panel.hasShadow = !Self.shadowIsBaked
+        // 牛皮纸の接地影は素材の bleed に焼いてある(窓はその分広げてある)。素材が無いときだけシステムの影(update で台紙ごとに決め直す)
+        panel.hasShadow = !Self.shadowIsBaked(tall: false)
         panel.hidesOnDeactivate = false    // 常駐アプリは普段非アクティブなので必須
         panel.isReleasedWhenClosed = false
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
@@ -81,9 +84,10 @@ final class PosturePanelController {
         return panel
     }
 
-    /// 牛皮纸の素材に bleed(焼いた影・飛沫)があれば、システムの影は重ねない
-    private static var shadowIsBaked: Bool {
-        guard let b = Baked.asset("kraft-sheet-night")?.bleedInsets else { return false }
+    /// いま敷く牛皮纸の素材(縦長の台紙 / ふつうの台紙)に bleed(焼いた影・飛沫)があれば、システムの影は重ねない
+    private static func shadowIsBaked(tall: Bool) -> Bool {
+        let id = PostureMetrics.sheetAsset(tall: tall)
+        guard Baked.has(id), let b = Baked.asset(id)?.bleedInsets else { return false }
         return b.top > 0 || b.leading > 0 || b.bottom > 0 || b.trailing > 0
     }
 }
@@ -117,6 +121,14 @@ private enum PostureMetrics {
     /// 牛皮纸の角(素材に焼いてある)と、神兽の残影の位置(紙の上から)
     static let sheetRadius: CGFloat = 10
     static let ghostTop: CGFloat = 84
+
+    /// 敷く台紙の素材(KraftSurface と同じ選び方):壁画带まで並ぶ站立中は 360×500 に焼いた縦長の台紙
+    /// (無ければふつうの台紙)、ほかは 360×400 の台紙。窓の余白(bleed)と影はこの素材で測る
+    @MainActor
+    static func sheetAsset(tall: Bool) -> String {
+        guard tall else { return "kraft-sheet-night" }
+        return Baked.first(["kraft-sheet-tall-night", "kraft-sheet-night"]) ?? "kraft-sheet-night"
+    }
 }
 
 /// デスクトップの上に浮く小窓(v12.1「Stencil Turf」夜):牛皮纸の台紙 1 枚を混凝土に貼り、上端を皱纹纸胶带で留める。
@@ -137,9 +149,11 @@ struct PosturePromptView: View {
     }
 
     /// 牛皮纸(幅 360)+ 上端の胶带。焼いた影と胶带のはみ出しが窓で切れないように外側を広げる。
-    /// 神兽の残影は紙の上・文字の下。素材の指定どおり(台紙の (0, 84)、台紙で切る)にここで置く
+    /// 壁画带まで並ぶ站立中だけ縦長の台紙(360×500。ふつうの 400pt の台紙を縦に伸ばさない)。
+    /// 神兽の残影は紙の上・文字の下。素材の指定どおり(台紙の (0, 84)、台紙で切る)にここで置く(09 / 11 のふつうの台紙だけ)
     private func sheet(_ prompt: BreakReminder.Prompt) -> some View {
-        ZStack(alignment: .top) {
+        let tall = Self.usesTallSheet(prompt, stretch: coordinator.promptStretch)
+        return ZStack(alignment: .top) {
             content(prompt)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(Turf.popupPadding)
@@ -149,11 +163,17 @@ struct PosturePromptView: View {
                         PostureGhost(id: Myth.ghostCreature(for: Date()))
                     }
                 }
-                .kraftSurface()
+                .kraftSurface(tall: tall)
                 .padding(.top, PostureMetrics.tapeOverhang)
             PostureTape(title: Self.tapeTitle(prompt))
         }
-        .padding(outerInsets)
+        .padding(Self.outerInsets(tall: tall))
+    }
+
+    /// 縦長の台紙にするか:站立中で、手順が壁画带になるとき(PostureStandingGuide と同じ判定)
+    @MainActor
+    static func usesTallSheet(_ prompt: BreakReminder.Prompt, stretch: BreakReminder.Stretch) -> Bool {
+        prompt == .standing && PostureStandingGuide.showsFrieze(StretchGuide.steps(of: stretch))
     }
 
     @ViewBuilder
@@ -173,9 +193,11 @@ struct PosturePromptView: View {
         }
     }
 
-    /// 窓の余白 = 牛皮纸の bleed(焼いた影)。上は胶带のはみ出しと胶带自身の bleed も見る
-    private var outerInsets: EdgeInsets {
-        let sheet = Baked.asset("kraft-sheet-night")?.bleedInsets ?? EdgeInsets()
+    /// 窓の余白 = いま敷く牛皮纸の素材の bleed(焼いた影。縦長の台紙なら縦長の台紙の bleed)。
+    /// 上は胶带のはみ出しと胶带自身の bleed も見る
+    @MainActor
+    private static func outerInsets(tall: Bool) -> EdgeInsets {
+        let sheet = Baked.asset(PostureMetrics.sheetAsset(tall: tall))?.bleedInsets ?? EdgeInsets()
         let tape = Baked.asset("tape-handle-night")?.bleedInsets ?? EdgeInsets()
         return EdgeInsets(top: max(0, sheet.top - PostureMetrics.tapeOverhang, tape.top),
                           leading: sheet.leading, bottom: sheet.bottom, trailing: sheet.trailing)
@@ -300,11 +322,19 @@ struct PosturePromptView: View {
 
 // MARK: - 10 站立中(拉伸の手順)
 
-/// 站立中:上に「站立中」+ 模板字の残り時間 + 手順の点、姿勢の大きな剪影と今の手順(数字の札つき)。上の 2 段は持ち手。
-/// 手順がどれも壁画带の素材のある姿勢(夹肩胛骨・转肩・收下巴 = 既定の「肩颈三步」)なら、折り目の下に古埃及の壁画带
-/// (同じ地平線に 2〜3 人)。それ以外は大きな剪影だけ。指令:下一步(青)/ 结束拉伸(白漆枠)
+/// 站立中:上に「站立中」+ 模板字の残り時間 +(2 歩目から)‹ 上一步 + 手順の点、姿勢の大きな剪影と今の手順(数字の札つき)。
+/// 上の 2 段は持ち手。手順がどれも壁画带の素材のある姿勢(夹肩胛骨・转肩・收下巴 = 既定の「肩颈三步」)なら、
+/// 折り目の下に古埃及の壁画带(同じ地平線に 2〜3 人。台紙は縦長)。それ以外は大きな剪影だけ。
+/// 指令はいつも 2 つ:下一步 / 做完了(青)・结束拉伸(白漆枠)
 private struct PostureStandingGuide: View {
     @ObservedObject var coordinator: AppCoordinator
+
+    /// 同じ人が並ぶだけになるので、手順ごとに姿勢が全部違うときだけ壁画带にする(人の絵が焼いてあれば)。
+    /// 小窓の台紙(縦長にするか)もこれで決める
+    @MainActor
+    static func showsFrieze(_ steps: [StretchGuide.Step]) -> Bool {
+        StretchGuide.showsFrieze(steps) && steps.allSatisfy { Baked.has("frieze-\($0.pose)-current") }
+    }
 
     var body: some View {
         let stretch = coordinator.promptStretch
@@ -312,11 +342,9 @@ private struct PostureStandingGuide: View {
         let count = steps.count
         let step = min(max(0, coordinator.stretchStep), count)
         let done = step >= count
-        // 同じ人が並ぶだけになるので、手順ごとに姿勢が全部違うときだけ壁画带にする(人の絵が焼いてあれば)
-        let showsFrieze = StretchGuide.showsFrieze(steps)
-            && steps.allSatisfy { Baked.has("frieze-\($0.pose)-current") }
+        let showsFrieze = Self.showsFrieze(steps)
         VStack(alignment: .leading, spacing: 0) {
-            header(count: count, step: step)
+            header(count: count, step: step, done: done)
             HStack(alignment: .center, spacing: 14) {
                 PosturePose(name: done ? "walk" : steps[step].pose,
                             height: PostureMetrics.questionPose, symbol: "figure.cooldown")
@@ -343,11 +371,13 @@ private struct PostureStandingGuide: View {
         }
     }
 
-    /// 站立中 + 残り時間(timer-black の模板字。秒を刻むのはこの行だけ)+ 手順の点。行ぜんぶが持ち手
-    private func header(count: Int, step: Int) -> some View {
+    /// 站立中 + 残り時間(timer-black の模板字。秒を刻むのはここだけ)+(2 歩目から、終えるまで)‹ 上一步 + 手順の点。
+    /// ボタン以外は持ち手(ボタンの下には持ち手を敷かない)。点は 16 / 10pt で数だけ伸びるので幅は決め打ちしない:
+    /// 左の塊はつぶさず、残りを点と ‹ 上一步 が先に取る(入らなければ ‹ だけ)。あまりは左の塊の右の空き
+    private func header(count: Int, step: Int, done: Bool) -> some View {
         let due = coordinator.postureDueAt
-        return TimelineView(.periodic(from: .now, by: 1)) { context in
-            HStack(alignment: .center, spacing: 8) {
+        return HStack(alignment: .center, spacing: 0) {
+            TimelineView(.periodic(from: .now, by: 1)) { context in
                 HStack(alignment: .firstTextBaseline, spacing: 8) {
                     Text("站立中")
                         .font(Typeface.cjk(15, weight: .black))
@@ -355,11 +385,36 @@ private struct PostureStandingGuide: View {
                     PostureTimer(text: StretchGuide.clock(until: due, now: context.date))
                 }
                 .accessibilityElement(children: .combine)
-                Spacer(minLength: 8)
-                PostureStepDots(count: count, index: step)
             }
+            .fixedSize()
+            .padding(.trailing, 8)
+            .frame(maxWidth: .infinity, alignment: .leading)
             .background(WindowDragArea())
+            if step > 0 && !done {
+                backButton
+                    .layoutPriority(1)
+            }
+            PostureStepDots(count: count, index: step)
+                .background(WindowDragArea())
+                .layoutPriority(1)
         }
+    }
+
+    /// ‹ 上一步:手順の点の横の小さな文字のボタン(指令の列には入れない)
+    private var backButton: some View {
+        Button {
+            coordinator.moveStretchStep(by: -1)
+        } label: {
+            ViewThatFits(in: .horizontal) {
+                Text("‹ 上一步")
+                Text("‹")
+            }
+            .font(Typeface.mixed(12.5, weight: 700))
+            .lineLimit(1)
+        }
+        .buttonStyle(BareButtonStyle(color: Palette.kraftTextSecondary, hoverColor: Palette.kraftText))
+        .help("上一步")
+        .accessibilityLabel("上一步")
     }
 
     /// 第 2 步 / 共 3 步・見出し・数字の札(秒 / 次。壁画带が無くても出す)・手順の一行・注意
@@ -422,32 +477,22 @@ private struct PostureStandingGuide: View {
         }
     }
 
-    /// 上一步(2 歩目から)・下一步 / 做完了・结束拉伸。終えたら「关闭」だけ
+    /// 指令は 2 つ:左 = 青(下一步、最後の手順は 做完了)169 × 50、右 = 白漆枠(结束拉伸)135 × 50。
+    /// 終えたら右の「关闭」だけ。上一步 は見出しの行
     private func buttons(step: Int, count: Int, done: Bool) -> some View {
         HStack(spacing: 12) {
             if done {
+                // 終えたら「关闭」だけ(前と同じ。左は空けておく)
                 Spacer(minLength: 0)
-                closeButton("关闭")
             } else {
-                if step > 0 {
-                    Button {
-                        coordinator.moveStretchStep(by: -1)
-                    } label: {
-                        StencilIconView(icon: .next, size: 16)
-                            .scaleEffect(x: -1, y: 1)
-                    }
-                    .buttonStyle(FrameButtonStyle(height: Turf.popupButton, onKraft: true))
-                    .help("上一步")
-                    .accessibilityLabel("上一步")
-                }
                 Button {
                     coordinator.moveStretchStep(by: 1)
                 } label: {
                     Text(step == count - 1 ? "做完了" : "下一步")
                 }
                 .buttonStyle(SprayButtonStyle(kind: .teal, height: Turf.popupButton, wide: true))
-                closeButton("结束拉伸")
             }
+            closeButton(done ? "关闭" : "结束拉伸")
         }
     }
 
