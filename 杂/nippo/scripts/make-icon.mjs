@@ -1,4 +1,4 @@
-// Resources/AppIcon/AppIcon.svg から PNG を書き出し、AppIcon.icns にまとめる。
+// Resources/AppIcon/AppIcon.svg(scripts/make-icon-svg.py が作る v12 のアイコン)から PNG を書き出し、AppIcon.icns にまとめる。
 // 使い方: node scripts/make-icon.mjs [PNG の出力先]   (要: playwright。iconutil は使わない=macOS 以外でも動く)
 import { createRequire } from "node:module";
 import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
