@@ -2,10 +2,14 @@
 //! 日课の窓(ふつうの窓)。どれも閉じたら捨てる。位置はマウスのある画面の、タスクバーを除いた範囲で決める。
 //! 名単のゲームが動いているあいだは、どの窓も作らない(反作弊に「ゲームの上に被さる窓」と見られないように)
 
+use std::time::{Duration, Instant};
+
 use tauri::{
-    AppHandle, Emitter, LogicalSize, Manager, WebviewUrl, WebviewWindowBuilder, WindowEvent,
+    AppHandle, Emitter, LogicalSize, Manager, WebviewUrl, WebviewWindow, WebviewWindowBuilder,
+    WindowEvent,
 };
 
+use crate::settings::Settings;
 use crate::AppState;
 
 /// 面板の大きさ(Mac と同じ 520 幅 + 焼いた枠のはみ出し)
@@ -33,6 +37,51 @@ fn area(app: &AppHandle) -> (f64, f64, f64, f64) {
             )
         })
         .unwrap_or((0.0, 0.0, 1920.0, 1040.0))
+}
+
+/// 自分で動かした位置(論理 px)が、いまのどれかの画面に収まっていればそれを使う
+/// (少なくとも左上の 80×40 が作業範囲の中:掴み直せる)。画面を外したら既定の位置
+fn saved_position(app: &AppHandle, saved: Option<[f64; 2]>, width: f64) -> Option<(f64, f64)> {
+    let [x, y] = saved?;
+    let monitors = app.available_monitors().ok()?;
+    monitors
+        .iter()
+        .any(|m| {
+            let s = m.scale_factor();
+            let w = m.work_area();
+            let (ax, ay) = (f64::from(w.position.x) / s, f64::from(w.position.y) / s);
+            let (aw, ah) = (f64::from(w.size.width) / s, f64::from(w.size.height) / s);
+            x >= ax - width + 80.0 && x <= ax + aw - 80.0 && y >= ay && y <= ay + ah - 40.0
+        })
+        .then_some((x, y))
+}
+
+/// 動かした位置を覚え、閉じたら設定に書く。作った直後にこちらで置いた分は数えない
+fn remember_position(
+    window: &WebviewWindow,
+    app: &AppHandle,
+    slot: fn(&mut Settings) -> &mut Option<[f64; 2]>,
+) {
+    let created = Instant::now();
+    let handle = app.clone();
+    let this = window.clone();
+    window.on_window_event(move |event| match event {
+        WindowEvent::Moved(pos) if created.elapsed() > Duration::from_millis(800) => {
+            let scale = this.scale_factor().unwrap_or(1.0);
+            let logical = pos.to_logical::<f64>(scale);
+            if let Ok(mut inner) = handle.state::<AppState>().inner.lock() {
+                *slot(&mut inner.settings) = Some([logical.x, logical.y]);
+            }
+        }
+        WindowEvent::Destroyed => {
+            let state = handle.state::<AppState>();
+            let guard = state.inner.lock();
+            if let Ok(inner) = guard {
+                state.save(&inner);
+            }
+        }
+        _ => {}
+    });
 }
 
 /// 名単のゲームが動いているか(動いていれば窓を作らない)
@@ -80,9 +129,19 @@ pub fn open_panel(app: &AppHandle) {
         let _ = window.set_focus();
         return;
     }
-    let (ax, ay, aw, ah) = area(app);
-    let x = (ax + aw - PANEL_SIZE.0 - 4.0).max(ax);
-    let y = (ay + ah - PANEL_SIZE.1 - 4.0).max(ay);
+    let saved = app
+        .state::<AppState>()
+        .inner
+        .lock()
+        .ok()
+        .and_then(|inner| inner.settings.panel_pos);
+    let (x, y) = saved_position(app, saved, PANEL_SIZE.0).unwrap_or_else(|| {
+        let (ax, ay, aw, ah) = area(app);
+        (
+            (ax + aw - PANEL_SIZE.0 - 4.0).max(ax),
+            (ay + ah - PANEL_SIZE.1 - 4.0).max(ay),
+        )
+    });
     let built = WebviewWindowBuilder::new(app, "panel", WebviewUrl::App("index.html".into()))
         .title("Yudh")
         .inner_size(PANEL_SIZE.0, PANEL_SIZE.1)
@@ -98,6 +157,7 @@ pub fn open_panel(app: &AppHandle) {
     let Ok(window) = built else {
         return;
     };
+    remember_position(&window, app, |s| &mut s.panel_pos);
     let handle = app.clone();
     window.on_window_event(move |event| match event {
         WindowEvent::Focused(false) => {
@@ -144,13 +204,22 @@ pub fn sync_posture(app: &AppHandle) {
             let _ = app.emit_to("posture", "posture-changed", ());
         }
         (true, None) => {
-            // マウスのある画面の上部中央
-            let (ax, ay, aw, _) = area(app);
-            let _ =
+            // 自分で動かした位置。無ければマウスのある画面の上部中央
+            let saved = app
+                .state::<AppState>()
+                .inner
+                .lock()
+                .ok()
+                .and_then(|inner| inner.settings.posture_pos);
+            let (x, y) = saved_position(app, saved, POSTURE_SIZE.0).unwrap_or_else(|| {
+                let (ax, ay, aw, _) = area(app);
+                (ax + ((aw - POSTURE_SIZE.0) / 2.0).max(0.0), ay + 12.0)
+            });
+            let built =
                 WebviewWindowBuilder::new(app, "posture", WebviewUrl::App("posture.html".into()))
                     .title("Yudh")
                     .inner_size(POSTURE_SIZE.0, POSTURE_SIZE.1)
-                    .position(ax + ((aw - POSTURE_SIZE.0) / 2.0).max(0.0), ay + 12.0)
+                    .position(x, y)
                     .decorations(false)
                     .transparent(true)
                     .shadow(false)
@@ -159,6 +228,9 @@ pub fn sync_posture(app: &AppHandle) {
                     .always_on_top(true)
                     .focused(false)
                     .build();
+            if let Ok(window) = built {
+                remember_position(&window, app, |s| &mut s.posture_pos);
+            }
         }
         (false, Some(window)) => {
             let _ = window.close();

@@ -1,6 +1,6 @@
 // 面板:英語(単語・考点词・听写)/ 明天的会 / 设置。底栏は坐站の状態と「泡完澡了」
 import { loadMaterial, slice, sprite, tile, h, button, first, asset } from "./baked.js";
-import { call, closeWindow, openUrl } from "./api.js";
+import { call, closeWindow, openUrl, enableDragging } from "./api.js";
 import { loadIcons, icon, weekdays, weekdaysZh, hhmm, speak, stopSpeaking, clear, voiceFor, voicesReady } from "./common.js";
 
 const $ = (id) => document.getElementById(id);
@@ -782,6 +782,7 @@ async function init() {
   await Promise.all([loadMaterial(), loadIcons(), voicesReady()]);
   paintWall();
   renderWeekday();
+  enableDragging();
   await refresh();
   bindKeys();
 }

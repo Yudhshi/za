@@ -1,6 +1,6 @@
 // 坐站の小窓:牛皮纸の台紙(360 幅)に皱纹纸胶带の持ち手。站起来了吗? → 腹式呼吸 3 回 → 拉伸の手順 → 坐下了吗?
 import { loadMaterial, slice, sprite, stencil, h, button, first } from "./baked.js";
-import { call, listen, fitWindow } from "./api.js";
+import { call, listen, fitWindow, enableDragging } from "./api.js";
 import { loadIcons, clock, clear } from "./common.js";
 
 const $ = (id) => document.getElementById(id);
@@ -60,7 +60,7 @@ function tape(text) {
 function askStand() {
   tape("STAND UP");
   return [
-    h("div", { class: "title", "data-tauri-drag-region": true }, "站起来了吗？"),
+    h("div", { class: "title" }, "站起来了吗？"),
     h(
       "div",
       { class: "body row" },
@@ -93,7 +93,7 @@ function breath() {
     return [];
   }
   return [
-    h("div", { class: "head row", "data-tauri-drag-region": true }, h("span", { class: "label" }, "先做 3 次腹式呼吸"), h("span", { class: "grow" }), dots(BREATH.breaths, s.breath)),
+    h("div", { class: "head row" }, h("span", { class: "label" }, "先做 3 次腹式呼吸"), h("span", { class: "grow" }), dots(BREATH.breaths, s.breath)),
     h(
       "div",
       { class: "body row" },
@@ -125,7 +125,7 @@ function standing() {
   return [
     h(
       "div",
-      { class: "head row", "data-tauri-drag-region": true },
+      { class: "head row" },
       h("span", { class: "label" }, "站立中"),
       timer(clock(view.dueAt - Date.now())),
       h("span", { class: "grow" }),
@@ -164,7 +164,7 @@ function standing() {
 function askSit() {
   tape("SIT DOWN");
   return [
-    h("div", { class: "title", "data-tauri-drag-region": true }, "坐下了吗？"),
+    h("div", { class: "title" }, "坐下了吗？"),
     h("div", { class: "body row" }, pose("sit-down"), h("div", { class: "col" }, h("div", { class: "text" }, "站够了，坐下歇一歇"), h("div", { class: "muted" }, "坐着打字时手肘有支撑，键盘鼠标靠近身体"))),
     h(
       "div",
@@ -194,6 +194,7 @@ function render() {
 
 async function init() {
   await Promise.all([loadMaterial(), loadIcons()]);
+  enableDragging();
   view = await call("posture_state");
   render();
   listen("posture-changed", async () => {

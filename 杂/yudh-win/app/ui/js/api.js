@@ -29,6 +29,19 @@ export function fitWindow(label, width, height) {
   return call("open_surface", { which: label, fit: { width: Math.ceil(width), height: Math.ceil(height) } });
 }
 
+/** 窓を掴んで動かせるように:data-drag の中を押したら動かす(ボタン・入力欄は除く)。
+ *  焼いた素材の .paint が上に重なっていても掴める(data-tauri-drag-region は押した要素そのものにしか効かない) */
+export function enableDragging() {
+  if (!inTauri) return;
+  const skip = "button, a, input, textarea, select, summary, label, details, iframe, [data-no-drag], .option, .rate, .tab, .ink-button, .play";
+  document.addEventListener("mousedown", (e) => {
+    if (e.button !== 0 || !(e.target instanceof Element)) return;
+    if (e.target.closest(skip) || !e.target.closest("[data-drag]")) return;
+    e.preventDefault();
+    tauri.window.getCurrentWindow().startDragging();
+  });
+}
+
 export function openUrl(url) {
   window.open(url, "_blank");
 }

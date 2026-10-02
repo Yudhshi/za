@@ -19,6 +19,9 @@ pub struct Settings {
     pub autostart: bool,
     /// 打游戏时让 Yudh 完全安静的程序(1 行 1 つ。exe 名)
     pub quiet_apps: String,
+    /// 自分で動かした面板・坐站の小窓の左上(論理 px)。次からその位置に出す
+    pub panel_pos: Option<[f64; 2]>,
+    pub posture_pos: Option<[f64; 2]>,
     pub posture: PostureSettings,
     /// 次に出す拉伸の番号(実際に立ったときに進める)
     pub stretch_index: usize,
@@ -42,6 +45,8 @@ impl Default for Settings {
             device: std::env::var("COMPUTERNAME").unwrap_or_else(|_| "Windows PC".into()),
             autostart: true,
             quiet_apps: quiet::DEFAULT_QUIET_APPS.into(),
+            panel_pos: None,
+            posture_pos: None,
             posture: PostureSettings::default(),
             stretch_index: 0,
             breath_habit: true,
