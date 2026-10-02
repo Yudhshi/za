@@ -622,12 +622,6 @@ async function settingsView() {
     el.addEventListener("change", () => save({ [key]: el.value }));
     return el;
   };
-  const number = (key, min, max, step) => {
-    const el = h("input", { type: "number", min, max, step });
-    el.value = s[key];
-    el.addEventListener("change", () => save({ [key]: Number(el.value) }));
-    return el;
-  };
   const check = (key, label) => {
     const el = h("input", { type: "checkbox" });
     el.checked = Boolean(s[key]);
@@ -663,6 +657,8 @@ async function settingsView() {
   };
   const root = h("input", { type: "text", readonly: true });
   root.value = s.syncRoot ?? "";
+  const note = (t) => h("div", { class: "hint", style: { color: "var(--text-2)", fontSize: "12px", lineHeight: 1.5 } }, t);
+  const line = (t) => h("div", { style: { fontSize: "14px", fontWeight: 600, lineHeight: 1.6 } }, t);
   return h(
     "div",
     { class: "form" },
@@ -694,42 +690,44 @@ async function settingsView() {
       h("div", { class: "hint" }, "选 Mac 设置里的同一个文件夹（OneDrive 等）。单词进度、明天的会议、词表都从这里来。"),
     ),
     h("div", { class: "field" }, "这台电脑的名字", text("device"), h("div", { class: "hint" }, "进度文件按名字分开写，两台设备不要同名。")),
-    check("autostart", "开机后自动启动（只待在托盘里，几乎不占资源）"),
-    resettable("quietApps", "打游戏时让 Yudh 完全安静的程序（每行一个）", 3),
-    h(
-      "div",
-      { class: "hint", style: { color: "var(--text-2)", fontSize: "12px", lineHeight: 1.5 } },
-      "这些程序运行时，Yudh 关掉自己所有的窗口、不再弹出任何东西，也不再读键鼠空闲和全屏状态，只留托盘图标；游戏关掉后自动恢复（玩了 60 分钟以上会马上问一次要不要站起来）。只看进程列表里的名字（和任务管理器的「详细信息」一样），不会打开或读取游戏进程。默认是 AION2。",
-    ),
-    h("h3", {}, "坐站提醒"),
-    check("postureEnabled", "提醒我切换坐姿和站姿"),
-    h("div", { class: "row", style: { gap: "16px" } }, h("div", { class: "field" }, "坐几分钟", number("sitMinutes", 20, 90, 5)), h("div", { class: "field" }, "站几分钟", number("standMinutes", 5, 60, 5))),
-    h("div", { class: "hint", style: { color: "var(--text-2)", fontSize: "12px", lineHeight: 1.5 } }, "全屏游戏时不弹；连续玩 60 分钟以上，退出全屏就马上问一次。坐着 3 分钟以上没操作就当作离开座位，重新计时。"),
-    check("breathHabit", "站起来时先做 3 次腹式呼吸（吸 4 秒、呼 6 秒）"),
-    resettable("stretches", "站起来时的拉伸（每次轮到一个）", 10),
+    h("h3", {}, "坐站计划（已经帮你定好，不用调）"),
+    line(`坐 ${s.sitMinutes} 分钟 → 站 ${s.standMinutes} 分钟，一直循环`),
+    note("每次站起来：先 3 次腹式呼吸，再做 1 个拉伸，每一步到时间自动往下走，不用点。一天 8 小时大约站 4 小时；每 30 分钟换一次姿势，比站多久更能放松斜角肌，也避免站太久。站着时把桌子升到手肘 90°。"),
+    note("全屏游戏时不弹；连续玩 60 分钟以上，退出全屏马上问一次。坐着 3 分钟没操作当作离开座位，重新计时。"),
     h("h3", {}, "泡完澡后的日课"),
-    check("ritualStrengthOn", "隔天加肩袖力量（约 6 分钟，徒手 + 一瓶水）"),
-    check("ritualVoice", "拉伸时语音播报每一步"),
-    resettable("ritualVideos", "跟练视频（每行：名字 + 链接）", 5),
-    resettable("ritualStretches", "站着做的拉伸", 10),
-    resettable("ritualStrength", "肩袖力量（在地上做）", 6),
-    resettable("ritualFloor", "最后在地上做的拉伸", 6),
-    h("div", { class: "hint", style: { color: "var(--text-2)", fontSize: "12px", lineHeight: 1.5 } }, "泡完热水澡先喝点水，从地上站起来慢一点。夜里疼醒、抬手没力气、手发麻，或不舒服超过 6 周，请去看医生或理疗师。"),
-    ...voiceSection(),
+    note("托盘右键「泡完澡了」：跟练视频 → 站着拉伸 → 隔天加肩袖力量 → 地上拉伸和腹式呼吸，全部按时间自动往下走。泡完热水澡先喝点水，从地上站起来慢一点。夜里疼醒、抬手没力气、手发麻，或不舒服超过 6 周，请去看医生或理疗师。"),
+    h(
+      "details",
+      {},
+      h("summary", {}, "高级（一般不用动）"),
+      h(
+        "div",
+        { class: "form", style: { marginTop: "14px" } },
+        check("autostart", "开机后自动启动（只待在托盘里，几乎不占资源）"),
+        check("postureEnabled", "坐站提醒（关掉就完全不提醒）"),
+        resettable("quietApps", "打游戏时让 Yudh 完全安静的程序（每行一个）", 3),
+        note(
+          "这些程序运行时，Yudh 关掉自己所有的窗口、不再弹出任何东西，也不再读键鼠空闲和全屏状态，只留托盘图标；游戏关掉后自动恢复（玩了 60 分钟以上会马上问一次要不要站起来）。只看进程列表里的名字（和任务管理器的「详细信息」一样），不会打开或读取游戏进程。默认是 AION2。",
+        ),
+        resettable("stretches", "站起来时的拉伸（每次轮到一个）", 10),
+        resettable("ritualVideos", "日课的跟练视频（每行：名字 + 链接）", 5),
+        resettable("ritualStretches", "日课：站着做的拉伸", 10),
+        resettable("ritualStrength", "日课：肩袖力量（在地上做）", 6),
+        resettable("ritualFloor", "日课：最后在地上做的拉伸", 6),
+        ...voiceSection(),
+      ),
+    ),
   );
 }
 
-/** このパソコンに入っている声(听写の英式・日课の中文)。無ければ入れ方を書く */
+/** 听写で読む英語の声(英式が無ければ入れ方を書く)。日课の語音播报はやめた */
 function voiceSection() {
   if (!("speechSynthesis" in window) || !speechSynthesis.getVoices().length) return [];
   const gb = voiceFor(["en-GB"]);
-  const zh = voiceFor(["zh-CN", "zh-TW", "zh-HK"]);
   const style = { color: "var(--text-2)", fontSize: "12px", lineHeight: 1.5 };
   const how = "Windows 设置 → 时间和语言 → 语音 → 管理语音 → 添加语音";
   return [
-    h("h3", {}, "语音"),
-    h("div", { class: "hint", style }, gb ? `听写：${gb.name}` : `听写：没装英式英语语音，现在用美式代替。${how} →「English (United Kingdom)」`),
-    h("div", { class: "hint", style }, zh ? `日课播报：${zh.name}` : `日课播报：没装中文语音，现在只计时不播报。${how} →「中文(简体，中国)」`),
+    h("div", { class: "hint", style }, gb ? `听写的语音：${gb.name}` : `听写的语音：没装英式英语，现在用美式代替。${how} →「English (United Kingdom)」`),
   ];
 }
 

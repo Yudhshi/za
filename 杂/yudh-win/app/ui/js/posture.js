@@ -1,12 +1,31 @@
 // 坐站の小窓:牛皮纸の台紙(360 幅)に皱纹纸胶带の持ち手。站起来了吗? → 腹式呼吸 3 回 → 拉伸の手順 → 坐下了吗?
 import { loadMaterial, slice, sprite, stencil, h, button, first } from "./baked.js";
 import { call, listen, fitWindow, enableDragging } from "./api.js";
-import { loadIcons, clock, clear } from "./common.js";
+import { loadIcons, clock, clear, chime } from "./common.js";
 
 const $ = (id) => document.getElementById(id);
 let view = null;
 let lastSize = "";
 let finishing = false;
+/** 拉伸の手順は時間が来たら自動で次へ(押さなくていい)。手順が替わったら(自分で押しても)計り直す */
+let stepKey = "";
+let stepStart = 0;
+let advancing = false;
+
+/** いまの手順の残り(ミリ秒)。全部終えていれば null */
+function stepLeft() {
+  const count = view.steps.length;
+  const step = Math.min(view.step, count);
+  if (step >= count) return null;
+  const key = `${view.stretch?.name ?? ""}#${step}`;
+  if (key !== stepKey) {
+    stepKey = key;
+    stepStart = Date.now();
+    advancing = false;
+  }
+  const total = (view.durations?.[step] ?? 10) * 1000;
+  return Math.max(0, total - (Date.now() - stepStart));
+}
 
 const BREATH = { inhale: 4, exhale: 6, breaths: 3 };
 
@@ -122,6 +141,7 @@ function standing() {
   const step = Math.min(view.step, count);
   const done = step >= count;
   const current = view.steps[step];
+  const left = stepLeft();
   return [
     h(
       "div",
@@ -141,7 +161,7 @@ function standing() {
         : h(
             "div",
             { class: "col" },
-            h("div", { class: "muted" }, `第 ${step + 1} 步 / 共 ${count} 步`),
+            h("div", { class: "muted" }, `第 ${step + 1}/${count} 步 · ${Math.ceil((left ?? 0) / 1000)} 秒后${step === count - 1 ? "做完" : "下一步"}`),
             h("div", { class: "heading" }, view.heading),
             current.meta ? chip(current.meta) : null,
             h("div", { class: "text" }, current.text),
@@ -203,7 +223,15 @@ async function init() {
   });
   // 残り時間と呼吸の節拍(1 秒ごと。呼吸のあいだは 4 分の 1 秒)
   setInterval(() => {
-    if (view?.prompt === "standing") render();
+    if (view?.prompt !== "standing") return;
+    // 拉伸の手順:時間が来たら小さな音で知らせて次へ(呼吸のあいだは呼吸の節拍だけ)
+    if (!view.breathStartedAt && stepLeft() === 0 && !advancing) {
+      advancing = true;
+      chime();
+      act("next");
+      return;
+    }
+    render();
   }, 250);
 }
 

@@ -5,7 +5,7 @@ use std::io;
 use std::path::Path;
 
 use serde::{Deserialize, Serialize};
-use yudh_core::posture::PostureSettings;
+use yudh_core::posture::{self, PostureSettings};
 use yudh_core::{quiet, ritual};
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -33,7 +33,6 @@ pub struct Settings {
     pub ritual_strength: String,
     pub ritual_floor: String,
     pub ritual_strength_on: bool,
-    pub ritual_voice: bool,
     pub ritual_log: BTreeMap<String, u32>,
     pub ritual_strength_log: BTreeMap<String, u32>,
 }
@@ -56,7 +55,6 @@ impl Default for Settings {
             ritual_strength: ritual::DEFAULT_STRENGTH.into(),
             ritual_floor: ritual::DEFAULT_FLOOR.into(),
             ritual_strength_on: true,
-            ritual_voice: true,
             ritual_log: BTreeMap::new(),
             ritual_strength_log: BTreeMap::new(),
         }
@@ -64,12 +62,16 @@ impl Default for Settings {
 }
 
 impl Settings {
-    /// 読めなければ既定(壊れたファイルで起動できなくならないように)
+    /// 読めなければ既定(壊れたファイルで起動できなくならないように)。
+    /// 坐站の分数は計画で固定(前の版で保存した 40 / 15 は使わない)
     pub fn load(path: &Path) -> Settings {
-        std::fs::read(path)
+        let mut settings: Settings = std::fs::read(path)
             .ok()
             .and_then(|data| serde_json::from_slice(&data).ok())
-            .unwrap_or_default()
+            .unwrap_or_default();
+        settings.posture.sit_minutes = posture::PLAN_SIT_MINUTES;
+        settings.posture.stand_minutes = posture::PLAN_STAND_MINUTES;
+        settings
     }
 
     pub fn save(&self, path: &Path) -> io::Result<()> {
@@ -87,8 +89,6 @@ pub struct SettingsPatch {
     pub autostart: Option<bool>,
     pub quiet_apps: Option<String>,
     pub posture_enabled: Option<bool>,
-    pub sit_minutes: Option<i64>,
-    pub stand_minutes: Option<i64>,
     pub stretches: Option<String>,
     pub breath_habit: Option<bool>,
     pub ritual_videos: Option<String>,
@@ -96,7 +96,6 @@ pub struct SettingsPatch {
     pub ritual_strength: Option<String>,
     pub ritual_floor: Option<String>,
     pub ritual_strength_on: Option<bool>,
-    pub ritual_voice: Option<bool>,
 }
 
 impl Settings {
@@ -121,12 +120,6 @@ impl Settings {
         if let Some(v) = patch.posture_enabled {
             self.posture.enabled = v;
         }
-        if let Some(v) = patch.sit_minutes {
-            self.posture.sit_minutes = v.clamp(20, 90);
-        }
-        if let Some(v) = patch.stand_minutes {
-            self.posture.stand_minutes = v.clamp(5, 60);
-        }
         if let Some(v) = patch.stretches {
             self.posture.stretches = v;
         }
@@ -148,9 +141,6 @@ impl Settings {
         if let Some(v) = patch.ritual_strength_on {
             self.ritual_strength_on = v;
         }
-        if let Some(v) = patch.ritual_voice {
-            self.ritual_voice = v;
-        }
         resync
     }
 }
@@ -171,13 +161,16 @@ mod tests {
         assert_eq!(Settings::load(&dir.join("broken.json")).stretch_index, 0);
         let mut loaded = Settings::load(&path);
         assert_eq!(loaded.breath_log["2026-10-01"], 3);
+        assert_eq!(
+            (loaded.posture.sit_minutes, loaded.posture.stand_minutes),
+            (30, 30),
+            "the sit / stand plan is fixed"
+        );
         let resync = loaded.apply(SettingsPatch {
             sync_root: Some(Some("D:\\OneDrive\\Yudh".into())),
-            sit_minutes: Some(200),
             ..Default::default()
         });
         assert!(resync, "a new folder reloads English");
-        assert_eq!(loaded.posture.sit_minutes, 90, "clamped");
         assert_eq!(loaded.breath_log["2026-10-01"], 3, "logs are untouched");
         assert!(!loaded.apply(SettingsPatch {
             sync_root: Some(Some("D:\\OneDrive\\Yudh".into())),

@@ -283,6 +283,8 @@ pub struct PostureView {
     due_at: i64,
     stretch: Stretch,
     steps: Vec<Step>,
+    /// 各手順の秒数(秒・回数から。読めなければ 10 秒)。時間が来たら自動で次へ進む(押さなくていい)
+    durations: Vec<u32>,
     step: usize,
     heading: String,
     frieze: bool,
@@ -303,6 +305,12 @@ fn posture_view(inner: &Inner) -> PostureView {
         due_at: clock.due_at(&inner.settings.posture).timestamp_millis(),
         heading: posture::heading(&clock.stretch, &steps, step),
         frieze: posture::shows_frieze(&steps),
+        durations: clock
+            .stretch
+            .steps
+            .iter()
+            .map(|line| ritual::duration(line).unwrap_or(ritual::SETUP_SECONDS))
+            .collect(),
         stretch: clock.stretch.clone(),
         steps,
         step,
@@ -406,7 +414,6 @@ pub struct RitualPlan {
     stretch_names: Vec<String>,
     has_strength: bool,
     short: bool,
-    voice: bool,
     streak: usize,
     caution: &'static str,
 }
@@ -459,7 +466,6 @@ pub fn ritual_plan(state: State<'_, AppState>, short: bool) -> RitualPlan {
             .collect(),
         has_strength,
         short,
-        voice: s.ritual_voice,
         streak: ritual::streak(&all.ritual, now, Zone::Local),
         caution: posture::CAUTION,
     }
@@ -499,7 +505,6 @@ pub struct SettingsView {
     ritual_strength: String,
     ritual_floor: String,
     ritual_strength_on: bool,
-    ritual_voice: bool,
     defaults: HashMap<&'static str, &'static str>,
 }
 
@@ -522,7 +527,6 @@ pub fn settings_get(state: State<'_, AppState>) -> SettingsView {
         ritual_strength: s.ritual_strength.clone(),
         ritual_floor: s.ritual_floor.clone(),
         ritual_strength_on: s.ritual_strength_on,
-        ritual_voice: s.ritual_voice,
         defaults: HashMap::from([
             ("stretches", posture::DEFAULT_STRETCHES),
             ("ritualVideos", ritual::DEFAULT_VIDEOS),

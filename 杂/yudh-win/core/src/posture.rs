@@ -382,12 +382,18 @@ pub struct PostureSettings {
     pub stretches: String,
 }
 
+/// 坐站の計画(ユーザーが決めなくていいように固定):坐 30 → 站 30 の繰り返し。
+/// 8 時間で約 4 時間立つ(Buckley 2015 の専門家声明:立つ・軽く動く時間を 1 日 2 時間から始めて 4 時間へ)。
+/// 立つのが好きな人なので上の目標から。同じ姿勢を 30 分より長く続けない(斜角肌には姿勢を変える回数が効く。立ちっぱなしも良くない)
+pub const PLAN_SIT_MINUTES: i64 = 30;
+pub const PLAN_STAND_MINUTES: i64 = 30;
+
 impl Default for PostureSettings {
     fn default() -> Self {
         PostureSettings {
             enabled: true,
-            sit_minutes: 40,
-            stand_minutes: 15,
+            sit_minutes: PLAN_SIT_MINUTES,
+            stand_minutes: PLAN_STAND_MINUTES,
             stretches: DEFAULT_STRETCHES.to_string(),
         }
     }
@@ -785,7 +791,7 @@ mod tests {
         // 離席(3 分無操作)で座りの計測をやり直す
         assert!(!c.check(t0 + Duration::minutes(30), &settings, 200, false));
         assert_eq!(c.since, t0 + Duration::minutes(30));
-        // 座る時間(40 分)がたつと「站起来了吗?」、拉伸は 7 番目(走一走)
+        // 座る時間(計画の 30 分)がたつと「站起来了吗?」、拉伸は 7 番目(走一走)
         let ask = c.since + Duration::minutes(settings.sit_minutes);
         assert!(c.check(ask, &settings, 0, false));
         assert_eq!(c.prompt, Some(Prompt::AskStand));
@@ -811,7 +817,8 @@ mod tests {
             !c.check(ask + Duration::minutes(5), &settings, 0, false),
             "closed guide stays closed"
         );
-        let sit = ask + Duration::minutes(16);
+        // 立ってから計画の立つ時間(30 分)がたつと「坐下了吗?」
+        let sit = ask + Duration::minutes(1 + settings.stand_minutes);
         assert!(c.check(sit, &settings, 0, false));
         assert_eq!(c.prompt, Some(Prompt::AskSit));
         c.snooze(sit, 5);

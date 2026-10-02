@@ -2,7 +2,7 @@
 // 拉伸は 1 歩ずつ:声で読み終えて 1.5 秒(声なしなら 3 秒)してから数え、終われば鳴らして次へ
 import { loadMaterial, slice, sprite, stencil, tile, h, button, first } from "./baked.js";
 import { call, openUrl, closeWindow } from "./api.js";
-import { loadIcons, icon, clock, speak, stopSpeaking, chime, clear, voicesReady } from "./common.js";
+import { loadIcons, icon, clock, chime, clear } from "./common.js";
 
 const $ = (id) => document.getElementById(id);
 
@@ -46,20 +46,15 @@ function enter(i) {
   s.finished = false;
   const item = s.items[s.index];
   if (item.type === "stretch") prepare(item);
-  else stopSpeaking();
   render();
 }
 
+/** 読んで構える時間(語音播报は無い):文の長さに合わせて 4〜9 秒。そのあと自動で計時 */
 function prepare(step) {
   s.preparing = true;
   const mine = s.token;
   const text = step.stepNumber === 0 ? `${step.heading}。${step.text}` : step.text;
-  if (s.plan.voice && speak(text, { lang: "zh-CN", rate: 0.9, done: () => startAfter(1500, mine, step.duration) })) {
-    // 読み終わりの知らせが来ない環境でも止まらないように:1 字 0.35 秒 + 3 秒
-    startAfter(text.length * 350 + 3000, mine, step.duration);
-  } else {
-    startAfter(3000, mine, step.duration);
-  }
+  startAfter(Math.min(9000, Math.max(4000, text.length * 160)), mine, step.duration);
 }
 
 function startAfter(ms, mine, seconds) {
@@ -87,7 +82,6 @@ function togglePause() {
   if (s.preparing && item?.type === "stretch") {
     clearTimeout(s.lead);
     s.preparing = false;
-    stopSpeaking();
     run(item.duration);
   } else if (s.pausedLeft != null) {
     const left = s.pausedLeft;
@@ -97,7 +91,6 @@ function togglePause() {
     clearTimeout(s.timer);
     s.pausedLeft = Math.max(0, (s.endsAt - Date.now()) / 1000);
     s.endsAt = null;
-    stopSpeaking();
   }
   render();
 }
@@ -106,7 +99,6 @@ async function finish() {
   if (s.finished) return;
   s.finished = true;
   s.index = s.items.length;
-  if (s.plan.voice) speak("今天的日课做完了", { lang: "zh-CN" });
   s.streak = await call("ritual_done", { strength: s.plan.hasStrength });
   render();
 }
@@ -244,7 +236,7 @@ function renderControls(item) {
     row = [
       bare("‹ 上一步", () => enter(s.index - 1)),
       h("span", { class: "grow" }),
-      button(s.preparing ? "开始" : s.pausedLeft != null ? "继续" : "暂停", { kind: "frame", width: 110, onClick: togglePause, title: s.preparing ? "不等语音读完，马上开始计时" : "暂停 / 继续" }),
+      button(s.preparing ? "开始" : s.pausedLeft != null ? "继续" : "暂停", { kind: "frame", width: 110, onClick: togglePause, title: s.preparing ? "不用等，马上开始计时" : "暂停 / 继续" }),
       button("下一步", { kind: "teal", width: 150, onClick: () => enter(s.index + 1) }),
     ];
   }
@@ -288,7 +280,7 @@ function bindKeys() {
 }
 
 async function init() {
-  await Promise.all([loadMaterial(), loadIcons(), voicesReady()]);
+  await Promise.all([loadMaterial(), loadIcons()]);
   tile(document.body, "concrete-night");
   build(await call("ritual_plan", { short: false }));
   s.streak = s.plan.streak;
