@@ -1722,6 +1722,11 @@ private struct TodayPostureStatus: View {
             let minutes = max(0, Int(context.date.timeIntervalSince(coordinator.postureSince) / 60))
             let due = context.date >= coordinator.postureDueAt
             let dueAt = coordinator.postureDueAt.formatted(Self.time)
+            // 型を書いておく(三項を足し合わせる式は型推論が重くなる)
+            let callNote: String = coordinator.inCall ? "通话中（麦克风或摄像头在用），挂断 1 分钟后再提醒。" : ""
+            let dueNote: String = due ? "（该站起来了）" : ""
+            let state: String = standing ? "已站 \(minutes) 分钟，\(dueAt) 坐下。点击打开拉伸步骤"
+                : "已坐 \(minutes) 分钟，\(dueAt) 站起来\(dueNote)。点击打开「站起来了吗？」小窗"
             Button {
                 coordinator.openPosturePrompt()
             } label: {
@@ -1751,9 +1756,7 @@ private struct TodayPostureStatus: View {
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .help((coordinator.inCall ? "通话中（麦克风或摄像头在用），挂断 1 分钟后再提醒。" : "")
-                  + (standing ? "已站 \(minutes) 分钟，\(dueAt) 坐下。点击打开拉伸步骤"
-                              : "已坐 \(minutes) 分钟，\(dueAt) 站起来\(due ? "（该站起来了）" : "")。点击打开「站起来了吗？」小窗"))
+            .help(callNote + state)
         }
     }
 }

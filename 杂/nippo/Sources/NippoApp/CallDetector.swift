@@ -43,8 +43,8 @@ enum CallDetector {
         var value: Unmanaged<CFString>?
         var size = UInt32(MemoryLayout<Unmanaged<CFString>?>.size)
         guard AudioObjectGetPropertyData(process, &address, 0, nil, &size, &value) == noErr,
-              let value else { return nil }
-        let id = value.takeRetainedValue() as String
+              let unmanaged = value else { return nil }
+        let id = unmanaged.takeRetainedValue() as String
         return id.isEmpty ? nil : id
     }
 

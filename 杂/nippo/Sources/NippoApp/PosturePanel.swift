@@ -292,7 +292,7 @@ struct PosturePromptView: View {
                 PostureQuestion(pose: "stand-up", symbol: "figure.stand",
                                 title: "站着\n开会？", spoken: "站着开会？") {
                     // 数字は等幅(ほかの小窓の分数と同じ)
-                    PostureNumbers(text: meeting.map(Self.meetingLine) ?? "会议马上开始",
+                    PostureNumbers(text: meeting.map { Self.meetingLine($0) } ?? "会议马上开始",
                                    color: Palette.kraftTextSecondary,
                                    digits: Typeface.mono(14, weight: 700),
                                    words: Typeface.cjk(13, weight: .semibold))
@@ -319,7 +319,7 @@ struct PosturePromptView: View {
                         .help("已经坐了 \(sitting) 分钟")
                     }
                     // 45 分以上の会議は水を持って入る(会議の通知と同じ決まり)
-                    Text(meeting.map(BreakReminder.isLong) == true ? "会比较长，倒杯水带进去" : "顺便喝杯水")
+                    Text(meeting.map { BreakReminder.isLong($0) } == true ? "会比较长，倒杯水带进去" : "顺便喝杯水")
                         .font(Typeface.cjk(13, weight: .semibold))
                         .foregroundStyle(Palette.kraftTextSecondary)
                 }

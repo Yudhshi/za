@@ -130,8 +130,8 @@ final class AppCoordinator: ObservableObject {
             opened = memory
             dbNotes.append("メモリ上の DB で動く(休暇日・英語の記録は保存されない)")
         }
-        guard let opened else { fatalError("DB 初期化失敗: \(dbNotes)") }
-        db = opened
+        guard let database = opened else { fatalError("DB 初期化失敗: \(dbNotes)") }
+        db = database
         AppLog.shared.configure(root: URL(fileURLWithPath: root))
         let info = Bundle.main.infoDictionary
         AppLog.shared.log("app", "起動 Yudh \(info?["CFBundleShortVersionString"] as? String ?? "dev") "
@@ -171,7 +171,8 @@ final class AppCoordinator: ObservableObject {
         calendarObserver = NotificationCenter.default.addObserver(forName: .EKEventStoreChanged, object: nil,
                                                                   queue: .main) { [weak self] _ in
             MainActor.assumeIsolated {
-                self?.refreshTodayEvents()
+                guard let self else { return }
+                self.refreshTodayEvents()
             }
         }
         timer = Timer.scheduledTimer(withTimeInterval: 30, repeats: true) { [weak self] _ in
@@ -408,13 +409,15 @@ final class AppCoordinator: ObservableObject {
         let file = folder.appendingPathComponent(HabitsSync.fileName(for: device)).path
         let previous = settings.habitsWrittenPath
         Task.detached(priority: .utility) { [weak self] in
-            var failure: String?
+            // let にしておく(var だと、下の MainActor.run から読めない:並行に動くコードからの捕獲)
+            let failure: String?
             do {
                 try HabitsSync.write(own, device: device, to: folder)
                 if let previous, previous != file,
                    (previous as NSString).deletingLastPathComponent == folder.path {
                     try? FileManager.default.removeItem(atPath: previous)
                 }
+                failure = nil
             } catch {
                 failure = "\(error)"
             }
@@ -505,9 +508,9 @@ final class AppCoordinator: ObservableObject {
             var tips: [String] = []
             if settings.breathHabit { tips.append("开会前先做 3 次腹式呼吸") }
             if e.joinURL != nil, BreakReminder.isLong(e) { tips.append("会比较长，倒杯水带进去") }
-            let body = "\(f.string(from: e.start)) 开始"
-                + (e.joinURL != nil ? "。点击加入会议" : "")
-                + (tips.isEmpty ? "" : "。" + tips.joined(separator: "；"))
+            let join: String = e.joinURL != nil ? "。点击加入会议" : ""
+            let tipText: String = tips.isEmpty ? "" : "。" + tips.joined(separator: "；")
+            let body: String = f.string(from: e.start) + " 开始" + join + tipText
             let signature = [title, body, e.joinURL?.absoluteString ?? ""]
                 .joined(separator: "\n")
             next[id] = signature
