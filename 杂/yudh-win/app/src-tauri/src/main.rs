@@ -173,11 +173,30 @@ fn build_tray(app: &AppHandle) -> tauri::Result<()> {
                 surfaces::toggle_panel(tray.app_handle());
             }
         });
-    if let Some(icon) = app.default_window_icon() {
-        tray = tray.icon(icon.clone());
+    // 通知領域の大きさ(96 DPI で 16px、150% で 24px)の段を .ico から取る。既定の窓のアイコンは 32px の段で、
+    // それをシステムが縮めると、小さい段のために簡略化した絵(星なし・実線の枠)が使われない
+    if let Some(icon) = tray_icon().or_else(|| app.default_window_icon().cloned()) {
+        tray = tray.icon(icon);
     }
     tray.build(app)?;
     Ok(())
+}
+
+#[cfg(windows)]
+fn tray_icon() -> Option<tauri::image::Image<'static>> {
+    use windows_sys::Win32::UI::WindowsAndMessaging::{GetSystemMetrics, SM_CXSMICON, SM_CYSMICON};
+    // SAFETY: 引数は定数。失敗すると 0 が返る
+    let metric = |index| match unsafe { GetSystemMetrics(index) } {
+        n if n > 0 => n as u32,
+        _ => 16,
+    };
+    // 32512 = Tauri がアプリのアイコン(.ico)を埋め込む資源の番号
+    tauri::image::Image::from_icon_resource(32512u16, metric(SM_CXSMICON), metric(SM_CYSMICON)).ok()
+}
+
+#[cfg(not(windows))]
+fn tray_icon() -> Option<tauri::image::Image<'static>> {
+    None
 }
 
 /// 30 秒ごと:坐站の判定(全画面のゲーム中は出さない・長く遊んだら抜けたときに尋ねる)。
