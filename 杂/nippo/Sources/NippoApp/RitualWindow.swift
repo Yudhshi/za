@@ -17,7 +17,7 @@ final class RitualWindowController: NSObject, NSWindowDelegate {
     }
 
     func show() {
-        if let window, window.isVisible {
+        if let window = self.window, window.isVisible {
             NSApp.activate()
             window.makeKeyAndOrderFront(nil)
             return
