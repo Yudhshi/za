@@ -695,6 +695,12 @@ async function settingsView() {
     ),
     h("div", { class: "field" }, "这台电脑的名字", text("device"), h("div", { class: "hint" }, "进度文件按名字分开写，两台设备不要同名。")),
     check("autostart", "开机后自动启动（只待在托盘里，几乎不占资源）"),
+    resettable("quietApps", "打游戏时让 Yudh 完全安静的程序（每行一个）", 3),
+    h(
+      "div",
+      { class: "hint", style: { color: "var(--text-2)", fontSize: "12px", lineHeight: 1.5 } },
+      "这些程序运行时，Yudh 关掉自己所有的窗口、不再弹出任何东西，也不再读键鼠空闲和全屏状态，只留托盘图标；游戏关掉后自动恢复（玩了 60 分钟以上会马上问一次要不要站起来）。只看进程列表里的名字（和任务管理器的「详细信息」一样），不会打开或读取游戏进程。默认是 AION2。",
+    ),
     h("h3", {}, "坐站提醒"),
     check("postureEnabled", "提醒我切换坐姿和站姿"),
     h("div", { class: "row", style: { gap: "16px" } }, h("div", { class: "field" }, "坐几分钟", number("sitMinutes", 20, 90, 5)), h("div", { class: "field" }, "站几分钟", number("standMinutes", 5, 60, 5))),

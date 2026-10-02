@@ -35,6 +35,8 @@ pub struct Inner {
     pub rng: Rng,
     /// フォルダを選ぶダイアログのあいだは、面板がフォーカスを失っても閉じない
     pub picking: bool,
+    /// 名単のゲーム(AION2 など)が動いている:Yudh は窓を一切作らず、OS への問い合わせも止める
+    pub quiet: Option<String>,
 }
 
 pub struct AppState {
@@ -75,6 +77,7 @@ fn main() {
                 breath_started: None,
                 rng: Rng::from_time(),
                 picking: false,
+                quiet: None,
             };
             // 手元の記録を同期フォルダへ(Mac から日课や呼吸の続きが見えるように)
             commands::publish_habits(&inner);
@@ -177,22 +180,41 @@ fn build_tray(app: &AppHandle) -> tauri::Result<()> {
     Ok(())
 }
 
-/// 30 秒ごと:坐站の判定(全画面のゲーム中は出さない・長く遊んだら抜けたときに尋ねる)
+/// 30 秒ごと:坐站の判定(全画面のゲーム中は出さない・長く遊んだら抜けたときに尋ねる)。
+/// 名単のゲーム(AION2 など)が動いているあいだは「完全に安静」:開いている窓を閉じ、窓を作らず、
+/// 無操作・全画面も問い合わせない(ゲーム中として計時だけ続け、抜けたら長いゲームの規則で尋ねる)
 fn ticker(app: AppHandle) {
     loop {
-        let changed = {
+        let list = app
+            .state::<AppState>()
+            .inner
+            .lock()
+            .map(|inner| inner.settings.quiet_apps.clone())
+            .unwrap_or_default();
+        let game = yudh_core::quiet::running_quiet_app(&platform::running_process_names(), &list);
+        let (changed, entered, left) = {
             let state = app.state::<AppState>();
             let mut inner = state.inner.lock().expect("state");
+            let entered = game.is_some() && inner.quiet.is_none();
+            let left = game.is_none() && inner.quiet.is_some();
+            inner.quiet = game.clone();
             let settings = inner.settings.posture.clone();
-            let busy = platform::fullscreen_busy();
-            let idle = platform::idle_seconds();
-            let changed = inner.posture.check(Utc::now(), &settings, idle, busy);
+            let changed = if game.is_some() {
+                inner.posture.check(Utc::now(), &settings, 0, true)
+            } else {
+                let busy = platform::fullscreen_busy();
+                let idle = platform::idle_seconds();
+                inner.posture.check(Utc::now(), &settings, idle, busy)
+            };
             if changed && inner.posture.prompt.is_none() {
                 inner.breath_started = None;
             }
-            changed
+            (changed, entered, left)
         };
-        if changed {
+        if entered || left {
+            surfaces::quiet_changed(&app, game.as_deref());
+        }
+        if changed && game.is_none() {
             surfaces::sync_posture(&app);
         }
         std::thread::sleep(Duration::from_secs(30));

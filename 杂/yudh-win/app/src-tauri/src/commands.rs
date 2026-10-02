@@ -488,6 +488,7 @@ pub struct SettingsView {
     sync_root: Option<String>,
     device: String,
     autostart: bool,
+    quiet_apps: String,
     posture_enabled: bool,
     sit_minutes: i64,
     stand_minutes: i64,
@@ -510,6 +511,7 @@ pub fn settings_get(state: State<'_, AppState>) -> SettingsView {
         sync_root: s.sync_root.clone(),
         device: s.device.clone(),
         autostart: s.autostart,
+        quiet_apps: s.quiet_apps.clone(),
         posture_enabled: s.posture.enabled,
         sit_minutes: s.posture.sit_minutes,
         stand_minutes: s.posture.stand_minutes,
@@ -527,6 +529,7 @@ pub fn settings_get(state: State<'_, AppState>) -> SettingsView {
             ("ritualStretches", ritual::DEFAULT_STRETCHES),
             ("ritualStrength", ritual::DEFAULT_STRENGTH),
             ("ritualFloor", ritual::DEFAULT_FLOOR),
+            ("quietApps", yudh_core::quiet::DEFAULT_QUIET_APPS),
         ]),
     }
 }

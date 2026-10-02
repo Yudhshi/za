@@ -6,7 +6,7 @@ use std::path::Path;
 
 use serde::{Deserialize, Serialize};
 use yudh_core::posture::PostureSettings;
-use yudh_core::ritual;
+use yudh_core::{quiet, ritual};
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(default, rename_all = "camelCase")]
@@ -17,6 +17,8 @@ pub struct Settings {
     pub device: String,
     /// ログインしたら自動で起動する(坐站の提醒が毎日届くように)
     pub autostart: bool,
+    /// 打游戏时让 Yudh 完全安静的程序(1 行 1 つ。exe 名)
+    pub quiet_apps: String,
     pub posture: PostureSettings,
     /// 次に出す拉伸の番号(実際に立ったときに進める)
     pub stretch_index: usize,
@@ -39,6 +41,7 @@ impl Default for Settings {
             sync_root: None,
             device: std::env::var("COMPUTERNAME").unwrap_or_else(|_| "Windows PC".into()),
             autostart: true,
+            quiet_apps: quiet::DEFAULT_QUIET_APPS.into(),
             posture: PostureSettings::default(),
             stretch_index: 0,
             breath_habit: true,
@@ -77,6 +80,7 @@ pub struct SettingsPatch {
     pub sync_root: Option<Option<String>>,
     pub device: Option<String>,
     pub autostart: Option<bool>,
+    pub quiet_apps: Option<String>,
     pub posture_enabled: Option<bool>,
     pub sit_minutes: Option<i64>,
     pub stand_minutes: Option<i64>,
@@ -105,6 +109,9 @@ impl Settings {
         }
         if let Some(v) = patch.autostart {
             self.autostart = v;
+        }
+        if let Some(v) = patch.quiet_apps {
+            self.quiet_apps = v;
         }
         if let Some(v) = patch.posture_enabled {
             self.posture.enabled = v;

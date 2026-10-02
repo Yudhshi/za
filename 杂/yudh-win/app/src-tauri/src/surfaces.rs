@@ -1,5 +1,6 @@
 //! 窓の出し入れ:面板(タスクバーのそば、フォーカスを失ったら閉じる)・坐站の小窓(画面上部の中央、フォーカスを奪わない)・
-//! 日课の窓(ふつうの窓)。どれも閉じたら捨てる。位置はマウスのある画面の、タスクバーを除いた範囲で決める
+//! 日课の窓(ふつうの窓)。どれも閉じたら捨てる。位置はマウスのある画面の、タスクバーを除いた範囲で決める。
+//! 名単のゲームが動いているあいだは、どの窓も作らない(反作弊に「ゲームの上に被さる窓」と見られないように)
 
 use tauri::{
     AppHandle, Emitter, LogicalSize, Manager, WebviewUrl, WebviewWindowBuilder, WindowEvent,
@@ -34,6 +35,33 @@ fn area(app: &AppHandle) -> (f64, f64, f64, f64) {
         .unwrap_or((0.0, 0.0, 1920.0, 1040.0))
 }
 
+/// 名単のゲームが動いているか(動いていれば窓を作らない)
+fn quiet(app: &AppHandle) -> bool {
+    app.state::<AppState>()
+        .inner
+        .lock()
+        .map(|inner| inner.quiet.is_some())
+        .unwrap_or(false)
+}
+
+/// ゲームが始まった / 終わった:始まったら開いている窓を全部閉じる。トレイの説明を変える
+pub fn quiet_changed(app: &AppHandle, game: Option<&str>) {
+    if game.is_some() {
+        for label in ["panel", "posture", "ritual"] {
+            if let Some(window) = app.get_webview_window(label) {
+                let _ = window.close();
+            }
+        }
+    }
+    if let Some(tray) = app.tray_by_id("yudh") {
+        let tip = match game {
+            Some(name) => format!("Yudh · 游戏中，已暂停（{name}）"),
+            None => "Yudh".to_string(),
+        };
+        let _ = tray.set_tooltip(Some(tip));
+    }
+}
+
 /// トレイから:開いていれば閉じる、閉じていれば開く
 pub fn toggle_panel(app: &AppHandle) {
     if let Some(window) = app.get_webview_window("panel") {
@@ -45,6 +73,9 @@ pub fn toggle_panel(app: &AppHandle) {
 
 /// 面板を開く(開いていれば前に出す)。タスクバーを除いた範囲の右下(タスクバーが横や上にあっても重ならない)
 pub fn open_panel(app: &AppHandle) {
+    if quiet(app) {
+        return;
+    }
     if let Some(window) = app.get_webview_window("panel") {
         let _ = window.set_focus();
         return;
@@ -95,6 +126,12 @@ pub fn open_panel(app: &AppHandle) {
 
 /// 坐站の小窓を、いまの状態に合わせて出す / 閉じる / 中身を更新する
 pub fn sync_posture(app: &AppHandle) {
+    if quiet(app) {
+        if let Some(window) = app.get_webview_window("posture") {
+            let _ = window.close();
+        }
+        return;
+    }
     let wanted = app
         .state::<AppState>()
         .inner
@@ -132,6 +169,9 @@ pub fn sync_posture(app: &AppHandle) {
 
 /// 日课の窓(ふつうの窓。動画のプレーヤーごと、閉じたら捨てる)
 pub fn open_ritual(app: &AppHandle) {
+    if quiet(app) {
+        return;
+    }
     if let Some(window) = app.get_webview_window("ritual") {
         let _ = window.set_focus();
         return;
