@@ -41,12 +41,12 @@ func runSettingsTests() {
         T.expectEqual(s.loginItemMovedToYudh, false)
 
         T.expectEqual(s.postureEnabled, true)
-        T.expectEqual(s.sitMinutes, 40)
-        T.expectEqual(s.standMinutes, 15)
+        T.expectEqual(s.sitMinutes, 30, "the sit / stand plan is fixed")
+        T.expectEqual(s.standMinutes, 30)
+        d.set(40, forKey: "sitMinutes")
+        T.expectEqual(AppSettings(defaults: d).sitMinutes, 30, "a value saved by an older version is ignored")
         T.expectEqual(s.stretches, BreakReminder.defaultStretches)
-        s.sitMinutes = 30
         s.stretches = "肩回し"
-        T.expectEqual(AppSettings(defaults: d).sitMinutes, 30)
         T.expectEqual(AppSettings(defaults: d).stretches, "肩回し")
         T.expectEqual(s.lastStretchIndex, 0)
 
@@ -61,7 +61,6 @@ func runSettingsTests() {
         T.expectEqual(s.ritualFloor, Ritual.defaultFloor)
         T.expectEqual(s.ritualStrengthOn, true)
         T.expectEqual(s.ritualStrengthLog, [:])
-        T.expectEqual(s.ritualVoice, true)
         T.expectEqual(s.breathHabit, true)
         T.expectEqual(s.meetingStandAsk, true, "asks to stand for meetings by default")
         T.expectEqual(s.callDetection, true, "mic / camera in use counts as a meeting by default")

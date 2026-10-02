@@ -35,12 +35,7 @@ struct SettingsView: View {
 
             Section("站立与拉伸（升降桌）") {
                 Toggle("提醒我切换坐姿和站姿", isOn: binding(\.postureEnabled))
-                Stepper("坐 \(settings.sitMinutes) 分钟后站起来",
-                        value: binding(\.sitMinutes), in: 20...90, step: 5)
-                    .disabled(!settings.postureEnabled)
-                Stepper("站 \(settings.standMinutes) 分钟后坐下",
-                        value: binding(\.standMinutes), in: 5...60, step: 5)
-                    .disabled(!settings.postureEnabled)
+                Text("计划已经定好：坐 \(settings.sitMinutes) 分钟 → 站 \(settings.standMinutes) 分钟，一直循环（一天 8 小时大约站 4 小时；每 30 分钟换一次姿势，比站多久更能放松斜角肌，也避免站太久）")
                 Text("到点后在屏幕上方弹出小窗问「站起来了吗？」，站好后显示剩余时间和拉伸步骤。Google Meet 会议中和开始前 5 分钟不问站坐，会议结束 1 分钟后再问（没有 Meet 链接的日程不算会议）。坐着时 3 分钟以上没有操作，就当作离开座位，重新计时（开会时不动不算；小窗弹出后 10 分钟没回应也没操作，同样算离开）")
                     .font(.caption)
                     .foregroundStyle(.secondary)
@@ -127,7 +122,6 @@ struct SettingsView: View {
                      + "泡完热水澡先喝点水，从地上站起来时慢一点；夜里疼醒、抬手没力气、手发麻，或者不舒服超过 6 周，请去看医生或理疗师")
                     .font(.caption)
                     .foregroundStyle(.secondary)
-                Toggle("拉伸时语音播报每一步（到时间自动进入下一步）", isOn: binding(\.ritualVoice))
                 HStack {
                     Text("晚上和休息日，面板底部会出现「泡完澡了」。已连续 \(BreathLog.streak(coordinator.habits.ritual, today: Date())) 天（在 Windows 上做的也算）")
                         .font(.caption)

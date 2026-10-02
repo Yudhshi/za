@@ -65,6 +65,12 @@ public enum BreakReminder {
 
     public static let caution = "※ 拉伸感可以，发麻或刺痛传到手上就停"
 
+    /// 坐站の計画(ユーザーが決めなくていいように固定。Windows の yudh-core と同じ):坐 30 → 站 30 の繰り返し。
+    /// 8 時間で約 4 時間立つ(Buckley 2015 の専門家声明:立つ・軽く動く時間を 1 日 2 時間から 4 時間へ)。
+    /// 立つのが好きな人なので上の目標から。同じ姿勢を 30 分より長く続けない(斜角肌には姿勢を変える回数が効く)
+    public static let planSitMinutes = 30
+    public static let planStandMinutes = 30
+
     /// 手順の文の中の数(秒・回・分)。文字の代わりに図と数字で見せるために取り出す
     public struct StepMeta: Equatable, Sendable {
         public var seconds: Int?

@@ -30,7 +30,7 @@ final class RitualWindowController: NSObject, NSWindowDelegate {
                                     standing: settings.ritualStretches,
                                     strength: strength ? settings.ritualStrength : nil,
                                     floor: settings.ritualFloor,
-                                    voice: settings.ritualVoice)
+                                    voice: false)
         session.onFinish = { [weak self] withStrength in self?.coordinator.recordRitual(strength: withStrength) }
         self.session = session
         let host = NSHostingController(rootView: RitualView(session: session, coordinator: coordinator))
@@ -210,7 +210,8 @@ final class RitualSession: ObservableObject {
             // 声が出ない環境でも止まらないように:1 字 0.35 秒 + 3 秒で始める
             startAfter(Double(text.count) * 0.35 + 3, token: mine, seconds: s.duration)
         } else {
-            startAfter(Self.quietLead, token: mine, seconds: s.duration)
+            // 語音播报は無い:読んで構える時間を文の長さに合わせて 4〜9 秒
+            startAfter(min(9, max(Self.quietLead + 1, Double(text.count) * 0.16)), token: mine, seconds: s.duration)
         }
     }
 

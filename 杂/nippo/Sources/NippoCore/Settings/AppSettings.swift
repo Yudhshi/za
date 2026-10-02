@@ -95,17 +95,10 @@ public final class AppSettings: ObservableObject {
         set { d.set(newValue, forKey: "postureEnabled"); objectWillChange.send() }
     }
 
-    public var sitMinutes: Int {
-        // 40 分:同じ姿勢を長く続けない(斜角肌は頭が前に出た姿勢・腕を前に浮かせた姿勢で張る)。
-        // 坐 40 / 站 15 で 1 日に立つ・動く時間はおよそ 2 時間(Buckley 2015 の最初の目標)
-        get { d.object(forKey: "sitMinutes") as? Int ?? 40 }
-        set { d.set(newValue, forKey: "sitMinutes"); objectWillChange.send() }
-    }
+    /// 坐る / 立つ分数は計画で固定(設定には出さない。前の版で保存した値は使わない)
+    public var sitMinutes: Int { BreakReminder.planSitMinutes }
 
-    public var standMinutes: Int {
-        get { d.object(forKey: "standMinutes") as? Int ?? 15 }
-        set { d.set(newValue, forKey: "standMinutes"); objectWillChange.send() }
-    }
+    public var standMinutes: Int { BreakReminder.planStandMinutes }
 
     /// 切り替え時に 1 つずつ出すストレッチ(1 行 1 つ)
     public var stretches: String {
@@ -150,12 +143,6 @@ public final class AppSettings: ObservableObject {
     public var ritualStrengthLog: [String: Int] {
         get { d.dictionary(forKey: "ritualStrengthLog") as? [String: Int] ?? [:] }
         set { d.set(newValue, forKey: "ritualStrengthLog"); objectWillChange.send() }
-    }
-
-    /// 日课の拉伸を声で読む(床で拉伸しているあいだ画面を見なくていいように)
-    public var ritualVoice: Bool {
-        get { d.object(forKey: "ritualVoice") as? Bool ?? true }
-        set { d.set(newValue, forKey: "ritualVoice"); objectWillChange.send() }
     }
 
     /// 日课をやり終えた日("yyyy-MM-dd" → 回数)
