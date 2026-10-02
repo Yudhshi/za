@@ -394,7 +394,7 @@ struct RitualView: View {
                 session.togglePause()
             }
             .buttonStyle(FrameButtonStyle(height: Turf.popupButton, width: 110))
-            .help(session.preparing ? "不等语音读完，马上开始计时" : "暂停 / 继续计时")
+            .help(session.preparing ? "不用等，马上开始计时" : "暂停 / 继续计时")
             Button("下一步") { session.next() }
                 .buttonStyle(SprayButtonStyle(kind: .teal, height: Turf.popupButton, width: 150))
         }

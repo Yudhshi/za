@@ -216,7 +216,8 @@ pub fn videos(text: &str) -> Vec<Video> {
 
 /// 数字の後(空白を飛ばして)に unit が来る数を全部
 fn numbers_before(text: &str, unit: char) -> Vec<u32> {
-    let chars: Vec<char> = text.chars().collect();
+    // 全角の数字(中文・日本語の入力法)も読む(StepMeta と Mac の Ritual.duration と同じ)
+    let chars = crate::posture::halfwidth(text);
     let mut found = Vec::new();
     let mut i = 0;
     while i < chars.len() {
@@ -508,5 +509,12 @@ mod tests {
             record(&mut log, &key);
         }
         assert_eq!(log.len(), 60);
+    }
+
+    #[test]
+    fn full_width_digits_count_for_the_timer_too() {
+        assert_eq!(duration("停 ２０ 秒"), Some(20));
+        assert_eq!(duration("做 ８ 次"), Some(32));
+        assert_eq!(duration("停 20 秒"), Some(20));
     }
 }

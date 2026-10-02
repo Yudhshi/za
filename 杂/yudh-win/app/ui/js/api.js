@@ -42,6 +42,8 @@ export function enableDragging() {
   });
 }
 
+/** 既定のブラウザで開く。Tauri の中では命令で(WebView2 の window.open は何も起きない) */
 export function openUrl(url) {
+  if (inTauri) return call("open_url", { url });
   window.open(url, "_blank");
 }

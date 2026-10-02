@@ -30,12 +30,15 @@ pub struct Stretch {
     pub steps: Vec<String>,
 }
 
-/// Mac と同じ既定の拉伸(斜角肌の張りを狙う 7 つ。腕は頭より上げない。空行区切り、1 行目が名前)
+/// Mac と同じ既定の拉伸(斜角肌の張りを狙う 7 つ。腕は頭より上げない。空行区切り、1 行目が名前)。
+/// 小窓は 1 行ごとに時間が来たら自動で次へ進むので、どの行も自分の秒数・回数を持つ(秒の無い行は 10 秒の構え)。
+/// 左右は同じ長さ、半分の動作(耸る / 放す、吸う / 吐く)は 1 行にまとめる
 pub const DEFAULT_STRETCHES: &str = "斜角肌拉伸（约 2 分钟）
 右手按住右侧锁骨下方，固定住第一根肋骨
 头向左倒，拉伸右侧颈部，右肩放松下沉，停 10 秒
 再微微抬头停 10 秒，微微低头停 10 秒
-换另一侧（左手按左侧锁骨下方，头向右倒）
+换另一侧：左手按住左侧锁骨下方，头向右倒，停 10 秒
+再微微抬头停 10 秒，微微低头停 10 秒
 
 W 字收肩（约 1 分钟）
 手肘贴着身体弯成 90°，手心朝前
@@ -44,8 +47,7 @@ W 字收肩（约 1 分钟）
 
 腹式呼吸（约 1 分钟）
 一只手放在肚子上，另一只手放在胸口
-用鼻子吸气 4 秒，只让肚子鼓起来，胸口和肩膀不动
-用嘴慢慢呼气 6 秒。做 6 次
+用鼻子吸气 4 秒只让肚子鼓起来，胸口和肩膀不动；用嘴慢慢呼气 6 秒。做 6 次
 
 扩胸拉伸（约 1 分钟）
 前臂竖着贴在门框上，手肘和肩膀差不多高
@@ -58,13 +60,11 @@ W 字收肩（约 1 分钟）
 收下巴：保持 5 秒 × 10 次
 
 耸肩放松（约 1 分钟）
-肩膀用力耸向耳朵，停 3 秒
-一下子完全放下，感觉脖子两侧松开。做 8 次
+肩膀用力耸向耳朵停 3 秒，一下子完全放下，感觉脖子两侧松开。做 8 次
 最后向后转肩 10 次
 
 走一走（1〜2 分钟）
-离开座位去接杯水
-手臂自然摆动地走
+离开座位去接杯水，手臂自然摆动地走 1 分钟
 看窗外等远处 20 秒";
 
 pub const CAUTION: &str = "※ 拉伸感可以，发麻或刺痛传到手上就停";
@@ -132,7 +132,7 @@ pub struct StepMeta {
     pub minutes: Option<u32>,
 }
 
-fn halfwidth(text: &str) -> Vec<char> {
+pub(crate) fn halfwidth(text: &str) -> Vec<char> {
     text.chars()
         .map(|c| match c {
             '\u{FF01}'..='\u{FF5E}' => char::from_u32(c as u32 - 0xFEE0).unwrap_or(c),
@@ -426,6 +426,8 @@ pub const GAME_BREAK_MINUTES: i64 = 60;
 
 /// 座っているあいだ、これだけ操作がなければ離席とみなして計り直す(秒)
 pub const IDLE_RESET_SECONDS: u64 = 180;
+/// 自動で出た「站起来了吗?」が開いたまま、これだけ無操作なら席を外したとみなす(Mac と同じ 10 分)
+pub const AWAY_WITH_PROMPT_SECONDS: u64 = 600;
 
 impl PostureClock {
     pub fn new(now: DateTime<Utc>, stretch_index: usize) -> PostureClock {
@@ -496,12 +498,18 @@ impl PostureClock {
                 .take()
                 .is_some_and(|start| now - start >= Duration::minutes(GAME_BREAK_MINUTES))
         };
+        // 離席の判定:小窓が無ければ 3 分、自動で出た「站起来了吗?」が開いたままなら 10 分(答えずに席を立った:
+        // 戻ってから古い問いと水増しした分数を見せない。Mac と同じ)。自分で開いた問いと、立っているあいだは数えない
+        let away_after = match (self.prompt, self.pinned) {
+            (None, _) => Some(IDLE_RESET_SECONDS),
+            (Some(Prompt::AskStand), false) => Some(AWAY_WITH_PROMPT_SECONDS),
+            _ => None,
+        };
         if long_game && self.posture == Posture::Sitting {
             self.remind_at = Some(now);
         } else if self.posture == Posture::Sitting
-            && self.prompt.is_none()
             && !suppressed
-            && idle_seconds >= IDLE_RESET_SECONDS
+            && away_after.is_some_and(|limit| idle_seconds >= limit)
         {
             // 座りっぱなしの計測だけ離席でリセット(立ち作業の残り時間は巻き戻さない)
             self.reset(now);
@@ -526,6 +534,19 @@ impl PostureClock {
         }
         self.prompt = desired;
         true
+    }
+
+    /// スリープから覚めた(tick が長く止まっていた):座り直したものとして計り直し、古い小窓は閉じる。
+    /// 眠っていた時間を座っていた時間に数えない(朝いちばんに「站起来了吗?」を出さない)。小窓が消えるなら true
+    pub fn wake(&mut self, now: DateTime<Utc>) -> bool {
+        let had_prompt = self.prompt.is_some();
+        self.posture = Posture::Sitting;
+        self.reset(now);
+        self.guide_dismissed = false;
+        self.pinned = false;
+        self.prompt = None;
+        self.game_since = None;
+        had_prompt
     }
 
     /// 「站起来了」:立ち作業の残り時間と拉伸の手順を出す
@@ -553,8 +574,14 @@ impl PostureClock {
     }
 
     /// 「15 分后」「再 5 分钟」
-    pub fn snooze(&mut self, now: DateTime<Utc>, minutes: i64) {
-        self.remind_at = Some(now + Duration::minutes(minutes));
+    /// 「15 分钟后」「再站 5 分钟」。自分で開いた(時間前の)問いからなら、計画の時刻より早めない
+    pub fn snooze(&mut self, now: DateTime<Utc>, minutes: i64, settings: &PostureSettings) {
+        let later = now + Duration::minutes(minutes);
+        self.remind_at = Some(if self.pinned {
+            later.max(self.due_at(settings))
+        } else {
+            later
+        });
         self.pinned = false;
         self.prompt = None;
     }
@@ -695,10 +722,23 @@ mod tests {
 
         let scalene = steps(&list[0]);
         let names: Vec<&str> = scalene.iter().map(|x| x.name.as_str()).collect();
-        assert_eq!(names, vec!["第 1 步", "第 2 步", "第 3 步", "第 4 步"]);
+        assert_eq!(
+            names,
+            vec!["第 1 步", "第 2 步", "第 3 步", "第 4 步", "第 5 步"]
+        );
         assert!(scalene.iter().all(|x| x.pose == "neck-side"));
         let metas: Vec<Option<&str>> = scalene.iter().map(|x| x.meta.as_deref()).collect();
-        assert_eq!(metas, vec![None, Some("10 秒"), Some("10 秒"), None]);
+        assert_eq!(
+            metas,
+            vec![
+                None,
+                Some("10 秒"),
+                Some("10 秒"),
+                Some("10 秒"),
+                Some("10 秒")
+            ],
+            "both sides of the scalene stretch carry their own times"
+        );
         assert!(!shows_frieze(&scalene));
         assert_eq!(heading(&list[0], &scalene, 0), "斜角肌拉伸");
         assert_eq!(steps(&list[1])[2].meta.as_deref(), Some("5 秒 · 12 次"));
@@ -808,9 +848,9 @@ mod tests {
             "next time starts over from the first stretch"
         );
         c.move_step(5);
-        assert_eq!(c.step, 3, "clamped to done");
+        assert_eq!(c.step, 2, "clamped to done (走一走 has 2 steps)");
         c.move_step(-1);
-        assert_eq!(c.step, 2);
+        assert_eq!(c.step, 1);
         c.close_prompt();
         assert!(c.guide_dismissed);
         assert!(
@@ -821,7 +861,7 @@ mod tests {
         let sit = ask + Duration::minutes(1 + settings.stand_minutes);
         assert!(c.check(sit, &settings, 0, false));
         assert_eq!(c.prompt, Some(Prompt::AskSit));
-        c.snooze(sit, 5);
+        c.snooze(sit, 5, &settings);
         assert_eq!(c.due_at(&settings), sit + Duration::minutes(5));
         assert!(!c.check(sit + Duration::minutes(4), &settings, 0, false));
         assert!(c.check(sit + Duration::minutes(5), &settings, 0, false));
@@ -869,5 +909,84 @@ mod tests {
         assert_eq!(e.prompt, None);
         assert!(e.check(t0 + Duration::minutes(2), &settings, 0, false));
         assert_eq!(e.prompt, Some(Prompt::Standing));
+    }
+
+    #[test]
+    fn leaving_the_desk_with_the_stand_prompt_open_closes_it_after_ten_minutes() {
+        let settings = PostureSettings::default();
+        let t0 = tokyo(2026, 10, 1, 10, 0, 0);
+        let mut c = PostureClock::new(t0, 0);
+        let due = t0 + Duration::minutes(settings.sit_minutes);
+        assert!(c.check(due, &settings, 60, false));
+        assert_eq!(c.prompt, Some(Prompt::AskStand));
+        // 3 分では閉じない(答える時間)。10 分無操作で席を外したとみなし、閉じて計り直す
+        assert!(!c.check(due + Duration::minutes(4), &settings, 240, false));
+        assert_eq!(c.prompt, Some(Prompt::AskStand));
+        let back = due + Duration::minutes(10);
+        assert!(
+            c.check(back, &settings, 600, false),
+            "the stale prompt closes"
+        );
+        assert_eq!((c.prompt, c.since), (None, back));
+        // 自分で開いた問いは離席で閉じない
+        c.open_prompt(&settings);
+        assert!(!c.check(back + Duration::minutes(20), &settings, 1200, false));
+        assert_eq!(c.prompt, Some(Prompt::AskStand));
+        // 自分で開いた問いからの「15 分钟后」は計画(30 分)より早めない
+        c.snooze(back + Duration::minutes(2), 15, &settings);
+        assert_eq!(c.due_at(&settings), back + Duration::minutes(30));
+    }
+
+    #[test]
+    fn waking_from_sleep_starts_a_fresh_sit_and_drops_the_prompt() {
+        let settings = PostureSettings::default();
+        let t0 = tokyo(2026, 10, 1, 18, 0, 0);
+        let mut c = PostureClock::new(t0, 0);
+        c.confirm_stood(t0 + Duration::minutes(30), &settings);
+        let morning = tokyo(2026, 10, 2, 9, 0, 0);
+        assert!(c.wake(morning), "the standing guide was up");
+        assert_eq!(
+            (c.posture, c.prompt, c.since),
+            (Posture::Sitting, None, morning)
+        );
+        assert!(
+            !c.check(morning + Duration::seconds(30), &settings, 5, false),
+            "no ask right after waking"
+        );
+        assert!(c.check(morning + Duration::minutes(30), &settings, 5, false));
+        assert_eq!(c.prompt, Some(Prompt::AskStand));
+    }
+
+    #[test]
+    fn default_steps_are_timer_friendly() {
+        use crate::ritual::{duration, SETUP_SECONDS};
+        let list = stretches(DEFAULT_STRETCHES);
+        let seconds = |s: &Stretch| -> Vec<u32> {
+            s.steps
+                .iter()
+                .map(|l| duration(l).unwrap_or(SETUP_SECONDS))
+                .collect()
+        };
+        for s in &list {
+            for (line, secs) in s.steps.iter().zip(seconds(s)) {
+                assert!(
+                    secs >= SETUP_SECONDS,
+                    "{line}: {secs} s is too short to read"
+                );
+            }
+        }
+        // 斜角肌:右側と左側は同じ長さ(構え 10 + 右 10 + 右 20 / 左 10 + 左 20)
+        assert_eq!(seconds(&list[0]), vec![10, 10, 20, 10, 20]);
+        assert_eq!(
+            seconds(&list[2]),
+            vec![10, 70],
+            "breathing: one line per breath cycle"
+        );
+        assert_eq!(seconds(&list[5]), vec![38, 40], "shrugs: one line per rep");
+        assert_eq!(
+            seconds(&list[6]),
+            vec![60, 20],
+            "the walk really lasts a minute"
+        );
     }
 }

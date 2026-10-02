@@ -14,6 +14,8 @@ const s = {
   endsAt: null,
   pausedLeft: null,
   finished: false,
+  /// 今日の分を記録したか(done 画面から戻ってまた終えても二重に数えない)
+  recorded: false,
   streak: 0,
   token: 0,
   timer: null,
@@ -99,7 +101,10 @@ async function finish() {
   if (s.finished) return;
   s.finished = true;
   s.index = s.items.length;
-  s.streak = await call("ritual_done", { strength: s.plan.hasStrength });
+  if (!s.recorded) {
+    s.recorded = true;
+    s.streak = await call("ritual_done", { strength: s.plan.hasStrength });
+  }
   render();
 }
 
@@ -124,9 +129,17 @@ function dots(count, index) {
   );
 }
 
+/** いまの手順の残り(ミリ秒) */
+function stepLeft(step) {
+  return s.preparing ? step.duration * 1000 : s.pausedLeft != null ? s.pausedLeft * 1000 : s.endsAt ? s.endsAt - Date.now() : 0;
+}
+
+function timerText(time) {
+  return stencil(time, "timer-black") ?? h("span", { class: "t-time", style: { fontSize: "34px" } }, time);
+}
+
 function stretchCard(step) {
-  const left = s.preparing ? step.duration * 1000 : s.pausedLeft != null ? s.pausedLeft * 1000 : s.endsAt ? s.endsAt - Date.now() : 0;
-  const time = clock(left);
+  const time = clock(stepLeft(step));
   const chip = step.meta ? h("span", { class: "chip" }, step.meta) : null;
   if (chip) slice(chip, first("chip-black-kraft", "chip-black-card")) || (chip.style.background = "var(--black)");
   const card = h(
@@ -141,7 +154,7 @@ function stretchCard(step) {
         "div",
         { class: "col" },
         s.preparing ? h("span", { class: "prep" }, "准备") : null,
-        stencil(time, "timer-black") ?? h("span", { class: "t-time", style: { fontSize: "34px" } }, time),
+        h("span", { class: "time" }, timerText(time)),
         chip,
       ),
     ),
@@ -190,8 +203,9 @@ function doneStage() {
     h(
       "div",
       { class: "row", style: { gap: "10px", alignItems: "baseline" } },
+      h("span", { class: "t-button" }, "连续"),
       stencil(String(s.streak), "mid-teal") ?? h("span", { class: "t-title", style: { color: "var(--teal)" } }, s.streak),
-      h("span", { class: "t-button" }, "天连续"),
+      h("span", { class: "t-button" }, "天"),
     ),
     h("span", { class: "t-body", style: { color: "var(--text-2)" } }, "睡前躺着再做几次腹式呼吸，慢慢让它变成平时的呼吸方式。"),
   );
@@ -213,7 +227,9 @@ function render() {
   }
   $("subtitle").textContent = item
     ? item.type === "video"
-      ? `跟练 ${item.number + 1} / ${videoCount()} · ${item.title}`
+      ? item.title === `跟练 ${item.number + 1}`
+        ? `跟练 ${item.number + 1} / ${videoCount()}`
+        : `跟练 ${item.number + 1} / ${videoCount()} · ${item.title}`
       : `拉伸 ${item.stretchNumber + 1} / ${s.plan.stretchNames.length} · ${item.name}`
     : "做完了";
   renderControls(item);
@@ -286,9 +302,12 @@ async function init() {
   s.streak = s.plan.streak;
   bindKeys();
   enter(0);
-  // 残り秒を描き直す(拉伸のあいだだけ)
+  // 残り秒の数字だけ差し替える(画面を作り直すと、押している途中のボタンが消えて押せない)
   setInterval(() => {
-    if (s.items[s.index]?.type === "stretch") render();
+    const item = s.items[s.index];
+    if (item?.type !== "stretch") return;
+    const holder = $("stage").querySelector(".time");
+    if (holder) clear(holder, timerText(clock(stepLeft(item))));
   }, 250);
 }
 

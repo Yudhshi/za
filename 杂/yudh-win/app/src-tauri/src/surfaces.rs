@@ -66,7 +66,12 @@ fn remember_position(
     let handle = app.clone();
     let this = window.clone();
     window.on_window_event(move |event| match event {
-        WindowEvent::Moved(pos) if created.elapsed() > Duration::from_millis(800) => {
+        // 最小化(Win+D など)で (-32000, -32000) に動かされた分は覚えない
+        WindowEvent::Moved(pos)
+            if created.elapsed() > Duration::from_millis(800)
+                && pos.x > -32000
+                && pos.y > -32000 =>
+        {
             let scale = this.scale_factor().unwrap_or(1.0);
             let logical = pos.to_logical::<f64>(scale);
             if let Ok(mut inner) = handle.state::<AppState>().inner.lock() {
@@ -93,7 +98,7 @@ fn quiet(app: &AppHandle) -> bool {
         .unwrap_or(false)
 }
 
-/// ゲームが始まった / 終わった:始まったら開いている窓を全部閉じる。トレイの説明を変える
+/// ゲームが始まった / 終わった:始まったら開いている窓を全部閉じる。トレイの説明とメニューを変える
 pub fn quiet_changed(app: &AppHandle, game: Option<&str>) {
     if game.is_some() {
         for label in ["panel", "posture", "ritual"] {
@@ -109,12 +114,54 @@ pub fn quiet_changed(app: &AppHandle, game: Option<&str>) {
         };
         let _ = tray.set_tooltip(Some(tip));
     }
+    refresh_tray_menu(app);
 }
 
-/// トレイから:開いていれば閉じる、閉じていれば開く
+/// トレイのメニューの文字(看拉伸 / 站起来了吗?、ゲーム中)を今の状態に合わせる。変わったときだけ作り直す
+pub fn refresh_tray_menu(app: &AppHandle) {
+    let state = app.state::<AppState>();
+    let wanted = match state.inner.lock() {
+        Ok(inner) => (
+            inner.posture.posture == yudh_core::posture::Posture::Standing,
+            inner.quiet.clone(),
+        ),
+        Err(_) => return,
+    };
+    let stale = state
+        .tray_state
+        .lock()
+        .map(|current| current.as_ref() != Some(&wanted))
+        .unwrap_or(false);
+    if !stale {
+        return;
+    }
+    let Some(tray) = app.tray_by_id("yudh") else {
+        return;
+    };
+    if let Ok(menu) = crate::tray_menu(app, wanted.0, wanted.1.as_deref()) {
+        if tray.set_menu(Some(menu)).is_ok() {
+            if let Ok(mut current) = state.tray_state.lock() {
+                *current = Some(wanted);
+            }
+        }
+    }
+}
+
+/// トレイから:開いていれば閉じる、閉じていれば開く。
+/// アイコンを押した瞬間(ボタンを離す前)に面板はフォーカスを失って閉じるので、閉じた直後のクリックでは開き直さない
 pub fn toggle_panel(app: &AppHandle) {
     if let Some(window) = app.get_webview_window("panel") {
         let _ = window.close();
+        return;
+    }
+    let just_closed = app
+        .state::<AppState>()
+        .blur_closed
+        .lock()
+        .ok()
+        .and_then(|t| *t)
+        .is_some_and(|t| t.elapsed() < Duration::from_millis(500));
+    if just_closed {
         return;
     }
     open_panel(app);
@@ -169,6 +216,9 @@ pub fn open_panel(app: &AppHandle) {
                 .unwrap_or(false);
             if !picking {
                 if let Some(panel) = handle.get_webview_window("panel") {
+                    if let Ok(mut t) = handle.state::<AppState>().blur_closed.lock() {
+                        *t = Some(Instant::now());
+                    }
                     let _ = panel.close();
                 }
             }
@@ -198,6 +248,7 @@ pub fn sync_posture(app: &AppHandle) {
         .lock()
         .map(|inner| inner.posture.prompt.is_some())
         .unwrap_or(false);
+    refresh_tray_menu(app);
     let existing = app.get_webview_window("posture");
     match (wanted, existing) {
         (true, Some(_)) => {

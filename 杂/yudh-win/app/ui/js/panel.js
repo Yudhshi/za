@@ -146,7 +146,7 @@ async function englishView() {
   if (!p.configured) {
     return emptyState(
       "先选同步文件夹",
-      "选 Mac 同一个同步文件夹（OneDrive 等）。单词进度两边共用。",
+      "选和 Mac 同一个同步文件夹（OneDrive 等）。单词进度两边共用。",
       button("去设置", { kind: "frame", onClick: () => switchTab("settings") }),
     );
   }
@@ -528,17 +528,32 @@ function reveal() {
   rerenderStage();
 }
 
+// 同じ卡を二度評価しない(キーの長押し・二度押し)
+let answering = false;
+
 async function rate(rating) {
-  const c = state.card;
-  state.panel.stats = await call("english_rate", { id: c.id, kind: c.kind, rating });
-  state.undoable = true;
-  await nextCard();
+  if (answering) return;
+  answering = true;
+  try {
+    const c = state.card;
+    state.panel.stats = await call("english_rate", { id: c.id, kind: c.kind, rating });
+    state.undoable = true;
+    await nextCard();
+  } finally {
+    answering = false;
+  }
 }
 
 async function markKnown() {
-  state.panel.stats = await call("english_known", { id: state.card.id });
-  state.undoable = true;
-  await nextCard();
+  if (answering) return;
+  answering = true;
+  try {
+    state.panel.stats = await call("english_known", { id: state.card.id });
+    state.undoable = true;
+    await nextCard();
+  } finally {
+    answering = false;
+  }
 }
 
 async function choose(i) {
@@ -616,10 +631,21 @@ async function settingsView() {
     await call("settings_save", { patch });
     Object.assign(state.settings, patch);
   };
+  // 打っている途中も少し待って保存する(面板はフォーカスを失うと閉じるので、blur を待っていては間に合わない)
   const text = (key, { area = false, rows } = {}) => {
     const el = h(area ? "textarea" : "input", area ? { rows } : { type: "text" });
     el.value = s[key] ?? "";
-    el.addEventListener("change", () => save({ [key]: el.value }));
+    let pending = null;
+    const flush = () => {
+      clearTimeout(pending);
+      pending = null;
+      if (state.settings[key] !== el.value) save({ [key]: el.value });
+    };
+    el.addEventListener("input", () => {
+      clearTimeout(pending);
+      pending = setTimeout(flush, 400);
+    });
+    el.addEventListener("change", flush);
     return el;
   };
   const check = (key, label) => {
@@ -693,9 +719,9 @@ async function settingsView() {
     h("h3", {}, "坐站计划（已经帮你定好，不用调）"),
     line(`坐 ${s.sitMinutes} 分钟 → 站 ${s.standMinutes} 分钟，一直循环`),
     note("每次站起来：先 3 次腹式呼吸，再做 1 个拉伸，每一步到时间自动往下走，不用点。一天 8 小时大约站 4 小时；每 30 分钟换一次姿势，比站多久更能放松斜角肌，也避免站太久。站着时把桌子升到手肘 90°。"),
-    note("全屏游戏时不弹；连续玩 60 分钟以上，退出全屏马上问一次。坐着 3 分钟没操作当作离开座位，重新计时。"),
+    note("全屏游戏时不弹；连续玩 60 分钟以上，退出全屏马上问一次。坐着 3 分钟没操作当作离开座位，重新计时；「站起来了吗？」弹出后 10 分钟没回应也没操作，同样算离开，小窗自己关。电脑睡眠后醒来，从头算。"),
     h("h3", {}, "泡完澡后的日课"),
-    note("托盘右键「泡完澡了」：跟练视频 → 站着拉伸 → 隔天加肩袖力量 → 地上拉伸和腹式呼吸，全部按时间自动往下走。泡完热水澡先喝点水，从地上站起来慢一点。夜里疼醒、抬手没力气、手发麻，或不舒服超过 6 周，请去看医生或理疗师。"),
+    note("托盘右键「泡完澡了」：跟练视频 → 站着拉伸 → 隔天加肩袖力量 → 地上拉伸和腹式呼吸。视频看完点一下「下一个」，之后的拉伸和力量全部按时间自动往下走。泡完热水澡先喝点水，从地上站起来慢一点。夜里疼醒、抬手没力气、手发麻，或不舒服超过 6 周，请去看医生或理疗师。"),
     h(
       "details",
       {},
@@ -735,6 +761,8 @@ function voiceSection() {
 
 function bindKeys() {
   document.addEventListener("keydown", (e) => {
+    // 押しっぱなしの繰り返しは受けない(Space の長押しで何枚も評価しない)
+    if (e.repeat) return;
     // Ctrl+R / F5 で画面を読み直さない(WebView2 の既定の動き)。听写では Ctrl+R が「播放」
     if (e.key === "F5" || (e.ctrlKey && e.key.toLowerCase() === "r")) {
       e.preventDefault();

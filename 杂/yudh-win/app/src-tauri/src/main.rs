@@ -9,7 +9,7 @@ mod surfaces;
 
 use std::path::PathBuf;
 use std::sync::Mutex;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use chrono::{DateTime, Utc};
 use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
@@ -42,6 +42,10 @@ pub struct Inner {
 pub struct AppState {
     pub inner: Mutex<Inner>,
     pub settings_path: PathBuf,
+    /// 面板がフォーカスを失って閉じた時刻:トレイのアイコンを押して閉じたときに、ボタンを離した知らせでまた開かないように
+    pub blur_closed: Mutex<Option<Instant>>,
+    /// いまトレイのメニューに出している状態(立っているか、ゲーム中か)。変わったときだけ作り直す
+    pub tray_state: Mutex<Option<(bool, Option<String>)>>,
 }
 
 impl AppState {
@@ -84,6 +88,8 @@ fn main() {
             app.manage(AppState {
                 inner: Mutex::new(inner),
                 settings_path,
+                blur_closed: Mutex::new(None),
+                tray_state: Mutex::new(None),
             });
             apply_autostart(app.handle());
             build_tray(app.handle())?;
@@ -107,6 +113,7 @@ fn main() {
             commands::settings_save,
             commands::pick_folder,
             commands::open_surface,
+            commands::open_url,
         ])
         .build(tauri::generate_context!())
         .expect("Yudh を起動できない")
@@ -139,17 +146,44 @@ pub fn apply_autostart(app: &AppHandle) {
     }
 }
 
-fn build_tray(app: &AppHandle) -> tauri::Result<()> {
-    let menu = Menu::with_items(
+/// トレイのメニュー。立っているあいだは「看拉伸」(面板の底と同じ言い方)、ゲーム中は 3 つとも押せない
+pub fn tray_menu(
+    app: &AppHandle,
+    standing: bool,
+    game: Option<&str>,
+) -> tauri::Result<tauri::menu::Menu<tauri::Wry>> {
+    let on = game.is_none();
+    let panel_label = match game {
+        Some(name) => format!("游戏中，已暂停（{name}）"),
+        None => "打开面板".to_string(),
+    };
+    Menu::with_items(
         app,
         &[
-            &MenuItem::with_id(app, "panel", "打开面板", true, None::<&str>)?,
-            &MenuItem::with_id(app, "ritual", "泡完澡了（日课）", true, None::<&str>)?,
-            &MenuItem::with_id(app, "posture", "站起来了吗？", true, None::<&str>)?,
+            &MenuItem::with_id(app, "panel", panel_label, on, None::<&str>)?,
+            &MenuItem::with_id(app, "ritual", "泡完澡了", on, None::<&str>)?,
+            &MenuItem::with_id(
+                app,
+                "posture",
+                if standing {
+                    "看拉伸"
+                } else {
+                    "站起来了吗？"
+                },
+                on,
+                None::<&str>,
+            )?,
             &PredefinedMenuItem::separator(app)?,
             &MenuItem::with_id(app, "quit", "退出 Yudh", true, None::<&str>)?,
         ],
-    )?;
+    )
+}
+
+fn build_tray(app: &AppHandle) -> tauri::Result<()> {
+    let menu = tray_menu(app, false, None)?;
+    if let Ok(mut state) = app.state::<AppState>().tray_state.lock() {
+        *state = Some((false, None));
+    }
     let mut tray = TrayIconBuilder::with_id("yudh")
         .tooltip("Yudh")
         .menu(&menu)
@@ -203,6 +237,7 @@ fn tray_icon() -> Option<tauri::image::Image<'static>> {
 /// 名単のゲーム(AION2 など)が動いているあいだは「完全に安静」:開いている窓を閉じ、窓を作らず、
 /// 無操作・全画面も問い合わせない(ゲーム中として計時だけ続け、抜けたら長いゲームの規則で尋ねる)
 fn ticker(app: AppHandle) {
+    let mut last_tick = Utc::now();
     loop {
         let list = app
             .state::<AppState>()
@@ -218,6 +253,14 @@ fn ticker(app: AppHandle) {
             let left = game.is_none() && inner.quiet.is_some();
             inner.quiet = game.clone();
             let settings = inner.settings.posture.clone();
+            // スリープから覚めた(2 分以上 tick が止まっていた):眠っていた時間を座っていた時間に数えない
+            let now = Utc::now();
+            let woke = now - last_tick > chrono::Duration::minutes(2);
+            last_tick = now;
+            if woke {
+                inner.posture.wake(now);
+                inner.breath_started = None;
+            }
             let changed = if game.is_some() {
                 inner.posture.check(Utc::now(), &settings, 0, true)
             } else {
@@ -228,7 +271,7 @@ fn ticker(app: AppHandle) {
             if changed && inner.posture.prompt.is_none() {
                 inner.breath_started = None;
             }
-            (changed, entered, left)
+            (changed || woke, entered, left)
         };
         if entered || left {
             surfaces::quiet_changed(&app, game.as_deref());

@@ -75,6 +75,32 @@ pub fn running_process_names() -> Vec<String> {
     Vec::new()
 }
 
+/// 既定のブラウザで URL を開く(ShellExecute "open")
+#[cfg(windows)]
+pub fn open_in_browser(url: &str) {
+    use windows_sys::Win32::UI::Shell::ShellExecuteW;
+    use windows_sys::Win32::UI::WindowsAndMessaging::SW_SHOWNORMAL;
+    let wide = |s: &str| -> Vec<u16> { s.encode_utf16().chain(std::iter::once(0)).collect() };
+    let verb = wide("open");
+    let target = wide(url);
+    // SAFETY: 2 つの文字列は呼び出しのあいだ生きている NUL 終端の UTF-16。ほかはヌル
+    unsafe {
+        ShellExecuteW(
+            std::ptr::null_mut(),
+            verb.as_ptr(),
+            target.as_ptr(),
+            std::ptr::null(),
+            std::ptr::null(),
+            SW_SHOWNORMAL,
+        );
+    }
+}
+
+#[cfg(not(windows))]
+pub fn open_in_browser(url: &str) {
+    let _ = std::process::Command::new("xdg-open").arg(url).spawn();
+}
+
 #[cfg(not(windows))]
 pub fn idle_seconds() -> u64 {
     0

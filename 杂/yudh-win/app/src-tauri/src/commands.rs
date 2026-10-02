@@ -283,8 +283,10 @@ pub struct PostureView {
     due_at: i64,
     stretch: Stretch,
     steps: Vec<Step>,
-    /// 各手順の秒数(秒・回数から。読めなければ 10 秒)。時間が来たら自動で次へ進む(押さなくていい)
+    /// 各手順の秒数(秒・回数から。読めなければ 10 秒、どの手順も 10 秒より短くしない)。時間が来たら自動で次へ進む
     durations: Vec<u32>,
+    /// 自分で開いた「站起来了吗?」(時間前。閉じるだけの指令も出す)
+    pinned: bool,
     step: usize,
     heading: String,
     frieze: bool,
@@ -309,8 +311,13 @@ fn posture_view(inner: &Inner) -> PostureView {
             .stretch
             .steps
             .iter()
-            .map(|line| ritual::duration(line).unwrap_or(ritual::SETUP_SECONDS))
+            .map(|line| {
+                ritual::duration(line)
+                    .unwrap_or(ritual::SETUP_SECONDS)
+                    .max(ritual::SETUP_SECONDS)
+            })
             .collect(),
+        pinned: clock.pinned,
         stretch: clock.stretch.clone(),
         steps,
         step,
@@ -346,11 +353,11 @@ pub fn apply_posture(app: &AppHandle, action: &str) -> PostureView {
                 inner.breath_started = None;
             }
             "snooze15" => {
-                inner.posture.snooze(now, 15);
+                inner.posture.snooze(now, 15, &settings);
                 inner.breath_started = None;
             }
             "snooze5" => {
-                inner.posture.snooze(now, 5);
+                inner.posture.snooze(now, 5, &settings);
                 inner.breath_started = None;
             }
             "close" => {
@@ -579,15 +586,33 @@ pub async fn pick_folder(app: AppHandle) -> Option<String> {
         inner.picking = true;
     }
     let dialog = app.clone();
-    let picked =
-        tauri::async_runtime::spawn_blocking(move || dialog.dialog().file().blocking_pick_folder())
-            .await
-            .ok()
-            .flatten();
+    let picked = tauri::async_runtime::spawn_blocking(move || {
+        // 面板を親にする:面板は最前面なので、親にしないとダイアログの下の端が面板に隠れる
+        let mut builder = dialog.dialog().file();
+        if let Some(panel) = dialog.get_webview_window("panel") {
+            builder = builder.set_parent(&panel);
+        }
+        builder.blocking_pick_folder()
+    })
+    .await
+    .ok()
+    .flatten();
     if let Ok(mut inner) = app.state::<AppState>().inner.lock() {
         inner.picking = false;
     }
     picked.map(|path| path.to_string())
+}
+
+/// 既定のブラウザで開く(会議のリンク・動画のページ)。WebView2 の window.open は窓を作る手当てが無いと何も起きない。
+/// http(s) だけ(ファイルやプログラムを開かせない)
+#[tauri::command]
+pub fn open_url(url: String) -> Result<(), String> {
+    let trimmed = url.trim();
+    if !(trimmed.starts_with("https://") || trimmed.starts_with("http://")) {
+        return Err("only http(s) links are opened".into());
+    }
+    crate::platform::open_in_browser(trimmed);
+    Ok(())
 }
 
 #[derive(Deserialize)]
