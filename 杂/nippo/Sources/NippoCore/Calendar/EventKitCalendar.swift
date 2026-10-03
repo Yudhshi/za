@@ -9,9 +9,19 @@ public final class EventKitCalendar: CalendarProviding {
         self.calendar = calendar
     }
 
+    public var isAuthorized: Bool {
+        EKEventStore.authorizationStatus(for: .event) == .fullAccess
+    }
+
     public func requestAccess() async -> Bool {
         if EKEventStore.authorizationStatus(for: .event) == .fullAccess { return true }
         return (try? await store.requestFullAccessToEvents()) ?? false
+    }
+
+    /// Google のアカウントは押し通知が無く定期の取得だけなので、こちらからも促す(古くなければ何もしない)
+    public func refreshSources() {
+        guard isAuthorized else { return }
+        store.refreshSourcesIfNecessary()
     }
 
     public func events(on day: Date) -> [MeetingEvent] {
@@ -27,6 +37,8 @@ public final class EventKitCalendar: CalendarProviding {
             .filter { e in
                 // 終日の予定は見ない(「休み」と書いてあっても休みとは扱わない)
                 if e.isAllDay { return false }
+                // 時刻つきの多日程(出張・研修 9:00–翌々日 18:00)も終日と同じ扱い:24 時間以上は会議ではない
+                if e.endDate.timeIntervalSince(e.startDate) >= 24 * 3600 { return false }
                 // キャンセル済み・自分が欠席回答した会議は一覧/リマインドから除外
                 if e.status == .canceled { return false }
                 if let me = e.attendees?.first(where: { $0.isCurrentUser }),
@@ -39,7 +51,7 @@ public final class EventKitCalendar: CalendarProviding {
                 // 開始時刻を混ぜてオカレンス単位の安定 id にする(ForEach とリマインド重複排除の両方が id に依存)
                 MeetingEvent(
                     id: "\(e.eventIdentifier ?? "no-id")-\(e.startDate.timeIntervalSince1970)",
-                    title: e.title ?? "(無題)",
+                    title: e.title ?? "（无标题）",
                     start: e.startDate,
                     end: e.endDate,
                     attendees: (e.attendees ?? []).compactMap(\.name),

@@ -29,6 +29,6 @@ public enum WorkStart {
     public static func durationText(from start: Date, to now: Date) -> String {
         let minutes = max(0, Int(now.timeIntervalSince(start) / 60))
         let h = minutes / 60, m = minutes % 60
-        return h == 0 ? "\(m)分" : "\(h)時間\(m)分"
+        return h == 0 ? "\(m) 分钟" : "\(h) 小时 \(m) 分"
     }
 }

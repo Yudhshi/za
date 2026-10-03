@@ -1,0 +1,913 @@
+/* 面板 = 夜の混凝土の墙(520 幅。窓は焼いた縁のはみ出しの分だけ広い) */
+
+.panel {
+  position: relative;
+  isolation: isolate;
+  width: 520px;
+  height: 732px;
+  margin: 6px 12px 22px 12px;
+  padding: 22px 24px 18px;
+  display: flex;
+  flex-direction: column;
+}
+
+/* 最初は細い帯:姿勢の札・今日の一行・打开。「打开」で全体に。帯は焼いた黒い帯(strip-black-night)、全体は面板の枠 */
+.panel.strip-mode {
+  height: 64px;
+  padding: 0 18px 0 16px;
+  justify-content: center;
+}
+
+.panel.strip-mode > .header,
+.panel.strip-mode > .seam,
+.panel.strip-mode > .view,
+.panel:not(.strip-mode) > .strip {
+  display: none;
+}
+
+.strip {
+  position: relative;
+  isolation: isolate;
+  height: 50px;
+  padding: 0 14px 0 10px;
+  gap: 14px;
+  color: var(--text-2);
+  font-size: 12.5px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.strip.fallback {
+  background: var(--black);
+  border-radius: 6px;
+}
+
+.strip .status {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.strip .status b,
+.posture-line .big {
+  color: var(--text);
+  font-weight: 800;
+}
+
+.strip .open {
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+/* 帯 → 全体:帯の黒い帯は 120 ms で消え、面板の枠は上へ 200 ms で広がる */
+.panel.expanding > .paint {
+  animation: frame-in 0.2s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  transform-origin: 50% 100%;
+}
+
+@keyframes frame-in {
+  from {
+    transform: scaleY(0.12);
+    opacity: 0;
+  }
+}
+
+/* 「坐 | 站」の札(混凝土の上。牛皮纸の上は posture.html) */
+.posture-chip {
+  display: inline-flex;
+  align-items: stretch;
+  height: 26px;
+  padding: 0;
+  font-size: 13px;
+  font-weight: 900;
+  color: var(--text-2);
+  flex: none;
+}
+
+.posture-chip .half {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 10px;
+  min-width: 34px;
+}
+
+.posture-chip .half.on {
+  color: var(--white);
+}
+
+.posture-chip:hover .half:not(.on) {
+  color: var(--text);
+}
+
+.wall {
+  position: absolute;
+  inset: 0;
+  z-index: -2;
+  border-radius: 20px;
+  overflow: hidden;
+  background-color: var(--surface);
+}
+
+.wall > .edge {
+  position: absolute;
+  inset: 0;
+}
+
+.header {
+  height: 40px;
+  gap: 14px;
+}
+
+.weekday {
+  display: inline-flex;
+  align-items: center;
+  min-height: 38px;
+}
+
+.weekday .fallback {
+  font-family: "Archivo", sans-serif;
+  font-weight: 900;
+  font-stretch: 112%;
+  font-size: 31px;
+  letter-spacing: 0.02em;
+  color: var(--white);
+}
+
+.tabs {
+  gap: 4px;
+}
+
+.tab {
+  height: 32px;
+  padding: 0 12px;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text-2);
+  white-space: nowrap;
+}
+
+.tab:hover {
+  color: var(--text);
+}
+
+.tab.on {
+  color: var(--black);
+}
+
+.tab .badge {
+  font-family: var(--mono);
+  font-weight: 700;
+  font-size: 12px;
+  margin-left: 6px;
+}
+
+.seam {
+  height: 18px;
+  flex: none;
+}
+
+.view {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  margin: 0 -24px;
+  padding: 12px 24px 16px;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(244, 243, 238, 0.25) transparent;
+}
+
+/* 今天(家):姿勢の一行、一日の胶带、呼吸・英語・日课・明天の一行ずつ */
+.today {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding-top: 4px;
+}
+
+.posture-line {
+  gap: 12px;
+}
+
+.posture-line .big {
+  font-size: 20px;
+}
+
+.posture-line .next {
+  white-space: nowrap;
+}
+
+.today .total {
+  margin-top: -6px;
+}
+
+.today-row {
+  gap: 12px;
+  min-height: 34px;
+  padding: 6px 0;
+  border-top: 1px solid rgba(244, 243, 238, 0.08);
+}
+
+.today-row .label {
+  width: 64px;
+  flex: none;
+}
+
+.today-row .value {
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.breath-dots {
+  gap: 3px;
+}
+
+.breath-dots .dot {
+  width: 10px;
+  height: 14px;
+  background: var(--teal);
+}
+
+
+
+/* 初回:計画の説明(同期フォルダより先) */
+.welcome {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 18px 4px 8px;
+}
+
+.welcome .big {
+  font-size: 26px;
+  font-weight: 900;
+  line-height: 1.25;
+}
+
+.welcome .body {
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.6;
+}
+
+.welcome .body em {
+  font-style: normal;
+  color: var(--teal);
+}
+
+.welcome .aside {
+  color: var(--text-2);
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.55;
+}
+
+/* 英語 */
+
+.modes {
+  gap: 4px;
+  margin-bottom: 14px;
+}
+
+.modes .summary {
+  margin-left: auto;
+}
+
+.stage {
+  display: flex;
+  gap: 16px;
+  align-items: flex-start;
+}
+
+.card {
+  width: 308px;
+  min-height: 380px;
+  padding: 22px 22px 20px;
+  color: var(--card-text);
+  flex: none;
+}
+
+.card.short {
+  min-height: 236px;
+}
+
+.card.fallback {
+  background: var(--white);
+}
+
+.tags {
+  gap: 8px;
+  height: 22px;
+}
+
+.tag {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 22px;
+  min-width: 40px;
+  padding: 0 8px;
+  font-size: 12.5px;
+  font-weight: 900;
+  white-space: nowrap;
+}
+
+.tag.black {
+  color: var(--white);
+}
+
+.tag.orange,
+.tag.frame {
+  color: var(--black);
+}
+
+.word {
+  margin-top: 10px;
+  font-family: "Archivo", sans-serif;
+  font-weight: 800;
+  font-size: 56px;
+  line-height: 1.02;
+  letter-spacing: -0.01em;
+  overflow-wrap: anywhere;
+}
+
+.phonetic {
+  gap: 8px;
+  margin-top: 4px;
+  font-family: "Segoe UI", "Archivo", sans-serif;
+  font-size: 17px;
+  font-weight: 500;
+  color: var(--card-text-2);
+}
+
+.ink-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  color: var(--card-text);
+}
+
+.ink-button:hover {
+  color: var(--black);
+  background: rgba(22, 22, 21, 0.08);
+}
+
+.history {
+  gap: 4px;
+  margin-top: 14px;
+  min-height: 14px;
+}
+
+.rule {
+  margin: 16px -4px 0;
+}
+
+.meaning {
+  margin-top: 12px;
+}
+
+.meaning .label {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--card-text-2);
+}
+
+.meaning .text {
+  font-size: 32px;
+  font-weight: 900;
+  letter-spacing: 0.06em;
+  line-height: 1.2;
+}
+
+.meaning .text.long {
+  font-size: 20px;
+  letter-spacing: 0;
+}
+
+.example {
+  margin-top: 10px;
+  font-family: "Archivo", sans-serif;
+  font-style: italic;
+  font-weight: 500;
+  font-size: 16px;
+  line-height: 1.4;
+}
+
+.example mark {
+  background: none;
+  color: inherit;
+  box-shadow: inset 0 -0.42em 0 rgba(18, 233, 211, 0.55);
+}
+
+.redaction {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+.column {
+  width: 148px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding-top: 4px;
+}
+
+.board {
+  display: grid;
+  grid-template-columns: repeat(4, 30px);
+  gap: 6px;
+}
+
+.board .cell {
+  width: 30px;
+  height: 30px;
+}
+
+.count {
+  font-family: "Archivo", sans-serif;
+  font-weight: 900;
+  font-stretch: 104%;
+  font-size: 34px;
+  line-height: 1;
+  color: var(--text);
+}
+
+.count small {
+  font-size: 15px;
+  color: var(--text-2);
+  margin-left: 2px;
+}
+
+.actions {
+  margin-top: 20px;
+  gap: 8px;
+}
+
+.rate {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  width: 112px;
+  height: 52px;
+  color: var(--white);
+  font-size: 15px;
+  font-weight: 900;
+}
+
+.rate .key {
+  font-family: var(--mono);
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-2);
+}
+
+.rate .swatch {
+  display: inline-flex;
+  padding: 3px;
+}
+
+.options {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+.option {
+  height: 56px;
+  padding: 0 16px;
+  color: var(--white);
+  font-family: "Archivo", "Microsoft YaHei UI", sans-serif;
+  font-size: 17px;
+  font-weight: 800;
+  text-align: left;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.option .key {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--text-2);
+}
+
+.option.right {
+  color: var(--black);
+}
+
+.option.right .key {
+  color: var(--black);
+}
+
+.note {
+  margin-top: 12px;
+  color: var(--text-2);
+  font-size: 12.5px;
+  font-weight: 600;
+  line-height: 1.5;
+}
+
+.empty-state {
+  padding: 48px 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  align-items: flex-start;
+}
+
+.empty-state .title {
+  font-size: 22px;
+  font-weight: 900;
+}
+
+/* 听写(Mac の EngSpell と同じ寸法:再生 44、入力枠 52 高、字の格 20 × 32) */
+
+.play {
+  gap: 12px;
+  margin-top: 14px;
+  padding: 0;
+  color: var(--card-text);
+  text-align: left;
+}
+
+.play-disc {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  flex: none;
+  color: var(--black);
+}
+
+.play-disc > .sprite {
+  position: absolute;
+  inset: 0;
+}
+
+.play-disc .disc {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: var(--orange);
+}
+
+.play-disc .icon {
+  position: relative;
+}
+
+.play-text {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.play-title {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 20px;
+  font-weight: 700;
+}
+
+.play-note {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--card-text-2);
+}
+
+.keycap {
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 600;
+  padding: 1px 5px;
+  border: 1px solid currentColor;
+  color: var(--card-text-2);
+}
+
+.keycap.on-wall {
+  color: var(--text-2);
+}
+
+.spell-label {
+  margin-top: 16px;
+  font-size: 12.5px;
+  font-weight: 600;
+}
+
+.spell-box {
+  display: flex;
+  align-items: center;
+  min-height: 52px;
+  margin-top: 8px;
+  padding: 10px;
+  opacity: 0.6;
+}
+
+.spell-box:focus-within,
+.spell-box.graded {
+  opacity: 1;
+}
+
+.spell-box.fallback {
+  box-shadow: inset 0 0 0 2px var(--card-text);
+}
+
+.spell-box input {
+  width: 100%;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--card-text);
+  font-family: "Archivo", sans-serif;
+  font-size: 20px;
+  font-weight: 600;
+}
+
+.spell-box input::placeholder {
+  color: rgba(42, 41, 38, 0.6);
+  font-family: var(--mixed);
+  font-size: 15px;
+}
+
+.spell-box .dash {
+  font-family: "Archivo", sans-serif;
+  font-size: 20px;
+  color: var(--card-text-2);
+}
+
+.letters {
+  display: flex;
+  flex-wrap: wrap;
+  row-gap: 4px;
+}
+
+.letter {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  font-family: "Archivo", sans-serif;
+  font-weight: 600;
+  line-height: 1;
+  color: var(--card-text);
+}
+
+.letter.under-orange {
+  text-decoration: underline 2px var(--orange);
+}
+
+.letter.under-teal {
+  text-decoration: underline 2px var(--teal);
+}
+
+.spell-answer {
+  margin-top: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.spell-answer .label {
+  font-size: 12.5px;
+  font-weight: 600;
+}
+
+.spell-answer .answer-row {
+  padding-left: 10px;
+  user-select: text;
+}
+
+.spell-answer .gloss {
+  font-size: 13px;
+  font-weight: 600;
+  user-select: text;
+}
+
+/* 明天 */
+
+.meeting {
+  gap: 16px;
+  min-height: 48px;
+  padding: 0 4px;
+  border-bottom: 1px solid rgba(244, 243, 238, 0.08);
+}
+
+.meeting .time {
+  width: 132px;
+  flex: none;
+  font-size: 15px;
+  white-space: nowrap;
+}
+
+.meeting .title {
+  font-size: 15px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* 设置 */
+
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.form h3 {
+  margin: 8px 0 -6px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-2);
+  letter-spacing: 0.08em;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 13.5px;
+  font-weight: 600;
+}
+
+.field .hint {
+  color: var(--text-2);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.5;
+}
+
+.form input[type="text"],
+.form input[type="number"],
+.form textarea {
+  font: inherit;
+  font-size: 13.5px;
+  font-weight: 500;
+  color: var(--text);
+  background: rgba(15, 16, 17, 0.55);
+  border: 1px solid rgba(244, 243, 238, 0.22);
+  padding: 8px 10px;
+  user-select: text;
+}
+
+.form input[type="text"],
+.form textarea {
+  width: 100%;
+}
+
+.form input[type="number"] {
+  width: 110px;
+}
+
+.form textarea {
+  min-height: 120px;
+  resize: vertical;
+  line-height: 1.5;
+}
+
+.form input:focus,
+.form textarea:focus {
+  outline: 2px solid var(--teal);
+  outline-offset: -1px;
+}
+
+.form label.check {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13.5px;
+  font-weight: 600;
+}
+
+.form input[type="checkbox"] {
+  accent-color: var(--teal);
+  width: 16px;
+  height: 16px;
+}
+
+.form details summary {
+  cursor: pointer;
+  color: var(--text-2);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+/* 設定:計画という「もの」の行 */
+.plan {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.plan-line {
+  font-size: 17px;
+  font-weight: 900;
+}
+
+.plan-row {
+  gap: 6px;
+  font-size: 13.5px;
+  font-weight: 600;
+}
+
+.form input.hour {
+  width: 54px;
+  padding: 4px 6px;
+  text-align: center;
+}
+
+/* 拉伸库:一覧 → 行を開いて手順を直す */
+.library-group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 6px 0 10px;
+  border-top: 1px solid rgba(244, 243, 238, 0.08);
+}
+
+.lib-head {
+  min-height: 24px;
+}
+
+.lib-row {
+  gap: 10px;
+  min-height: 46px;
+  padding: 2px 0;
+}
+
+/* 姿勢の絵は黒い墨なので、小さな牛皮纸の上に */
+.lib-pose {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  flex: none;
+  background: var(--kraft);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.lib-pose .sprite {
+  margin: 0 !important;
+}
+
+.lib-name {
+  font-size: 14px;
+  font-weight: 800;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.lib-meta {
+  font-family: var(--mono);
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--text-2);
+  white-space: nowrap;
+}
+
+.lib-item.open {
+  padding-bottom: 8px;
+}
+
+.lib-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 4px 0 0 50px;
+}
+
+.lib-step {
+  gap: 8px;
+}
+
+.lib-step .t-count {
+  width: 18px;
+  flex: none;
+  color: var(--text-2);
+}
+
+.lib-step input[type="text"] {
+  flex: 1;
+  min-width: 0;
+  padding: 5px 8px;
+  font-size: 13px;
+}
