@@ -1,6 +1,6 @@
 // ブラウザで画面を確かめるための見本(Tauri の中では読まない)。
-// posture.html?prompt=standing|sit、&phase=announce|breath|stretch|done、&step=N、&manual=1(トレイから開いた)
-// index.html?welcome=0(初回の説明)、?configured=0
+// posture.html?prompt=standing|sit、&phase=announce|breath|stretch|done、&step=N、&manual=1(トレイから開いた)、&preview=1(试做)
+// index.html?welcome=0(初回の説明)、?configured=0、?pinned=1(常駐の帯)
 
 const q = new URLSearchParams(location.search);
 const now = Date.now();
@@ -32,9 +32,13 @@ const stats = () => ({
 });
 
 const steps = [
-  { pose: "shoulder-blades", name: "夹肩胛骨", text: "保持 5 秒 × 10 次", meta: "5 秒 · 10 次" },
-  { pose: "shoulder-rolls", name: "转肩", text: "向后转 10 次", meta: "10 次" },
-  { pose: "chin-tuck", name: "收下巴", text: "保持 5 秒 × 10 次", meta: "5 秒 · 10 次" },
+  { pose: "neck-side", name: "第 1 步", text: "右手按住右侧锁骨下方固定第一根肋骨，头向左倒拉伸右侧颈部，右肩放松下沉，停 20 秒", meta: "20 秒", section: "斜角肌拉伸", titled: false },
+  { pose: "neck-side", name: "第 2 步", text: "再微微抬头看斜上方，停 20 秒", meta: "20 秒", section: "斜角肌拉伸", titled: false },
+  { pose: "neck-side", name: "第 3 步", text: "换左边：左手按住左侧锁骨下方，头向右倒拉伸左侧颈部，左肩放松下沉，停 20 秒", meta: "20 秒", section: "斜角肌拉伸", titled: false },
+  { pose: "neck-side", name: "第 4 步", text: "再微微抬头看斜上方，停 20 秒", meta: "20 秒", section: "斜角肌拉伸", titled: false },
+  { pose: "shoulder-blades", name: "夹肩胛骨", text: "保持 5 秒 × 10 次", meta: "5 秒 · 10 次", section: "肩颈三步", titled: true },
+  { pose: "shoulder-rolls", name: "转肩", text: "向后转 10 次", meta: "10 次", section: "肩颈三步", titled: true },
+  { pose: "chin-tuck", name: "收下巴", text: "保持 5 秒 × 10 次", meta: "5 秒 · 10 次", section: "肩颈三步", titled: true },
 ];
 
 const handlers = {
@@ -57,11 +61,24 @@ const handlers = {
     posture: "sitting",
     minutesInPosture: 23,
     prompt: null,
+    since: now - 23 * 60 * 1000,
+    dueAt: now + 7 * 60 * 1000,
+    announced: true,
+    resting: false,
+    marks: (() => {
+      const t = new Date();
+      t.setHours(9, 0, 0, 0);
+      const b = t.getTime();
+      const m = (min, kind) => ({ at: b + min * 60000, kind });
+      return [m(0, "sit"), m(30, "stand"), m(60, "sit"), m(75, "away"), m(95, "sit"), m(120, "stand"), m(150, "sit"), m(180, "game"), m(250, "sit"), m(280, "stand"), m(310, "sit")];
+    })(),
     today: "今天站了 1 小时 30 分，换了 3 次姿势",
     todayShort: "站了 1 小时 30 分 · 换了 3 次",
     breathToday: 4,
     ritualStreak: 5,
+    ritualToday: false,
     welcomed: q.get("welcome") !== "0",
+    pinned: q.get("pinned") === "1",
   }),
   english_card: ({ kind }) =>
     kind === "spell"
@@ -109,20 +126,25 @@ const handlers = {
   posture_state: () => {
     const prompt = q.get("prompt") || "standing";
     const phase = q.get("phase") || "stretch";
+    const preview = q.get("preview") === "1";
     // announce:いま言ったところ。breath:一言のあと呼吸 3 秒目。stretch / done:呼吸は済んだ
     const since = phase === "announce" ? now - 1000 : phase === "breath" ? now - 7000 - 3000 : now - 5 * 60 * 1000;
+    const step = phase === "done" ? steps.length : Number(q.get("step") || 5);
+    const current = steps[Math.min(step, steps.length - 1)];
     return {
       prompt,
       posture: prompt === "sit" ? "sitting" : "standing",
       since,
       dueAt: since + 30 * 60 * 1000,
-      announced: q.get("manual") !== "1",
-      stretch: { name: "肩颈三步（约 2 分钟）", steps: steps.map((s) => s.text) },
-      steps,
-      durations: [12, 30, 30],
-      step: phase === "done" ? 3 : Number(q.get("step") || 1),
-      heading: "转肩",
-      frieze: true,
+      announced: !preview && q.get("manual") !== "1",
+      stretch: { name: "肩颈三步（约 2 分钟）", steps: steps.slice(4).map((s) => s.text) },
+      fixedName: preview ? "" : "斜角肌拉伸",
+      steps: preview ? steps.slice(4) : steps,
+      durations: preview ? [52, 40, 52] : [20, 20, 20, 20, 52, 40, 52],
+      step: preview ? Math.min(step, 3) : step,
+      heading: current.titled ? current.name : current.section,
+      frieze: false,
+      preview,
       breathStartedAt: phase === "announce" || phase === "breath" ? since : null,
       breathToday: 3,
       nextStretch: "斜角肌拉伸 · 2 分钟",
@@ -157,21 +179,26 @@ const handlers = {
     autostart: true,
     quietApps: "Aion2.exe\nAion2-Win64-Shipping.exe",
     welcomed: true,
+    pinned: false,
     postureEnabled: true,
     sitMinutes: 30,
     standMinutes: 30,
-    stretches: "斜角肌拉伸（约 2 分钟）\n…",
+    quietFrom: 23,
+    quietTo: 8,
+    fixed: "斜角肌拉伸（约 1 分半）\n右手按住右侧锁骨下方固定第一根肋骨，头向左倒拉伸右侧颈部，右肩放松下沉，停 20 秒\n再微微抬头看斜上方，停 20 秒\n换左边：左手按住左侧锁骨下方，头向右倒拉伸左侧颈部，左肩放松下沉，停 20 秒\n再微微抬头看斜上方，停 20 秒",
+    stretches: "W 字收肩（约 1 分钟）\n手肘贴着身体弯成 90°，手心朝前\n前臂向外打开，同时把肩胛骨往后、往中间收，不要耸肩\n停 5 秒后放松。做 12 次\n\n肩颈三步（约 2 分钟）\n夹肩胛骨：保持 5 秒 × 10 次\n转肩：向后转 10 次\n收下巴：保持 5 秒 × 10 次\n\n走一走（1〜2 分钟）\n离开座位去接杯水，手臂自然摆动地走 1 分钟\n看窗外等远处 20 秒",
     breathHabit: true,
     ritualVideos: "跟练 1 https://www.bilibili.com/video/BV1JW4y1k7F7/",
-    ritualStretches: "…",
-    ritualStrength: "…",
-    ritualFloor: "…",
+    ritualStretches: "斜角肌拉伸（约 2 分钟）\n右手按住右侧锁骨下方，头向左倒，拉伸右侧颈部，停 20 秒\n微微抬头停 15 秒，再微微低头停 15 秒\n\n横臂拉肩后侧（约 1 分钟）\n右臂伸直横过身体前方，和肩同高\n左手扣住右肘往左肩方向拉，肩膀不要耸，停 30 秒\n换另一侧，停 30 秒",
+    ritualStrength: "肩袖力量（隔天做，约 6 分钟）\n坐在地上，右手肘贴腰弯 90°，左手握住右手腕；右手往外推、左手顶住不让动，用 5 成力，停 10 秒 × 5 次\n换左手往外推，停 10 秒 × 5 次",
+    ritualFloor: "仰躺腹式呼吸（约 3 分钟）\n仰躺，膝盖弯曲，一只手放肚子上，一只手放胸口\n用鼻子吸气 4 秒只让肚子鼓起来，用嘴呼气 6 秒，做 12 次",
     ritualStrengthOn: true,
     defaults: { quietApps: "Aion2.exe\nAion2-Win64-Shipping.exe" },
   }),
   settings_save: () => null,
   pick_folder: () => "D:\\OneDrive\\Yudh",
   open_surface: () => null,
+  posture_preview: () => null,
 };
 
 export async function call(cmd, args) {

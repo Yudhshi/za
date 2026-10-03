@@ -22,6 +22,8 @@ pub struct Settings {
     pub quiet_apps: String,
     /// 初回の説明(坐 30 站 30、到点小窗会叫你)を読んだ
     pub welcomed: bool,
+    /// 面板の帯を常駐させる(フォーカスを失っても閉じない。広げた面板は帯に戻る)
+    pub pinned: bool,
     /// 自分で動かした面板の左下(論理 px。帯と全体で下の辺を揃えるため左下を覚える)。次からその位置に出す。
     /// 前の版の panelPos(左上)は読まない
     pub panel_anchor: Option<[f64; 2]>,
@@ -52,6 +54,7 @@ impl Default for Settings {
             autostart: true,
             quiet_apps: quiet::DEFAULT_QUIET_APPS.into(),
             welcomed: false,
+            pinned: false,
             panel_anchor: None,
             posture_pos: None,
             posture: PostureSettings::default(),
@@ -80,6 +83,23 @@ impl Settings {
             .unwrap_or_default();
         settings.posture.sit_minutes = posture::PLAN_SIT_MINUTES;
         settings.posture.stand_minutes = posture::PLAN_STAND_MINUTES;
+        // 前の版は斜角肌を順番の 1 つ目に置いていた。いまは毎回の分(fixed)なので、順番からは外す(二重にやらない)
+        let rotating = posture::stretches(&settings.posture.stretches);
+        if rotating
+            .first()
+            .is_some_and(|s| s.name.starts_with("斜角肌"))
+        {
+            settings.posture.stretches = rotating[1..]
+                .iter()
+                .map(|s| {
+                    std::iter::once(s.name.clone())
+                        .chain(s.steps.iter().cloned())
+                        .collect::<Vec<_>>()
+                        .join("\n")
+                })
+                .collect::<Vec<_>>()
+                .join("\n\n");
+        }
         settings
     }
 
@@ -98,7 +118,11 @@ pub struct SettingsPatch {
     pub autostart: Option<bool>,
     pub quiet_apps: Option<String>,
     pub welcomed: Option<bool>,
+    pub pinned: Option<bool>,
     pub posture_enabled: Option<bool>,
+    pub quiet_from: Option<u32>,
+    pub quiet_to: Option<u32>,
+    pub fixed: Option<String>,
     pub stretches: Option<String>,
     pub breath_habit: Option<bool>,
     pub ritual_videos: Option<String>,
@@ -129,6 +153,18 @@ impl Settings {
         }
         if let Some(v) = patch.welcomed {
             self.welcomed = v;
+        }
+        if let Some(v) = patch.pinned {
+            self.pinned = v;
+        }
+        if let Some(v) = patch.quiet_from {
+            self.posture.quiet_from = v % 24;
+        }
+        if let Some(v) = patch.quiet_to {
+            self.posture.quiet_to = v % 24;
+        }
+        if let Some(v) = patch.fixed {
+            self.posture.fixed = v;
         }
         if let Some(v) = patch.posture_enabled {
             self.posture.enabled = v;
@@ -203,6 +239,17 @@ mod tests {
             ..Default::default()
         }));
         assert!(loaded.welcomed);
+        // 前の版の順番(斜角肌が 1 つ目)は、斜角肌を外して読む
+        let mut old = Settings::default();
+        old.posture.stretches = format!(
+            "斜角肌拉伸（约 2 分钟）\n头向左倒，停 10 秒\n\n{}",
+            posture::DEFAULT_STRETCHES
+        );
+        old.save(&path).unwrap();
+        let migrated = Settings::load(&path);
+        assert_eq!(migrated.posture.stretches, posture::DEFAULT_STRETCHES);
+        assert_eq!(migrated.posture.fixed, posture::DEFAULT_FIXED);
+        assert!(!migrated.pinned);
         std::fs::remove_dir_all(&dir).ok();
     }
 }

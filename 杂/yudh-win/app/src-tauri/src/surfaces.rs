@@ -146,24 +146,43 @@ pub fn quiet_changed(app: &AppHandle, game: Option<&str>) {
             }
         }
     }
-    if let Some(tray) = app.tray_by_id("yudh") {
-        let tip = match game {
-            Some(name) => format!("Yudh · 游戏中，已暂停（{name}）"),
-            None => "Yudh".to_string(),
-        };
-        let _ = tray.set_tooltip(Some(tip));
-    }
     refresh_tray_menu(app);
+    // ゲームが終わって、帯を常駐させる設定なら戻す
+    if game.is_none() {
+        let pinned = app
+            .state::<AppState>()
+            .inner
+            .lock()
+            .map(|inner| inner.settings.pinned)
+            .unwrap_or(false);
+        if pinned {
+            open_panel(app);
+        }
+    }
 }
 
-/// トレイのメニューの文字(看拉伸・坐下了 / 现在站起来、ゲーム中)を今の状態に合わせる。変わったときだけ作り直す
+/// トレイのメニュー(姿勢の一行・站起来 / 坐下・看拉伸・ゲーム中)と説明を今の状態に合わせる。変わったときだけ作り直す
 pub fn refresh_tray_menu(app: &AppHandle) {
     let state = app.state::<AppState>();
     let wanted = match state.inner.lock() {
-        Ok(inner) => (
-            inner.posture.posture == yudh_core::posture::Posture::Standing,
-            inner.quiet.clone(),
-        ),
+        Ok(inner) => {
+            let now = chrono::Utc::now();
+            let status = match (&inner.quiet, inner.posture.game_since) {
+                // 安静モードの説明は許される範囲(窓は作らない):長く遊んでいればその長さも
+                (Some(name), Some(start)) if now - start >= chrono::Duration::minutes(90) => {
+                    format!(
+                        "游戏中 · 已 {}（{name}）",
+                        yudh_core::standing::minutes_text((now - start).num_minutes())
+                    )
+                }
+                _ => crate::commands::status_line(&inner, now),
+            };
+            (
+                status,
+                inner.posture.posture == yudh_core::posture::Posture::Standing,
+                inner.quiet.clone(),
+            )
+        }
         Err(_) => return,
     };
     let stale = state
@@ -177,7 +196,12 @@ pub fn refresh_tray_menu(app: &AppHandle) {
     let Some(tray) = app.tray_by_id("yudh") else {
         return;
     };
-    if let Ok(menu) = crate::tray_menu(app, wanted.0, wanted.1.as_deref()) {
+    let tip = match &wanted.2 {
+        Some(name) => format!("Yudh · 游戏中，已暂停（{name}）"),
+        None => format!("Yudh · {}", wanted.0),
+    };
+    let _ = tray.set_tooltip(Some(tip));
+    if let Ok(menu) = crate::tray_menu(app, &wanted.0, wanted.1, wanted.2.as_deref()) {
         if tray.set_menu(Some(menu)).is_ok() {
             if let Ok(mut current) = state.tray_state.lock() {
                 *current = Some(wanted);
@@ -244,23 +268,35 @@ pub fn open_panel(app: &AppHandle) {
     let Ok(window) = built else {
         return;
     };
+    if let Ok(mut expanded) = app.state::<AppState>().panel_expanded.lock() {
+        *expanded = false;
+    }
     remember_position(&window, app, |s| &mut s.panel_anchor, true);
     let handle = app.clone();
     window.on_window_event(move |event| match event {
         WindowEvent::Focused(false) => {
-            let picking = handle
-                .state::<AppState>()
+            let state = handle.state::<AppState>();
+            let (picking, pinned) = state
                 .inner
                 .lock()
-                .map(|inner| inner.picking)
-                .unwrap_or(false);
-            if !picking {
-                if let Some(panel) = handle.get_webview_window("panel") {
-                    if let Ok(mut t) = handle.state::<AppState>().blur_closed.lock() {
-                        *t = Some(Instant::now());
-                    }
-                    let _ = panel.close();
+                .map(|inner| (inner.picking, inner.settings.pinned))
+                .unwrap_or((false, false));
+            if picking {
+                return;
+            }
+            // 常駐の帯:広げていたら帯に戻すだけ。帯のままなら何もしない
+            if pinned {
+                let expanded = state.panel_expanded.lock().map(|e| *e).unwrap_or(false);
+                if expanded {
+                    collapse_panel(&handle);
                 }
+                return;
+            }
+            if let Some(panel) = handle.get_webview_window("panel") {
+                if let Ok(mut t) = state.blur_closed.lock() {
+                    *t = Some(Instant::now());
+                }
+                let _ = panel.close();
             }
         }
         WindowEvent::Destroyed => {
@@ -288,11 +324,38 @@ pub fn expand_panel(app: &AppHandle) {
     let bottom = pos.y + f64::from(size.height) / scale;
     let (_, ay, _, _) = area(app);
     let y = (bottom - PANEL_SIZE.1).max(ay);
-    if let Ok(mut t) = app.state::<AppState>().programmatic_move.lock() {
+    let state = app.state::<AppState>();
+    if let Ok(mut t) = state.programmatic_move.lock() {
         *t = Some(Instant::now());
+    }
+    if let Ok(mut expanded) = state.panel_expanded.lock() {
+        *expanded = true;
     }
     let _ = window.set_size(LogicalSize::new(PANEL_SIZE.0, PANEL_SIZE.1));
     let _ = window.set_position(LogicalPosition::new(pos.x, y));
+}
+
+/// 面板を全体から帯に戻す(下の辺はそのまま)。画面側には知らせる(帯の中身に描き直す)
+pub fn collapse_panel(app: &AppHandle) {
+    let Some(window) = app.get_webview_window("panel") else {
+        return;
+    };
+    let scale = window.scale_factor().unwrap_or(1.0);
+    let (Ok(pos), Ok(size)) = (window.outer_position(), window.inner_size()) else {
+        return;
+    };
+    let pos = pos.to_logical::<f64>(scale);
+    let bottom = pos.y + f64::from(size.height) / scale;
+    let state = app.state::<AppState>();
+    if let Ok(mut t) = state.programmatic_move.lock() {
+        *t = Some(Instant::now());
+    }
+    if let Ok(mut expanded) = state.panel_expanded.lock() {
+        *expanded = false;
+    }
+    let _ = window.set_position(LogicalPosition::new(pos.x, bottom - STRIP_SIZE.1));
+    let _ = window.set_size(LogicalSize::new(STRIP_SIZE.0, STRIP_SIZE.1));
+    let _ = app.emit_to("panel", "panel-collapsed", ());
 }
 
 /// 坐站の小窓を、いまの状態に合わせて出す / 閉じる / 中身を更新する
@@ -307,7 +370,7 @@ pub fn sync_posture(app: &AppHandle) {
         .state::<AppState>()
         .inner
         .lock()
-        .map(|inner| inner.posture.prompt.is_some())
+        .map(|inner| inner.posture.prompt.is_some() || inner.preview.is_some())
         .unwrap_or(false);
     refresh_tray_menu(app);
     let existing = app.get_webview_window("posture");

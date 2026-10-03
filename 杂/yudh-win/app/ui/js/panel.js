@@ -1,13 +1,15 @@
-// 面板:最初は細い帯(坐站の状態・今日立った時間・泡完澡了)。「打开面板」で全体:英語(単語・考点词・听写)/ 明天的会 / 设置。
+// 面板:最初は細い帯(姿勢の札・今日の一行・泡完澡了)。「打开」で全体:今天 / 英語(単語・考点词・听写)/ 明天的会 / 设置。
+// 「今天」が家:姿勢という「もの」(坐 | 站 の札)、一日の胶带(時間軸)、呼吸・英語・日课・明天の一行ずつ。
 // 初回は計画の説明を先に見せる(同期フォルダは英語と会議にだけ要る)
-import { loadMaterial, slice, sprite, tile, h, button, first, asset } from "./baked.js";
-import { call, closeWindow, openUrl, enableDragging } from "./api.js";
-import { loadIcons, icon, weekdays, weekdaysZh, hhmm, speak, stopSpeaking, clear, voiceFor, voicesReady } from "./common.js";
+import { loadMaterial, slice, sprite, tile, h, button, first, asset, has } from "./baked.js";
+import { call, closeWindow, openUrl, enableDragging, listen } from "./api.js";
+import { loadIcons, icon, weekdays, weekdaysZh, hhmm, speak, stopSpeaking, clear, voiceFor, voicesReady, withNums } from "./common.js";
+import { postureChip, poseSmall, parseStretches, renderStretches, stepSeconds, metaText, illustration, title, totalSeconds, mmss } from "./stretchcard.js";
 
 const $ = (id) => document.getElementById(id);
 
 const state = {
-  tab: safeGet("tab") || "english",
+  tab: safeGet("tab") || "today",
   mode: "vocab",
   panel: null,
   card: null,
@@ -20,6 +22,8 @@ const state = {
   settings: null,
   /** 帯から全体に広げたか */
   expanded: false,
+  /** 拉伸库で開いている行("key:index") */
+  libraryOpen: null,
 };
 
 function safeGet(key) {
@@ -47,7 +51,13 @@ function paintWall() {
   const edge = h("div", { class: "edge" });
   wall.append(edge);
   slice(edge, "concrete-edge-night", { tile: true });
-  slice(panel, "panel-frame-night");
+}
+
+/** 全体のときだけ面板の枠(帯のときは帯の黒い帯だけ) */
+function paintFrame(on) {
+  const panel = $("panel");
+  if (on) slice(panel, "panel-frame-night");
+  else panel.querySelector(":scope > .paint:not(.over)")?.remove();
 }
 
 function renderWeekday() {
@@ -57,31 +67,26 @@ function renderWeekday() {
   clear(holder, art ?? h("span", { class: "fallback" }, day.toUpperCase()));
 }
 
+const TABS = [
+  ["today", "今天"],
+  ["english", "英语"],
+  ["tomorrow", "明天"],
+  ["settings", "设置"],
+];
+
 function renderTabs() {
   // 初回の説明のあいだは札を出さない(押しても説明のままなので)
   if (state.panel && !state.panel.welcomed) return clear($("tabs"));
-  const remaining = state.panel?.stats
-    ? Object.values(state.panel.stats.remaining).reduce((a, b) => a + b, 0)
-    : null;
-  const tabs = [
-    ["english", "英语", remaining],
-    ["tomorrow", "明天", null],
-    ["settings", "设置", null],
-  ];
+  const remaining = state.panel?.stats ? Object.values(state.panel.stats.remaining).reduce((a, b) => a + b, 0) : null;
   clear(
     $("tabs"),
-    tabs.map(([key, title, badge]) => {
+    TABS.map(([key, title]) => {
       const on = state.tab === key;
-      const el = h(
-        "button",
-        { class: `tab${on ? " on" : ""}`, onclick: () => switchTab(key) },
-        title,
-        badge != null && badge > 0 ? h("span", { class: "badge" }, badge) : null,
-      );
+      const badge = key === "english" ? remaining : null;
+      const el = h("button", { class: `tab${on ? " on" : ""}`, onclick: () => switchTab(key) }, title, badge != null && badge > 0 ? h("span", { class: "badge" }, badge) : null);
       if (on) {
         const wide = title.length + (badge ? String(badge).length + 1 : 0) >= 5;
-        slice(el, wide ? first("tab-chip-wide-night", "tab-chip-night") : "tab-chip-night") ||
-          (el.style.background = "var(--white)");
+        slice(el, wide ? first("tab-chip-wide-night", "tab-chip-night") : "tab-chip-night") || (el.style.background = "var(--white)");
       }
       return el;
     }),
@@ -95,17 +100,33 @@ function switchTab(key) {
   renderView();
 }
 
-/** いまの姿勢と今日の数字(帯は短い形) */
-function postureStatus(short = false) {
+// MARK: 姿勢という「もの」:帯・今天・小窓・トレイで同じ札と同じ一行
+
+async function flip() {
+  await call("posture_action", { action: "flip" });
+  await refreshQuiet();
+}
+
+/** 姿勢と今日の数字だけ読み直す(見ている卡や書きかけの設定は作り直さない) */
+async function refreshQuiet() {
+  state.panel = await call("panel_state");
+  renderStrip();
+  if (state.expanded && state.tab === "today" && state.panel.welcomed) clear($("view"), todayView());
+}
+
+/** 「已坐 23 分钟」(夜は「休息中」) */
+function postureWord() {
   const p = state.panel;
-  const sitting = p.posture === "sitting";
-  return h(
-    "span",
-    { class: "status" },
-    icon(sitting ? "seat" : "stand", 15),
-    h("b", {}, `${sitting ? "已坐" : "已站"} ${Math.max(0, p.minutesInPosture)} 分钟`),
-    ` · ${short ? p.todayShort : p.today}`,
-  );
+  if (p.resting) return "休息中";
+  return `${p.posture === "sitting" ? "已坐" : "已站"} ${Math.max(0, p.minutesInPosture)} 分钟`;
+}
+
+/** 次の切り替え:「12:30 坐下」 */
+function nextSwitch() {
+  const p = state.panel;
+  if (p.resting) return "夜里不叫，早上 8 点重新开始";
+  const at = new Date(p.dueAt);
+  return `${hhmm(at)} ${p.posture === "sitting" ? "站起来" : "坐下"}`;
 }
 
 function ritualButton() {
@@ -117,43 +138,154 @@ function ritualButton() {
   );
 }
 
-/** 先回りの操作(钟は自分で切り替えるので、ここにあるのは「今すぐ」だけ) */
-function postureActions() {
-  const sitting = state.panel.posture === "sitting";
-  // 変わるのは姿勢と今日の数字だけ:見ている単語の卡や書きかけの設定は作り直さない
-  const act = (action) => async () => {
-    await call("posture_action", { action });
-    state.panel = await call("panel_state");
-    renderStrip();
-    renderFooter();
-  };
-  return sitting
-    ? [h("button", { class: "bare", onclick: act("stood") }, "现在站起来")]
-    : [h("button", { class: "bare", onclick: act("open") }, "看拉伸"), h("button", { class: "bare", onclick: act("sat") }, "坐下了")];
-}
-
 function renderStrip() {
-  clear($("strip"), postureStatus(true), h("span", { class: "grow" }), ritualButton(), h("button", { class: "bare open", onclick: expand }, "打开 ›"));
+  const p = state.panel;
+  const strip = $("strip");
+  // 帯に入るのは姿勢という「もの」とその一行だけ(泡完澡了は「今天」とトレイに)
+  clear(
+    strip,
+    postureChip(p.posture, flip),
+    h("span", { class: "status" }, h("b", {}, withNums(postureWord())), " · ", withNums(p.todayShort)),
+    h("span", { class: "grow" }),
+    h("button", { class: "bare open", onclick: expand }, "打开 ›"),
+  );
+  slice(strip, "strip-black-night") || strip.classList.add("fallback");
 }
 
-function renderFooter() {
+// MARK: 一日の胶带(時間軸):黒 = 座った、青 = 立った、灰 = 離席 / ゲーム / 休み、橙の刻み = いま、点線 = この姿勢の予定
+
+const TAPE_FROM = 8;
+const TAPE_TO = 24;
+
+function tapeX(ms, width) {
+  const d = new Date(ms);
+  const hour = d.getHours() + d.getMinutes() / 60 + d.getSeconds() / 3600;
+  return Math.max(0, Math.min(1, (hour - TAPE_FROM) / (TAPE_TO - TAPE_FROM))) * width;
+}
+
+/** 印 → 区間([from, to, kind]) */
+function tapeSegments(p) {
+  const now = Date.now();
+  const marks = [...(p.marks ?? [])].sort((a, b) => a.at - b.at);
+  const segs = [];
+  for (let i = 0; i < marks.length; i++) {
+    const to = i + 1 < marks.length ? marks[i + 1].at : now;
+    if (to > marks[i].at) segs.push([marks[i].at, Math.min(to, now), marks[i].kind]);
+  }
+  if (!marks.length) segs.push([p.since, now, p.posture === "sitting" ? "sit" : "stand"]);
+  const planned = p.resting ? null : [now, p.dueAt, p.posture === "sitting" ? "sit" : "stand"];
+  return { segs, planned, now };
+}
+
+function dayTape(p, width = 472) {
+  const { segs, planned, now } = tapeSegments(p);
+  const track = h("div", { class: "daytape", style: { width: `${width}px` } });
+  const seg = (from, to, kind, plan = false) => {
+    const x = tapeX(from, width);
+    const w = Math.max(plan ? 2 : 1.5, tapeX(to, width) - x);
+    const el = h("span", { class: `seg ${kind}${plan ? " plan" : ""}`, style: { left: `${x}px`, width: `${w}px` }, title: `${hhmm(new Date(from))}–${hhmm(new Date(to))}` });
+    if (!plan) {
+      if (kind === "sit") slice(el, "band-black-night");
+      if (kind === "stand") slice(el, "block-teal-night");
+    }
+    return el;
+  };
+  for (const [from, to, kind] of segs) track.append(seg(from, to, kind));
+  if (planned && planned[1] > planned[0]) track.append(seg(planned[0], planned[1], planned[2], true));
+  const notch = sprite("now-notch-night", { height: 20 }) ?? h("span", { class: "notch-fallback" });
+  const nowMark = h("span", { class: "now", style: { left: `${tapeX(now, width)}px` } }, notch);
+  track.append(nowMark);
+  const hours = h("div", { class: "hours row", style: { width: `${width}px` } });
+  for (const hr of [8, 12, 16, 20, 24]) hours.append(h("span", { style: { left: `${((hr - TAPE_FROM) / (TAPE_TO - TAPE_FROM)) * width}px` } }, String(hr)));
+  return h("div", { class: "daytape-wrap" }, track, hours);
+}
+
+// MARK: 今天(家)
+
+function todayRow(label, ...children) {
+  return h("div", { class: "today-row row" }, h("span", { class: "t-section label" }, label), ...children);
+}
+
+function breathDots(n) {
+  const el = h("span", { class: "breath-dots row" });
+  for (let i = 0; i < Math.min(n, 12); i++) el.append(sprite("cell-teal-night", { height: 14 }) ?? h("i", { class: "dot" }));
+  return el;
+}
+
+function todayView() {
   const p = state.panel;
-  clear(
-    $("footer"),
-    h("div", { class: "line row" }, postureStatus(), h("span", { class: "grow" }), h("span", { class: "status" }, `腹式呼吸今天 ${p.breathToday} 次`)),
-    h("div", { class: "line row" }, ...postureActions(), h("span", { class: "grow" }), ritualButton()),
+  const s = p.stats;
+  const t = p.tomorrow;
+  const meeting = t.state === "meetings" ? t.meetings[0] : null;
+  const meetingText = meeting ? `${hhmm(new Date(meeting.start))} ${meeting.title}${t.meetings.length > 1 ? ` · 共 ${t.meetings.length} 个` : ""}` : t.state === "empty" ? "明天没有会" : t.state === "notSynced" ? "Mac 还没同步明天的日程" : "还没有会议数据";
+  return h(
+    "div",
+    { class: "today" },
+    h(
+      "div",
+      { class: "posture-line row" },
+      postureChip(p.posture, flip),
+      h("span", { class: "big" }, withNums(postureWord())),
+      h("span", { class: "grow" }),
+      h("span", { class: "next t-caption" }, withNums(nextSwitch())),
+    ),
+    dayTape(p),
+    h("div", { class: "t-caption total" }, withNums(p.today)),
+    todayRow("腹式呼吸", breathDots(p.breathToday), h("span", { class: "value" }, withNums(`${p.breathToday} 次`)), h("span", { class: "grow" }), h("span", { class: "t-caption" }, "每次站起来 3 次，日课最后 12 次")),
+    todayRow(
+      "英语",
+      s ? h("span", { class: "value" }, withNums(`今天 ${s.todayCount}/${s.goal} · 连续 ${s.streak} 天`)) : h("span", { class: "t-caption" }, p.configured ? "词表还没同步过来" : "先在设置里选同步文件夹"),
+      h("span", { class: "grow" }),
+      s ? h("button", { class: "bare", onclick: () => switchTab("english") }, "去背单词 ›") : null,
+    ),
+    todayRow(
+      "日课",
+      h("span", { class: "value" }, withNums(p.ritualToday ? `今天做过了 · 连续 ${p.ritualStreak} 天` : `连续 ${p.ritualStreak} 天`)),
+      h("span", { class: "grow" }),
+      ritualButton(),
+    ),
+    todayRow("明天", h("span", { class: "value" }, withNums(meetingText)), h("span", { class: "grow" }), meeting?.join ? h("button", { class: "bare", onclick: () => openUrl(meeting.join) }, "会议链接") : null),
   );
 }
 
-/** 帯から全体へ(窓は Rust が下の辺を揃えて上へ伸ばす) */
+// MARK: 帯 ⇄ 全体
+
+/** 帯から全体へ(窓は Rust が下の辺を揃えて上へ伸ばす)。帯の黒い帯は消え、面板の枠が上へ広がる */
 async function expand() {
   if (state.expanded) return;
   state.expanded = true;
-  $("panel").classList.remove("strip-mode");
+  const panel = $("panel");
+  panel.classList.add("expanding");
+  panel.classList.remove("strip-mode");
+  paintFrame(true);
+  setTimeout(() => panel.classList.remove("expanding"), 260);
   await call("open_surface", { which: "panel-full" });
   renderTabs();
-  renderFooter();
   await renderView();
+  armFade();
+}
+
+/** 全体から帯へ(Rust が窓を縮めたあと、または Esc) */
+function collapse() {
+  if (!state.expanded) return;
+  state.expanded = false;
+  const panel = $("panel");
+  panel.classList.add("strip-mode");
+  paintFrame(false);
+  stopSpeaking();
+  renderStrip();
+  armFade();
+}
+
+/** 常駐の帯:10 秒触らなければ薄くなり、触れば戻る */
+let fadeTimer = null;
+function armFade() {
+  clearTimeout(fadeTimer);
+  document.body.style.opacity = "";
+  if (!state.panel?.pinned || state.expanded) return;
+  fadeTimer = setTimeout(() => {
+    if (!state.expanded) document.body.style.opacity = "0.4";
+  }, 10000);
 }
 
 // MARK: 本体
@@ -161,15 +293,16 @@ async function expand() {
 async function refresh() {
   state.panel = await call("panel_state");
   renderStrip();
+  armFade();
   if (!state.expanded) return;
   renderTabs();
-  renderFooter();
   await renderView();
 }
 
 async function renderView() {
   const view = $("view");
   if (!state.panel.welcomed) return clear(view, welcomeView());
+  if (state.tab === "today") return clear(view, todayView());
   if (state.tab === "tomorrow") return clear(view, tomorrowView());
   if (state.tab === "settings") return clear(view, await settingsView());
   clear(view, await englishView());
@@ -181,28 +314,44 @@ function focusSpell() {
   if (state.card?.kind === "spell" && !state.graded) $("spell-input")?.focus();
 }
 
-/** 初回:計画を先に(同期フォルダは英語と会議にだけ要るので、あとで) */
+/** 初回:計画を先に(同期フォルダは英語と会議にだけ要るので、あとで)。曜日の creature と胶带の見本つき */
 function welcomeView() {
+  const day = weekdays[new Date().getDay()].slice(0, 3);
+  const creature = sprite(`creature-${day}-grey-m`, { height: 120 }) ?? sprite(`creature-${day}-grey`, { height: 120 });
+  const sample = { marks: [], since: Date.now() - 23 * 60000, posture: "sitting", dueAt: Date.now() + 7 * 60000, resting: false };
+  const t = new Date();
+  t.setHours(9, 0, 0, 0);
+  const base = t.getTime();
+  sample.marks = [
+    { at: base, kind: "sit" },
+    { at: base + 30 * 60000, kind: "stand" },
+    { at: base + 60 * 60000, kind: "sit" },
+    { at: base + 75 * 60000, kind: "away" },
+    { at: base + 90 * 60000, kind: "sit" },
+    { at: base + 120 * 60000, kind: "stand" },
+  ];
   return h(
     "div",
     { class: "welcome" },
-    h("div", { class: "big" }, "从现在开始：坐 30 分钟，站 30 分钟"),
+    h("div", { class: "row", style: { gap: "16px", alignItems: "flex-start" } }, h("div", { class: "big grow" }, "从现在开始：坐 30 分钟，站 30 分钟"), creature),
     h(
       "div",
       { class: "body" },
       "到点屏幕上方的小窗会说",
       h("em", {}, "「站起来」"),
-      "，接着 3 次腹式呼吸、1 个肩颈拉伸，每一步到时间自动往下走，做完自己关。30 分钟后它说",
+      "，接着 3 次腹式呼吸、斜角肌拉伸、再轮 1 个肩颈动作，每一步到时间自动往下走，做完自己关。30 分钟后它说",
       h("em", {}, "「坐下」"),
-      "。你什么都不用点；它说错了，就点一下角上的「我还坐着 / 我还站着」。",
+      "。你什么都不用点；它说错了，就把「坐 | 站」的牌子翻过来。",
     ),
-    h("div", { class: "aside" }, "有声音：换姿势两个音，换动作一个音，做完一个短音。全屏游戏时不弹；AION2 运行时完全安静，关掉游戏自动恢复。"),
-    h("div", { class: "aside" }, "英语和明天的会议要和 Mac 共用一个同步文件夹，以后在「设置」里选就行。"),
+    h("div", { class: "aside" }, "这条胶带是你的一天：黑是坐，青是站，灰是离开，橙色刻痕是现在。"),
+    dayTape(sample),
+    h("div", { class: "aside" }, "有声音：换姿势、换动作、做完各不一样。夜里 23 点到早上 8 点不叫；全屏游戏时不弹；AION2 运行时完全安静。英语和明天的会议要和 Mac 共用一个同步文件夹，以后在「设置」里选。"),
     button("知道了", {
       kind: "teal",
       width: 160,
       onClick: async () => {
         await call("settings_save", { patch: { welcomed: true } });
+        state.tab = "today";
         await refresh();
       },
     }),
@@ -699,6 +848,14 @@ function tomorrowView() {
 
 // MARK: 设置
 
+const LIBRARY = [
+  ["fixed", "每次站起来先做", "斜角肌。狙いの筋肉は毎回"],
+  ["stretches", "站起来时轮流（每次一个）", ""],
+  ["ritualStretches", "日课 · 站着", ""],
+  ["ritualStrength", "日课 · 肩袖力量（隔天）", ""],
+  ["ritualFloor", "日课 · 地上", ""],
+];
+
 async function settingsView() {
   const s = (state.settings = await call("settings_get"));
   const save = async (patch) => {
@@ -722,46 +879,48 @@ async function settingsView() {
     el.addEventListener("change", flush);
     return el;
   };
-  const check = (key, label) => {
+  const check = (key, label, after) => {
     const el = h("input", { type: "checkbox" });
     el.checked = Boolean(s[key]);
-    el.addEventListener("change", () => save({ [key]: el.checked }));
+    el.addEventListener("change", async () => {
+      await save({ [key]: el.checked });
+      after?.(el.checked);
+    });
     return h("label", { class: "check" }, el, label);
   };
-  const resettable = (key, title, rows) => {
-    const area = text(key, { area: true, rows });
-    return h(
-      "details",
-      {},
-      h("summary", {}, title),
-      h(
-        "div",
-        { class: "field", style: { marginTop: "8px" } },
-        area,
-        s.defaults?.[key]
-          ? h(
-              "button",
-              {
-                class: "bare",
-                style: { alignSelf: "flex-start" },
-                onclick: async () => {
-                  area.value = s.defaults[key];
-                  await save({ [key]: area.value });
-                },
-              },
-              "恢复默认",
-            )
-          : null,
-      ),
-    );
+  const hour = (key) => {
+    const el = h("input", { type: "number", min: 0, max: 23, class: "hour" });
+    el.value = s[key];
+    el.addEventListener("change", () => {
+      const v = Math.max(0, Math.min(23, Number(el.value) || 0));
+      el.value = v;
+      save({ [key]: v });
+    });
+    return el;
   };
   const root = h("input", { type: "text", readonly: true });
   root.value = s.syncRoot ?? "";
   const note = (t) => h("div", { class: "hint", style: { color: "var(--text-2)", fontSize: "12px", lineHeight: 1.5 } }, t);
-  const line = (t) => h("div", { style: { fontSize: "14px", fontWeight: 600, lineHeight: 1.6 } }, t);
   return h(
     "div",
     { class: "form" },
+    h("h3", {}, "坐站计划（固定）"),
+    h(
+      "div",
+      { class: "plan" },
+      h("div", { class: "plan-line" }, withNums(`坐 ${s.sitMinutes} 分钟 → 站 ${s.standMinutes} 分钟，一直循环`)),
+      h("div", { class: "row plan-row" }, "夜里 ", hour("quietFrom"), " 点到 ", hour("quietTo"), " 点不叫；日课做完当天也不叫"),
+      note("它不问你，默认你照做了。说错了就把「坐 | 站」翻过来：刚被叫的 90 秒内等于「我还坐着 / 我还站着」（10 分钟 / 5 分钟后再叫），之后等于现在就换。离开座位 3 分钟以上，切换等你回来再说；坐着离开则重新计时。全屏游戏时不弹，连续玩 60 分钟以上，关掉游戏马上让你站起来；读图、切出去不到 5 分钟不算关掉。"),
+      check("pinned", "常驻细条（不点也一直在；10 秒没碰会变淡，碰一下就回来）", (on) => on && armFade()),
+      check("postureEnabled", "坐站提醒（关掉就完全不提醒）"),
+    ),
+    h("h3", {}, "拉伸库"),
+    note("每个拉伸一行一步，每步写上秒数或次数就能自动计时（「停 20 秒」「做 12 次」「停 5 秒 × 10 次」）。「试做」会在小窗里走一遍。"),
+    ...LIBRARY.map(([key, label]) => libraryGroup(key, label, save)),
+    h("h3", {}, "泡完澡后的日课"),
+    note("托盘「泡完澡了」：跟练视频 → 站着拉伸 → 隔天加肩袖力量 → 地上拉伸和 12 次腹式呼吸。写了时长的视频放完自动跳下一个（YouTube 的还能收到播放器放完的消息），没写的看完点「跟练完了，下一个」。泡完热水澡先喝点水，从地上站起来慢一点。夜里疼醒、抬手没力气、手发麻，或不舒服超过 6 周，请去看医生或理疗师。"),
+    h("div", { class: "field" }, "跟练视频（每行：名字 + 链接，链接后面可以写时长，如 4:04 或 4 分 35 秒）", text("ritualVideos", { area: true, rows: 5 })),
+    check("ritualStrengthOn", "隔天加肩袖力量"),
     h("h3", {}, "同步（和 Mac 共用）"),
     h(
       "div",
@@ -790,12 +949,6 @@ async function settingsView() {
       h("div", { class: "hint" }, "选 Mac 设置里的同一个文件夹（OneDrive 等）。单词进度、明天的会议、词表都从这里来。"),
     ),
     h("div", { class: "field" }, "这台电脑的名字", text("device"), h("div", { class: "hint" }, "进度文件按名字分开写，两台设备不要同名。")),
-    h("h3", {}, "坐站计划（已经帮你定好，不用调）"),
-    line(`坐 ${s.sitMinutes} 分钟 → 站 ${s.standMinutes} 分钟，一直循环，到点小窗直接说「站起来」「坐下」`),
-    note("它不问你，默认你照做了：「站起来」之后先 3 次腹式呼吸，再 1 个拉伸，每一步到时间自动往下走；「坐下」15 秒后自己消失。它说错了就点「我还坐着」（10 分钟后再叫）或「我还站着」（再站 5 分钟）。一天 8 小时大约站 4 小时；每 30 分钟换一次姿势，比站多久更能放松斜角肌，也避免站太久。站着时把桌子升到手肘 90°。"),
-    note("全屏游戏时不弹；连续玩 60 分钟以上，退出全屏马上让你站起来。离开座位 3 分钟以上，切换等你回来再说；坐着离开则重新计时。电脑睡眠后醒来，从头算。今天站了多久、换了几次，在面板底部和「坐下」的小窗里。"),
-    h("h3", {}, "泡完澡后的日课"),
-    note("托盘右键「泡完澡了」：跟练视频 → 站着拉伸 → 隔天加肩袖力量 → 地上拉伸和腹式呼吸。写了时长的视频放完自动跳下一个（YouTube 的还能收到播放器放完的消息），没写的看完点「跟练完了，下一个」；之后的拉伸和力量全部按时间自动往下走。泡完热水澡先喝点水，从地上站起来慢一点。夜里疼醒、抬手没力气、手发麻，或不舒服超过 6 周，请去看医生或理疗师。"),
     h(
       "details",
       {},
@@ -804,20 +957,115 @@ async function settingsView() {
         "div",
         { class: "form", style: { marginTop: "14px" } },
         check("autostart", "开机后自动启动（只待在托盘里，几乎不占资源）"),
-        check("postureEnabled", "坐站提醒（关掉就完全不提醒）"),
-        resettable("quietApps", "打游戏时让 Yudh 完全安静的程序（每行一个）", 3),
+        h("div", { class: "field" }, "打游戏时让 Yudh 完全安静的程序（每行一个）", text("quietApps", { area: true, rows: 3 })),
         note(
           "这些程序运行时，Yudh 关掉自己所有的窗口、不再弹出任何东西，也不再读键鼠空闲和全屏状态，只留托盘图标；游戏关掉后自动恢复（连续玩了 60 分钟以上，关掉游戏就马上让你站起来）。只看进程列表里的名字（和任务管理器的「详细信息」一样），不会打开或读取游戏进程。默认是 AION2。",
         ),
-        resettable("stretches", "站起来时的拉伸（每次轮到一个）", 10),
-        resettable("ritualVideos", "日课的跟练视频（每行：名字 + 链接，链接后面可以写时长，如 4:04 或 4 分 35 秒）", 5),
-        resettable("ritualStretches", "日课：站着做的拉伸", 10),
-        resettable("ritualStrength", "日课：肩袖力量（在地上做）", 6),
-        resettable("ritualFloor", "日课：最后在地上做的拉伸", 6),
         ...voiceSection(),
       ),
     ),
   );
+}
+
+/** 拉伸库の 1 群:一覧(姿勢の絵・名前・長さ・歩数)→ 行を開くと手順を直せる。テキストは構造から作り直して保存する */
+function libraryGroup(key, label, save) {
+  const s = state.settings;
+  const list = parseStretches(s[key]);
+  let pending = null;
+  const commit = (rerender = true) => {
+    const textValue = renderStretches(list);
+    clearTimeout(pending);
+    pending = setTimeout(() => save({ [key]: textValue }), 400);
+    if (rerender) rerenderGroup();
+  };
+  const holder = h("div", { class: "library-group" });
+  const rerenderGroup = () => holder.replaceWith(libraryGroup(key, label, save));
+  const row = (st, i) => {
+    const id = `${key}:${i}`;
+    const open = state.libraryOpen === id;
+    const summary = h(
+      "div",
+      { class: "lib-row row" },
+      h("span", { class: "lib-pose" }, poseSmall(illustration(st), 40)),
+      h("span", { class: "lib-name grow" }, title(st.name), h("span", { class: "lib-meta" }, withNums(` ${mmss(totalSeconds(st))} · ${st.steps.length} 步`))),
+      h("button", { class: "bare", title: "在小窗里走一遍", onclick: () => call("posture_preview", { text: renderStretches([st]) }) }, "试做"),
+      h(
+        "button",
+        {
+          class: "bare",
+          onclick: () => {
+            state.libraryOpen = open ? null : id;
+            rerenderGroup();
+          },
+        },
+        open ? "收起" : "编辑",
+      ),
+    );
+    if (!open) return summary;
+    const stepInput = (line, j) => {
+      const input = h("input", { type: "text", value: line });
+      const meta = h("span", { class: "lib-meta" }, metaText(line) ?? "10 秒");
+      input.addEventListener("input", () => {
+        st.steps[j] = input.value;
+        meta.textContent = metaText(input.value) ?? "10 秒";
+        commit(false);
+      });
+      return h(
+        "div",
+        { class: "lib-step row" },
+        h("span", { class: "t-count" }, String(j + 1)),
+        input,
+        meta,
+        h("button", { class: "bare", title: "删除这一步", onclick: () => (st.steps.splice(j, 1), commit()) }, "×"),
+      );
+    };
+    const name = h("input", { type: "text", value: st.name });
+    name.addEventListener("input", () => {
+      st.name = name.value;
+      commit(false);
+    });
+    const editor = h(
+      "div",
+      { class: "lib-editor" },
+      h("div", { class: "lib-step row" }, h("span", { class: "t-count" }, "名"), name, h("span", { class: "lib-meta" }, "（约 N 分钟）")),
+      st.steps.map(stepInput),
+      h(
+        "div",
+        { class: "row", style: { gap: "12px", marginTop: "6px" } },
+        h("button", { class: "bare", onclick: () => (st.steps.push("停 20 秒"), commit()) }, "+ 加一步"),
+        h("span", { class: "grow" }),
+        i > 0 ? h("button", { class: "bare", onclick: () => (list.splice(i - 1, 2, list[i], list[i - 1]), (state.libraryOpen = `${key}:${i - 1}`), commit()) }, "上移") : null,
+        i < list.length - 1 ? h("button", { class: "bare", onclick: () => (list.splice(i, 2, list[i + 1], list[i]), (state.libraryOpen = `${key}:${i + 1}`), commit()) }, "下移") : null,
+        h("button", { class: "bare", onclick: () => (list.splice(i, 1), (state.libraryOpen = null), commit()) }, "删除这个拉伸"),
+      ),
+    );
+    return h("div", { class: "lib-item open" }, summary, editor);
+  };
+  clear(
+    holder,
+    h("div", { class: "lib-head row" }, h("span", { class: "t-section" }, label), h("span", { class: "grow" }), h("span", { class: "t-caption" }, withNums(`${list.length} 个 · 共 ${mmss(list.reduce((a, st) => a + totalSeconds(st), 0))}`))),
+    list.map(row),
+    h(
+      "div",
+      { class: "row", style: { gap: "14px", marginTop: "4px" } },
+      h("button", { class: "bare", onclick: () => (list.push({ name: "新的拉伸（约 1 分钟）", steps: ["停 20 秒", "换另一侧，停 20 秒"] }), (state.libraryOpen = `${key}:${list.length - 1}`), commit()) }, "+ 新建拉伸"),
+      s.defaults?.[key]
+        ? h(
+            "button",
+            {
+              class: "bare",
+              onclick: async () => {
+                await save({ [key]: s.defaults[key] });
+                state.libraryOpen = null;
+                rerenderGroup();
+              },
+            },
+            "恢复默认",
+          )
+        : null,
+    ),
+  );
+  return holder;
 }
 
 /** 听写で読む英語の声(英式が無ければ入れ方を書く)。日课の語音播报はやめた */
@@ -844,13 +1092,17 @@ function bindKeys() {
       return;
     }
     const typing = e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement;
-    // 設定の入力中は Esc で閉じない(書きかけを失わない)。听写の入力欄からは閉じてよい
+    // 設定の入力中は Esc で閉じない(書きかけを失わない)。听写の入力欄からは閉じてよい。
+    // 常駐の帯なら、広げた面板は帯に戻すだけ
     if (e.key === "Escape" && (!typing || e.target.id === "spell-input")) {
-      closeWindow();
+      if (state.panel?.pinned && state.expanded) {
+        call("open_surface", { which: "panel-strip" });
+        collapse();
+      } else closeWindow();
       return;
     }
     if (typing) return;
-    if (state.tab !== "english" || !state.card) return;
+    if (!state.expanded || state.tab !== "english" || !state.card) return;
     if (e.ctrlKey && e.key.toLowerCase() === "z") {
       if (state.undoable) undo();
       return;
@@ -876,6 +1128,8 @@ function bindKeys() {
       }
     }
   });
+  document.addEventListener("mousemove", armFade);
+  document.addEventListener("mouseenter", armFade);
 }
 
 async function init() {
@@ -887,6 +1141,9 @@ async function init() {
   // 初回は説明を読んでもらう:帯でなく全体を開く
   if (!state.panel.welcomed) await expand();
   bindKeys();
+  // 30 秒ごとの钟の知らせ:帯と「今天」の数字を更新。Rust が帯に縮めたら中身も帯に
+  listen("panel-tick", refreshQuiet);
+  listen("panel-collapsed", collapse);
 }
 
 init();

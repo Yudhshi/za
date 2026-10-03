@@ -18,6 +18,7 @@ use yudh_core::round::RoundMark;
 use yudh_core::spell::{self, SpellMarks, SpellResult};
 use yudh_core::srs::Rating;
 use yudh_core::standing;
+use yudh_core::standing::DayMark;
 use yudh_core::sync::SyncFolder;
 use yudh_core::{English, Zone};
 
@@ -93,13 +94,25 @@ pub struct PanelState {
     posture: Posture,
     minutes_in_posture: i64,
     prompt: Option<Prompt>,
+    /// いまの姿勢を始めた時刻と、次に切り替える時刻(UNIX ミリ秒)
+    since: i64,
+    due_at: i64,
+    /// いまの姿勢は钟が自分で切り替えた(札を返せば取り消し)
+    announced: bool,
+    /// 夜・日课のあと:钟を止めている
+    resting: bool,
+    /// 今日の胶带の印(時間軸)
+    marks: Vec<DayMark>,
     /// 「今天站了 1 小时 30 分，换了 3 次姿势」(いま立っている分も入れて)と、帯に入る短い形「站了 1 小时 30 分 · 换了 3 次」
     today: String,
     today_short: String,
     breath_today: u32,
     ritual_streak: usize,
+    ritual_today: bool,
     /// 初回の説明をまだ読んでいない:面板は先に計画を見せる
     welcomed: bool,
+    /// 帯を常駐させる
+    pinned: bool,
 }
 
 #[tauri::command]
@@ -127,12 +140,41 @@ pub fn panel_state(state: State<'_, AppState>) -> PanelState {
         posture: inner.posture.posture,
         minutes_in_posture: (now - inner.posture.since).num_minutes(),
         prompt: inner.posture.prompt,
+        since: inner.posture.since.timestamp_millis(),
+        due_at: inner
+            .posture
+            .due_at(&inner.settings.posture)
+            .timestamp_millis(),
+        announced: inner.posture.announced,
+        resting: inner.posture.resting,
+        marks: day_stand(&inner, now).marks,
         today: standing::summary(day_stand(&inner, now)),
         today_short: standing::short_summary(day_stand(&inner, now)),
         breath_today: today_breaths(&all),
         ritual_streak: ritual::streak(&all.ritual, now, Zone::Local),
+        ritual_today: all.ritual.get(&today()).is_some_and(|n| *n > 0),
         welcomed: inner.settings.welcomed,
+        pinned: inner.settings.pinned,
     }
+}
+
+/// 帯・トレイ・小窓で同じ一行:「已坐 23 分钟 · 站了 1 小时 30 分 · 换了 3 次」(夜は「夜里不叫」)
+pub fn status_line(inner: &Inner, now: chrono::DateTime<Utc>) -> String {
+    if inner.posture.resting {
+        return format!(
+            "休息中 · {}",
+            standing::short_summary(day_stand(inner, now))
+        );
+    }
+    let minutes = (now - inner.posture.since).num_minutes().max(0);
+    let posture = match inner.posture.posture {
+        Posture::Sitting => "已坐",
+        Posture::Standing => "已站",
+    };
+    format!(
+        "{posture} {minutes} 分钟 · {}",
+        standing::short_summary(day_stand(inner, now))
+    )
 }
 
 // MARK: 英語
@@ -294,13 +336,19 @@ pub struct PostureView {
     due_at: i64,
     /// いまの姿勢は钟が自分で切り替えた(「我还坐着」「我还站着」で直せる)
     announced: bool,
+    /// 順番の拉伸(名前は小窓の鍵と「然后：…」に)
     stretch: Stretch,
+    /// 毎回の分の題(「斜角肌拉伸」。無ければ空)
+    fixed_name: String,
+    /// 通した手順(毎回の分 → 順番の分)
     steps: Vec<Step>,
     /// 各手順の秒数(秒・回数から。読めなければ 10 秒、どの手順も 10 秒より短くしない)。時間が来たら自動で次へ進む
     durations: Vec<u32>,
     step: usize,
     heading: String,
     frieze: bool,
+    /// 設定の「试做」:钟は動かさず、この拉伸だけを流している
+    preview: bool,
     /// 立ってすぐの腹式呼吸を始めた時刻(UNIX ミリ秒)
     breath_started_at: Option<i64>,
     breath_today: u32,
@@ -325,9 +373,13 @@ fn day_stand(inner: &Inner, now: chrono::DateTime<Utc>) -> standing::DayStand {
 /// 钟の切り替わりを記録に落とす(日ごとの立った時間・回数、次の拉伸の番号、立ってすぐの腹式呼吸)。
 /// 判定のあと・操作のあとに毎回呼ぶ。記録が増えたら true(設定を保存する)
 pub fn settle(inner: &mut Inner, now: chrono::DateTime<Utc>) -> bool {
+    let marks = inner.posture.take_marks();
+    for m in &marks {
+        standing::record_mark(&mut inner.settings.stand_log, &Zone::Local.key(m.at), m);
+    }
     let transitions = inner.posture.take_transitions();
     if transitions.is_empty() {
-        return false;
+        return !marks.is_empty();
     }
     for t in &transitions {
         standing::record(&mut inner.settings.stand_log, &Zone::Local.key(t.at), t);
@@ -343,32 +395,70 @@ pub fn settle(inner: &mut Inner, now: chrono::DateTime<Utc>) -> bool {
     true
 }
 
+/// 各手順の秒数(秒・回数から。読めなければ 10 秒、どの手順も 10 秒より短くしない)
+fn durations(parts: &[Stretch]) -> Vec<u32> {
+    parts
+        .iter()
+        .flat_map(|s| s.steps.iter())
+        .map(|line| {
+            ritual::duration(line)
+                .unwrap_or(ritual::SETUP_SECONDS)
+                .max(ritual::SETUP_SECONDS)
+        })
+        .collect()
+}
+
 fn posture_view(inner: &Inner) -> PostureView {
     let clock = &inner.posture;
-    let steps = posture::steps(&clock.stretch);
-    let step = clock.step.min(steps.len());
     let now = Utc::now();
+    // 設定の「试做」:钟は触らず、その拉伸だけを手順として見せる
+    if let Some(p) = &inner.preview {
+        let parts = vec![p.stretch.clone()];
+        let steps = posture::routine_steps(&parts);
+        let step = p.step.min(steps.len());
+        return PostureView {
+            prompt: Some(Prompt::Standing),
+            posture: clock.posture,
+            since: p.started.timestamp_millis(),
+            due_at: (p.started + chrono::Duration::minutes(30)).timestamp_millis(),
+            announced: false,
+            heading: posture::routine_heading(&steps, step),
+            frieze: posture::shows_frieze(&steps),
+            durations: durations(&parts),
+            stretch: p.stretch.clone(),
+            fixed_name: String::new(),
+            steps,
+            step,
+            preview: true,
+            breath_started_at: None,
+            breath_today: 0,
+            next_stretch: String::new(),
+            today: String::new(),
+            last_stand_minutes: 0,
+            caution: posture::CAUTION,
+        };
+    }
+    let parts = clock.parts();
+    let steps = posture::routine_steps(&parts);
+    let step = clock.step.min(steps.len());
     PostureView {
         prompt: clock.prompt,
         posture: clock.posture,
         since: clock.since.timestamp_millis(),
         due_at: clock.due_at(&inner.settings.posture).timestamp_millis(),
         announced: clock.announced,
-        heading: posture::heading(&clock.stretch, &steps, step),
+        heading: posture::routine_heading(&steps, step),
         frieze: posture::shows_frieze(&steps),
-        durations: clock
-            .stretch
-            .steps
-            .iter()
-            .map(|line| {
-                ritual::duration(line)
-                    .unwrap_or(ritual::SETUP_SECONDS)
-                    .max(ritual::SETUP_SECONDS)
-            })
-            .collect(),
+        durations: durations(&parts),
         stretch: clock.stretch.clone(),
+        fixed_name: clock
+            .fixed
+            .first()
+            .map(|s| posture::split(&s.name).0)
+            .unwrap_or_default(),
         steps,
         step,
+        preview: false,
         breath_started_at: inner.breath_started.map(|t| t.timestamp_millis()),
         breath_today: today_breaths(&habits(inner)),
         next_stretch: posture::display_name(&clock.next_stretch(&inner.settings.posture).name),
@@ -391,10 +481,25 @@ pub fn apply_posture(app: &AppHandle, action: &str) -> PostureView {
         let mut inner = state.inner.lock().expect("state");
         let now = Utc::now();
         let settings = inner.settings.posture.clone();
+        // 「试做」の最中:手順の送りと閉じるだけ。钟は触らない
+        if let Some(p) = inner.preview.as_mut() {
+            match action {
+                "next" => p.step += 1,
+                "prev" => p.step = p.step.saturating_sub(1),
+                "close" => inner.preview = None,
+                _ => {}
+            }
+            let view = posture_view(&inner);
+            drop(inner);
+            surfaces::sync_posture(app);
+            return view;
+        }
         match action {
             // トレイ:座っていればすぐ立ち作業に、立っていれば手順を開き直す
             "stood" | "open" => inner.posture.confirm_stood(now, &settings),
             "sat" => inner.posture.confirm_sat(now, &settings),
+            // 「坐 | 站」の札:切り替えた直後なら取り消し、それより後なら今ここで切り替え
+            "flip" => inner.posture.flip(now, &settings),
             "stillSitting" => {
                 inner.posture.still_sitting(now, &settings);
             }
@@ -427,6 +532,26 @@ pub fn apply_posture(app: &AppHandle, action: &str) -> PostureView {
 #[tauri::command]
 pub async fn posture_action(app: AppHandle, action: String) -> PostureView {
     apply_posture(&app, &action)
+}
+
+/// 設定の拉伸库の「试做」:その拉伸(1 つ分のテキスト)を小窓で流す。钟は動かさない
+#[tauri::command]
+pub async fn posture_preview(app: AppHandle, text: String) -> Result<(), String> {
+    let stretch = posture::stretches(&text)
+        .into_iter()
+        .next()
+        .ok_or("empty stretch")?;
+    {
+        let state = app.state::<AppState>();
+        let mut inner = state.inner.lock().expect("state");
+        inner.preview = Some(crate::Preview {
+            stretch,
+            step: 0,
+            started: Utc::now(),
+        });
+    }
+    surfaces::sync_posture(&app);
+    Ok(())
 }
 
 // MARK: 日课
@@ -546,9 +671,13 @@ pub struct SettingsView {
     autostart: bool,
     quiet_apps: String,
     welcomed: bool,
+    pinned: bool,
     posture_enabled: bool,
     sit_minutes: i64,
     stand_minutes: i64,
+    quiet_from: u32,
+    quiet_to: u32,
+    fixed: String,
     stretches: String,
     breath_habit: bool,
     ritual_videos: String,
@@ -569,9 +698,13 @@ pub fn settings_get(state: State<'_, AppState>) -> SettingsView {
         autostart: s.autostart,
         quiet_apps: s.quiet_apps.clone(),
         welcomed: s.welcomed,
+        pinned: s.pinned,
         posture_enabled: s.posture.enabled,
         sit_minutes: s.posture.sit_minutes,
         stand_minutes: s.posture.stand_minutes,
+        quiet_from: s.posture.quiet_from,
+        quiet_to: s.posture.quiet_to,
+        fixed: s.posture.fixed.clone(),
         stretches: s.posture.stretches.clone(),
         breath_habit: s.breath_habit,
         ritual_videos: s.ritual_videos.clone(),
@@ -580,7 +713,9 @@ pub fn settings_get(state: State<'_, AppState>) -> SettingsView {
         ritual_floor: s.ritual_floor.clone(),
         ritual_strength_on: s.ritual_strength_on,
         defaults: HashMap::from([
+            ("fixed", posture::DEFAULT_FIXED),
             ("stretches", posture::DEFAULT_STRETCHES),
+            ("ritualShort", ritual::SHORT_STRETCHES),
             ("ritualVideos", ritual::DEFAULT_VIDEOS),
             ("ritualStretches", ritual::DEFAULT_STRETCHES),
             ("ritualStrength", ritual::DEFAULT_STRENGTH),
@@ -675,6 +810,7 @@ pub async fn open_surface(app: AppHandle, which: String, fit: Option<Fit>) {
         ("ritual", _) => surfaces::open_ritual(&app),
         ("panel", _) => surfaces::toggle_panel(&app),
         ("panel-full", _) => surfaces::expand_panel(&app),
+        ("panel-strip", _) => surfaces::collapse_panel(&app),
         (label, Some(size)) => surfaces::fit(&app, label, size.width, size.height),
         _ => {}
     }

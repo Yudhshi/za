@@ -1,11 +1,12 @@
 // 坐站の小窓:牛皮纸の台紙(360 幅)に皱纹纸胶带の持ち手。播报の钟:尋ねない。
-// 「站起来」→ 腹式呼吸 3 回 → 拉伸の手順(時間が来たら自動で次へ)→ 做完 → 自分で閉じる。30 分後に「坐下」→ 15 秒で閉じる。
-// ユーザーがするのは、钟が間違えたときの「我还坐着」「我还站着」だけ。
+// 「站起来」→ 腹式呼吸 3 回 → 拉伸の手順(毎回の斜角肌 → 順番の 1 つ。時間が来たら自動で次へ)→ 做完 → 自分で閉じる。
+// 30 分後に「坐下」→ 15 秒で閉じる。ユーザーがするのは「坐 | 站」の札を返すことだけ(钟が間違えたら取り消し、あとなら今の切り替え)。
 // 立っているときは離れて見るので、この手順の残り秒を模板の大字で、動作の名前を大きく出す。
 // 画面は状態が変わったときだけ作り直す(4 分の 1 秒ごとに作り直すと、押している途中のボタンが消えて押せない)。秒の数字だけを差し替える
-import { loadMaterial, slice, sprite, stencil, h, button, first } from "./baked.js";
+import { loadMaterial, slice, h, button, has } from "./baked.js";
 import { call, listen, fitWindow, enableDragging } from "./api.js";
-import { loadIcons, clock, clear, sound } from "./common.js";
+import { loadIcons, loadSounds, clock, clear, sound } from "./common.js";
+import { pose, dots, figure, stretchBody, countRow, postureChip, title } from "./stretchcard.js";
 
 const $ = (id) => document.getElementById(id);
 let view = null;
@@ -27,16 +28,16 @@ let soundedSwitch = 0;
 let entered = false;
 /** 注意書きは一日に一度だけ(見れば分かる。立っているときの小窓に 2 行は要らない) */
 let showCaution = null;
+let swapTimer = null;
 
 /** 「站起来」の一言を見せる長さ。呼吸はこの後に始まる */
 const ANNOUNCE_MS = 7000;
 const DONE_LINGER_MS = 15000;
 const SIT_LINGER_MS = 15000;
-/** 切り替えの音と「我还坐着」は切り替えてからこのあいだだけ(一言 + 呼吸 + 最初の手順。あとで小窓を開き直しても鳴らさない・出さない) */
+/** 切り替えの音は切り替えてからこのあいだだけ(あとで小窓を開き直しても鳴らさない) */
 const FRESH_MS = 90000;
 const BREATH = { inhale: 4, exhale: 6, breaths: 3 };
 
-/** 「站起来」の一言の分(钟が自分で立たせたときだけ) */
 function announceMs() {
   return view.announced ? ANNOUNCE_MS : 0;
 }
@@ -72,11 +73,6 @@ function stepLeft() {
   return Math.max(0, total - (Date.now() - stepStart));
 }
 
-/** 「斜角肌拉伸（约 2 分钟）」→「斜角肌拉伸」 */
-function title(name) {
-  return (name ?? "").split(/[（(]/)[0].trim() || name;
-}
-
 function cautionDue() {
   if (showCaution !== null) return showCaution;
   try {
@@ -89,35 +85,12 @@ function cautionDue() {
   return showCaution;
 }
 
+/** 切り替えたばかりか(钟が自分で、かつ 1 分半以内) */
+function fresh() {
+  return view.announced && Date.now() - view.since < FRESH_MS;
+}
+
 // MARK: 部品
-
-function pose(name, height = 132) {
-  return sprite(`pose-${name}`, { height }) ?? h("div", { style: { width: `${height}px`, height: `${height}px` } });
-}
-
-function dots(count, index) {
-  return h(
-    "div",
-    { class: "dots row" },
-    Array.from({ length: count }, (_, i) => {
-      const s = i < index ? "done" : i === index ? "current" : "future";
-      return sprite(`dot-${s}-kraft`, { height: i === index ? 16 : 10 });
-    }),
-  );
-}
-
-/** 模板の大字(set = timer-black 28 / mid-black 58 の字高)。無ければ太字 */
-function figure(text, set, cls = "", fallbackPx = 34) {
-  const el = stencil(text, set) ?? h("span", { class: "t-time", style: { fontSize: `${fallbackPx}px` } }, text);
-  if (cls) el.classList.add(cls);
-  return el;
-}
-
-function chip(text) {
-  const el = h("span", { class: "chip" }, text);
-  slice(el, first("chip-black-kraft", "chip-black-card")) || (el.style.background = "var(--black)");
-  return el;
-}
 
 function tape(text) {
   const el = $("tape");
@@ -130,16 +103,10 @@ function smallTimer() {
   return h("span", { class: "small-timer tick-timer" }, `还剩 ${clock(view.dueAt - Date.now())}`);
 }
 
-/** 切り替えたばかりか(钟が自分で、かつ 1 分半以内) */
-function fresh() {
-  return view.announced && Date.now() - view.since < FRESH_MS;
-}
-
-/** 钟が間違えたときの一言(钟が自分で立たせた / 座らせた直後だけ:一言・呼吸・最初の手順のあいだ) */
-function correction() {
-  if (!fresh()) return null;
-  const standing = view.posture === "standing";
-  return h("button", { class: "bare on-kraft", onclick: () => leave(standing ? "stillSitting" : "stillStanding") }, standing ? "我还坐着" : "我还站着");
+/** 「坐 | 站」の札(试做のあいだは無い) */
+function chip() {
+  if (view.preview) return null;
+  return postureChip(view.posture, () => act("flip"), { onKraft: true });
 }
 
 async function act(action) {
@@ -168,13 +135,24 @@ async function next() {
   }
 }
 
+/** 手順が替わった:中身を落とし直す(140 ms) */
+function swap() {
+  const wrap = $("wrap");
+  wrap.classList.remove("swap");
+  void wrap.offsetWidth;
+  wrap.classList.add("swap");
+  clearTimeout(swapTimer);
+  swapTimer = setTimeout(() => wrap.classList.remove("swap"), 300);
+}
+
 // MARK: 画面
 
 /** 「站起来」:呼吸はこの一言のあとに始まる */
 function announce() {
   tape("STAND UP");
+  const then = [view.fixedName, title(view.stretch?.name)].filter(Boolean).join(" + ");
   return [
-    h("div", { class: "head row" }, h("span", { class: "label" }, "到点了"), smallTimer(), h("span", { class: "grow" }), correction()),
+    h("div", { class: "head row" }, h("span", { class: "label" }, "到点了"), smallTimer(), h("span", { class: "grow" }), chip()),
     h(
       "div",
       { class: "body row" },
@@ -184,21 +162,48 @@ function announce() {
         { class: "col" },
         h("div", { class: "announce" }, "站起来"),
         h("div", { class: "text" }, "桌子升到手肘 90°，顺便喝口水"),
-        h("div", { class: "muted" }, `${view.breathStartedAt ? "先 3 次腹式呼吸，然后：" : "然后："}${title(view.stretch?.name)}`),
+        h("div", { class: "muted" }, `${view.breathStartedAt ? "先 3 次腹式呼吸，然后：" : "然后："}${then}`),
       ),
     ),
   ];
 }
 
+/** 喷漆の溜まりの何枚目か:吸うと 0 → 3 に広がり、吐くと 3 → 0 に引く(4 分の 1 秒ごとに差し替える)。
+ *  4 枚目から先は箱いっぱいに塗ってしまうので使わない */
+const FLOOD_MAX = 3;
+function floodFrame(s) {
+  const span = s.inhaling ? BREATH.inhale : BREATH.exhale;
+  const i = Math.min(FLOOD_MAX, Math.floor((s.inPhase / span) * (FLOOD_MAX + 1)));
+  return s.inhaling ? i : FLOOD_MAX - i;
+}
+
+function setFloodFrame(pool, s) {
+  const frame = floodFrame(s);
+  if (pool.dataset.frame === String(frame)) return;
+  pool.dataset.frame = String(frame);
+  const url = `url("material/flood-teal-${frame}.png")`;
+  pool.style.webkitMaskImage = url;
+  pool.style.maskImage = url;
+}
+
+/** 呼吸の絵:喷漆の溜まり(素材があれば)、無ければ墨の円 */
+function breathArt(s) {
+  if (has("flood-teal-0")) {
+    const pool = h("div", { class: "paint-pool" });
+    setFloodFrame(pool, s);
+    return h("div", { class: `breath-flood ${s.inhaling ? "inhale" : "exhale"}` }, pool);
+  }
+  return h("div", { class: `breath-ring ${s.inhaling ? "inhale" : "exhale"}` }, h("div", { class: "ink", style: { animationDelay: `${-s.inPhase}s` } }));
+}
+
 function breath(s) {
   tape("BREATHE");
-  const ring = h("div", { class: `breath-ring ${s.inhaling ? "inhale" : "exhale"}` }, h("div", { class: "ink", style: { animationDelay: `${-s.inPhase}s` } }));
   return [
-    h("div", { class: "head row" }, h("span", { class: "label" }, "3 次腹式呼吸"), h("span", { class: "grow" }), correction(), dots(BREATH.breaths, s.breath)),
+    h("div", { class: "head row" }, h("span", { class: "label" }, "3 次腹式呼吸"), h("span", { class: "grow" }), chip(), dots(BREATH.breaths, s.breath)),
     h(
       "div",
       { class: "body row" },
-      ring,
+      breathArt(s),
       h(
         "div",
         { class: "col" },
@@ -217,27 +222,25 @@ function breath(s) {
   ];
 }
 
-function stepOf(step, count) {
-  return `第 ${step + 1}/${count} 步`;
-}
-
 /** 拉伸の手順(遠くから見る:残り秒が主役) */
 function standing() {
-  tape("STRETCH");
+  tape(view.preview ? "PREVIEW" : "STRETCH");
   const count = view.steps.length;
   const step = Math.min(view.step, count);
   const done = step >= count;
   const current = view.steps[step];
   const left = stepLeft();
   if (done) {
+    if (view.preview) {
+      return [
+        h("div", { class: "head row" }, h("span", { class: "label" }, "试做完了"), h("span", { class: "grow" }), dots(count, step)),
+        stretchBody({ pose: "walk", heading: title(view.stretch?.name), text: "就是这样。关掉回到设置。" }),
+        h("div", { class: "buttons row" }, h("span", { class: "grow" }), button("关闭", { kind: "frame", onKraft: true, width: 135, onClick: () => leave("close") })),
+      ];
+    }
     return [
-      h("div", { class: "head row" }, h("span", { class: "label" }, "做完了"), smallTimer(), h("span", { class: "grow" }), dots(count, step)),
-      h(
-        "div",
-        { class: "body row" },
-        pose("walk"),
-        h("div", { class: "col" }, h("div", { class: "heading far" }, "站着把剩下的时间用完"), h("div", { class: "text" }, "到点我会说「坐下」。这个小窗一会儿自己关。")),
-      ),
+      h("div", { class: "head row" }, h("span", { class: "label" }, "做完了"), smallTimer(), h("span", { class: "grow" }), chip(), dots(count, step)),
+      stretchBody({ pose: "walk", heading: "站着把剩下的时间用完", text: "到点我会说「坐下」。这个小窗一会儿自己关。" }),
       h("div", { class: "buttons row" }, h("span", { class: "grow" }), button("关闭", { kind: "frame", onKraft: true, width: 135, onClick: () => leave("close") })),
     ];
   }
@@ -245,32 +248,22 @@ function standing() {
     h(
       "div",
       { class: "head row" },
-      h("span", { class: "label" }, "站立中"),
-      smallTimer(),
+      h("span", { class: "label" }, view.preview ? "试做" : "站立中"),
+      view.preview ? null : smallTimer(),
       h("span", { class: "grow" }),
-      step > 0 ? h("button", { class: "bare on-kraft", onclick: () => act("prev") }, "‹ 上一步") : correction(),
-      dots(count, step),
+      step > 0 ? h("button", { class: "bare on-kraft", onclick: () => act("prev") }, "‹ 上一步") : null,
+      // 札はいつもここ(手順の点は 7 つあると入らないので、第 N/M 步 に任せる)
+      chip(),
+      view.preview ? dots(count, step) : null,
     ),
-    h(
-      "div",
-      { class: "body row" },
-      pose(current.pose),
-      h("div", { class: "col" }, h("div", { class: "heading far" }, view.heading), current.meta ? chip(current.meta) : null, h("div", { class: "text" }, current.text)),
-    ),
-    h(
-      "div",
-      { class: "count row" },
-      figure(String(Math.ceil((left ?? 0) / 1000)), "mid-black", "tick-count", 52),
-      h("span", { class: "unit" }, step === count - 1 ? "秒后做完" : "秒后下一步"),
-      h("span", { class: "grow" }),
-      h("span", { class: "step-of" }, stepOf(step, count)),
-    ),
-    cautionDue() ? h("div", { class: "muted" }, view.caution) : null,
+    stretchBody({ pose: current.pose, heading: view.heading, meta: current.meta, text: current.text }),
+    countRow({ seconds: Math.ceil((left ?? 0) / 1000), unit: step === count - 1 ? "秒后做完" : "秒后下一步", note: `第 ${step + 1}/${count} 步` }),
+    !view.preview && cautionDue() ? h("div", { class: "muted" }, view.caution) : null,
     h(
       "div",
       { class: "buttons row" },
       button(step === count - 1 ? "做完了" : "下一步", { kind: "teal", width: 169, onClick: next }),
-      button("结束拉伸", { kind: "frame", onKraft: true, width: 135, onClick: () => leave("close") }),
+      button(view.preview ? "关闭" : "结束拉伸", { kind: "frame", onKraft: true, width: 135, onClick: () => leave("close") }),
     ),
   ];
 }
@@ -279,7 +272,7 @@ function standing() {
 function sit() {
   tape("SIT DOWN");
   return [
-    h("div", { class: "head row" }, h("span", { class: "label" }, "到点了"), h("span", { class: "grow" }), correction()),
+    h("div", { class: "head row" }, h("span", { class: "label" }, "到点了"), h("span", { class: "grow" }), chip()),
     h(
       "div",
       { class: "body row" },
@@ -308,20 +301,23 @@ function stateKey() {
     return `breath|${s.breath}|${s.inhaling}`;
   }
   if (p === "breath-done") return "breath-done";
-  return `stretch|${view.stretch?.name ?? ""}#${Math.min(view.step, view.steps.length)}`;
+  return `stretch|${view.stretch?.name ?? ""}#${Math.min(view.step, view.steps.length)}|${view.posture}`;
 }
 
 function render() {
   const sheet = $("sheet");
   const key = stateKey();
-  // 画面が替わったら、しばらく見せてから閉じる数え直し(做完 → 坐下 と続いても「坐下」を 15 秒見せる)
-  if (key !== drawnKey) lingerSince = 0;
+  // 画面が替わったら、しばらく見せてから閉じる数え直し(做完 → 坐下 と続いても「坐下」を 15 秒見せる)。手順が替わったら落とし直す
+  if (key !== drawnKey) {
+    lingerSince = 0;
+    if (drawnKey && key.startsWith("stretch|")) swap();
+  }
   drawnKey = key;
   if (!view?.prompt) return clear(sheet);
   // 切り替えの音は切り替えた直後に一度(钟が自分で切り替えたときだけ。あとで小窓を開き直したときや、トレイから開いたときは鳴らさない)
   if (fresh() && soundedSwitch !== view.since) {
     soundedSwitch = view.since;
-    sound("switch");
+    sound(view.prompt === "sit" ? "sit" : "switch");
   }
   let content;
   if (view.prompt === "sit") {
@@ -375,9 +371,12 @@ function tick() {
   if (p === "breath") {
     const s = breathState(breathElapsed());
     sheet.querySelector(".tick-breath")?.replaceWith(figure(String(s.remaining), "timer-black", "tick-breath"));
+    const pool = sheet.querySelector(".paint-pool");
+    if (pool) setFloodFrame(pool, s);
     return;
   }
   if (p === "done") {
+    if (view.preview) return;
     // 全部やり終えた:しばらく見せてから自分で閉じる(「关闭」を押さなくていい)
     lingerSince ||= Date.now();
     if (!closing && Date.now() - lingerSince > DONE_LINGER_MS) leave("close");
@@ -395,11 +394,15 @@ function tick() {
     }
     return;
   }
-  sheet.querySelector(".tick-count")?.replaceWith(figure(String(Math.ceil(left / 1000)), "mid-black", "tick-count", 52));
+  const seconds = String(Math.ceil(left / 1000));
+  const current = sheet.querySelector(".tick-count");
+  if (current && current.getAttribute("aria-label") !== seconds && current.textContent !== seconds) {
+    current.replaceWith(figure(seconds, "count-black", "tick-count", 40));
+  }
 }
 
 async function init() {
-  await Promise.all([loadMaterial(), loadIcons()]);
+  await Promise.all([loadMaterial(), loadIcons(), loadSounds()]);
   enableDragging();
   view = await call("posture_state");
   render();

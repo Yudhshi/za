@@ -1,9 +1,10 @@
 // 泡澡のあとの日课:跟练の動画(公式の埋め込み)→ 立ってやる拉伸 →(隔天)肩袖の力 → 床の拉伸 → 仰向けの腹式呼吸。
 // 動画は長さが分かっていれば放し終わる時刻に自動で次へ(YouTube は播放器の「終わった」の知らせでも)。
 // 拉伸は 1 歩ずつ:読んで構える 4〜9 秒のあと数え、終われば鳴らして次へ
-import { loadMaterial, slice, sprite, stencil, tile, h, button, first } from "./baked.js";
+import { loadMaterial, slice, sprite, stencil, tile, h, button } from "./baked.js";
 import { call, openUrl, closeWindow } from "./api.js";
-import { loadIcons, icon, clock, chime, clear } from "./common.js";
+import { loadIcons, loadSounds, icon, clock, chime, clear } from "./common.js";
+import { kraft, dots, poseSmall, stretchBody, figure, title } from "./stretchcard.js";
 
 const $ = (id) => document.getElementById(id);
 
@@ -160,52 +161,28 @@ async function setShort(short) {
 
 // MARK: 画面
 
-function pose(name, height = 132) {
-  return sprite(`pose-${name}`, { height }) ?? h("div", { style: { width: `${height}px`, height: `${height}px` } });
-}
-
-function dots(count, index) {
-  return h(
-    "div",
-    { class: "dots row" },
-    Array.from({ length: count }, (_, i) => sprite(`dot-${i < index ? "done" : i === index ? "current" : "future"}-kraft`, { height: i === index ? 16 : 10 })),
-  );
-}
-
 /** いまの手順の残り(ミリ秒) */
 function stepLeft(step) {
   return s.preparing ? step.duration * 1000 : s.pausedLeft != null ? s.pausedLeft * 1000 : s.endsAt ? s.endsAt - Date.now() : 0;
 }
 
+/** 舞台の残り時間:模板の mid-black(字高 58。小窓の count-black とは役割が違う) */
 function timerText(time) {
-  return stencil(time, "timer-black") ?? h("span", { class: "t-time", style: { fontSize: "34px" } }, time);
+  return figure(time, "mid-black", "", 48);
 }
 
+/** 拉伸の卡:小窓と同じ牛皮纸・同じ部品(舞台の大きさ) */
 function stretchCard(step) {
   const time = clock(stepLeft(step));
-  const chip = step.meta ? h("span", { class: "chip" }, step.meta) : null;
-  if (chip) slice(chip, first("chip-black-kraft", "chip-black-card")) || (chip.style.background = "var(--black)");
   const card = h(
     "div",
     { class: "sheet" },
-    h("div", { class: "head row" }, h("span", { class: "label" }, step.heading), h("span", { class: "grow" }), dots(step.stepCount, step.stepNumber)),
-    h(
-      "div",
-      { class: "body row" },
-      pose(step.pose),
-      h(
-        "div",
-        { class: "col" },
-        s.preparing ? h("span", { class: "prep" }, "准备") : null,
-        h("span", { class: "time" }, timerText(time)),
-        chip,
-      ),
-    ),
-    h("div", { class: "text" }, step.text),
+    h("div", { class: "head row" }, h("span", { class: "label" }, step.name), h("span", { class: "grow" }), dots(step.stepCount, step.stepNumber)),
+    stretchBody({ pose: step.pose, heading: step.heading, meta: step.meta, text: step.text }),
+    h("div", { class: "row time-row" }, s.preparing ? h("span", { class: "prep" }, "准备") : null, h("span", { class: "time" }, timerText(time))),
     h("div", { class: "muted" }, s.plan.caution),
   );
-  if (!slice(card, "kraft-sheet-night")) card.classList.add("fallback");
-  return card;
+  return kraft(card);
 }
 
 function upcoming() {
@@ -215,20 +192,27 @@ function upcoming() {
     "div",
     { class: "upcoming" },
     h("span", { class: "t-section" }, "下一步"),
-    h("span", { class: "t-card-title" }, next.stepNumber === 0 ? next.name : next.heading),
+    h("div", { class: "row", style: { gap: "10px" } }, poseSmall(next.pose, 44), h("span", { class: "t-card-title" }, next.stepNumber === 0 ? next.name : next.heading)),
     h("span", { class: "t-body", style: { color: "var(--text-2)" } }, next.text),
   );
 }
 
+/** ブラウザでしか見られない動画の舞台:牛皮纸に、次の拉伸の小さな絵と黒牌のリンク(空の混凝土を見せない) */
+function browserOnlyStage(item) {
+  const next = s.items.find((it, i) => i > s.index && it.type === "stretch");
+  const card = h(
+    "div",
+    { class: "sheet" },
+    h("div", { class: "head row" }, h("span", { class: "label" }, item.title), h("span", { class: "grow" })),
+    h("div", { class: "body row" }, next ? poseSmall(next.pose, 96) : null, h("div", { class: "col" }, h("div", { class: "heading far" }, "这个视频只能在浏览器里看"), h("div", { class: "text" }, "开好了就按这边的「跟练完了，下一个」。"), next ? h("div", { class: "muted" }, `视频后面：${title(next.name)}`) : null)),
+    h("div", { class: "row", style: { marginTop: "14px", gap: "12px" } }, button("在浏览器里打开", { kind: "teal", width: 180, onClick: () => openUrl(item.page) })),
+    h("div", { class: "muted", style: { userSelect: "text" } }, item.page),
+  );
+  return kraft(card);
+}
+
 function videoStage(item) {
-  if (!item.embed) {
-    return h(
-      "div",
-      { class: "done" },
-      h("span", { class: "t-card-title" }, "这个视频只能在浏览器里看"),
-      h("span", { class: "t-caption" }, item.page),
-    );
-  }
+  if (!item.embed) return browserOnlyStage(item);
   const youtube = item.embed.includes("youtube");
   // YouTube には自分の origin を伝えて、播放器の知らせ(終わった)を受け取る
   const src = youtube && /^https?:/.test(location.origin) ? `${item.embed}&origin=${encodeURIComponent(location.origin)}` : item.embed;
@@ -326,11 +310,14 @@ function renderList() {
   const p = s.plan;
   const rows = [];
   const state = (first, last) => (s.index > last ? "done" : s.index >= first ? "current" : "later");
-  const row = (title, st, to) =>
-    h("button", { class: `item is-${st}`, onclick: () => enter(to) }, icon(st === "done" ? "check" : "play", 12), h("span", {}, title));
+  const row = (label, st, to, note) => {
+    const el = h("button", { class: `item is-${st}`, onclick: () => enter(to) }, icon(st === "done" ? "check" : "play", 12), h("span", { class: "grow" }, label), note ? h("span", { class: "item-note" }, note) : null);
+    if (st === "current") slice(el, "tab-chip-night") || (el.style.background = "var(--white)");
+    return el;
+  };
   if (p.videos.length) {
     rows.push(h("span", { class: "t-section" }, "跟练"));
-    p.videos.forEach((v, i) => rows.push(row(v.title, state(i, i), i)));
+    p.videos.forEach((v, i) => rows.push(row(v.title, state(i, i), i, v.embed ? (v.seconds ? clock(v.seconds * 1000) : "") : "浏览器")));
   }
   if (p.stretchNames.length) {
     rows.push(h("span", { class: "t-section", style: { marginTop: "12px" } }, p.short ? "拉伸（简版）" : p.hasStrength ? "拉伸 · 今天加肩袖力量" : "拉伸"));
@@ -359,7 +346,7 @@ function bindKeys() {
 }
 
 async function init() {
-  await Promise.all([loadMaterial(), loadIcons()]);
+  await Promise.all([loadMaterial(), loadIcons(), loadSounds()]);
   tile(document.body, "concrete-night");
   build(await call("ritual_plan", { short: false }));
   s.streak = s.plan.streak;

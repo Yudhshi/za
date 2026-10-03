@@ -64,10 +64,10 @@ pub const DEFAULT_FLOOR: &str = "猫牛式和穿针式（约 2 分钟）
 右手从左手下方穿过去，右肩和右耳贴地，停 30 秒
 换另一侧，停 30 秒
 
-仰躺腹式呼吸（约 2 分钟）
+仰躺腹式呼吸（约 3 分钟）
 仰躺，膝盖弯曲，一只手放肚子上，一只手放胸口
 收下巴，后脑轻轻压向地面，停 5 秒 × 5 次
-用鼻子吸气 4 秒只让肚子鼓起来，用嘴呼气 6 秒，做 8 次";
+用鼻子吸气 4 秒只让肚子鼓起来，用嘴呼气 6 秒，做 12 次";
 
 /// 累的晚上の简版(約 5 分)
 pub const SHORT_STRETCHES: &str = "斜角肌拉伸（约 1 分钟）
@@ -500,7 +500,7 @@ mod tests {
         );
         let rest = plan(DEFAULT_STRETCHES, None, DEFAULT_FLOOR, false);
         assert_eq!(rest.len(), 8);
-        assert!(secs(&rest) <= 13 * 60, "{}", secs(&rest));
+        assert!(secs(&rest) <= 14 * 60, "{}", secs(&rest));
         assert!(secs(&full) - secs(&rest) <= 6 * 60);
         let short = plan(
             DEFAULT_STRETCHES,

@@ -89,12 +89,17 @@ export function stopSpeaking() {
   if ("speechSynthesis" in window) speechSynthesis.cancel();
 }
 
-/** 短い音(WebAudio。素材なし。見ていなくても何が起きたか分かるように 3 種類):
- *  switch = 姿勢の切り替え(低 → 高の 2 音)、step = 手順が替わった(1 音)、done = 全部終わった(高 → 低の短い 2 音) */
+/** 短い音。焼いた素材と同じ世界の 4 つ(sounds/*.wav:胶带を裂く + 喷漆 / 模板の板を置く / 喷漆を 2 回 / 罐を置く)。
+ *  読めなければ正弦波で代える。switch = 「站起来」、sit = 「坐下」、step = 手順が替わった、done = 全部終わった */
+const SOUND_FILES = { switch: "sounds/switch.wav", sit: "sounds/sit.wav", step: "sounds/step.wav", done: "sounds/done.wav" };
 const TONES = {
   switch: [
     [660, 0, 0.18],
     [990, 0.2, 0.3],
+  ],
+  sit: [
+    [660, 0, 0.18],
+    [440, 0.2, 0.3],
   ],
   step: [[1320, 0, 0.35]],
   done: [
@@ -102,24 +107,55 @@ const TONES = {
     [660, 0.15, 0.32],
   ],
 };
+let audio = null;
+const buffers = {};
+
+function context() {
+  audio ??= new AudioContext();
+  if (audio.state === "suspended") audio.resume().catch(() => {});
+  return audio;
+}
+
+/** 音を先に読んでおく(窓を開いた直後に鳴らすので) */
+export function loadSounds() {
+  return Promise.all(
+    Object.entries(SOUND_FILES).map(async ([kind, file]) => {
+      try {
+        const data = await (await fetch(file)).arrayBuffer();
+        buffers[kind] = await context().decodeAudioData(data);
+      } catch {
+        /* 正弦波で代える */
+      }
+    }),
+  );
+}
 
 export function sound(kind = "step") {
-  const notes = TONES[kind] ?? TONES.step;
   try {
-    const ctx = new AudioContext();
-    for (const [freq, at, len] of notes) {
+    const ctx = context();
+    const gain = ctx.createGain();
+    gain.connect(ctx.destination);
+    const buffer = buffers[kind];
+    if (buffer) {
+      gain.gain.value = 0.7;
+      const src = ctx.createBufferSource();
+      src.buffer = buffer;
+      src.connect(gain);
+      src.start();
+      return;
+    }
+    for (const [freq, at, len] of TONES[kind] ?? TONES.step) {
       const osc = ctx.createOscillator();
-      const gain = ctx.createGain();
+      const g = ctx.createGain();
       osc.frequency.value = freq;
       const t = ctx.currentTime + at;
-      gain.gain.setValueAtTime(0.0001, t);
-      gain.gain.exponentialRampToValueAtTime(0.18, t + 0.01);
-      gain.gain.exponentialRampToValueAtTime(0.0001, t + len);
-      osc.connect(gain).connect(ctx.destination);
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.exponentialRampToValueAtTime(0.18, t + 0.01);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + len);
+      osc.connect(g).connect(gain);
       osc.start(t);
       osc.stop(t + len + 0.05);
     }
-    setTimeout(() => ctx.close().catch(() => {}), 1500);
   } catch {
     /* 音が出なくても進む */
   }
@@ -128,6 +164,16 @@ export function sound(kind = "step") {
 /** 歩が終わったときの短い音 */
 export function chime() {
   sound("step");
+}
+
+/** 中文の行の数字を Archivo の等幅で(基線を少し下げて中文と揃える) */
+export function withNums(text) {
+  const frag = document.createDocumentFragment();
+  for (const part of String(text).split(/(\d[\d:]*)/)) {
+    if (!part) continue;
+    frag.append(/^\d/.test(part) ? h("span", { class: "num" }, part) : document.createTextNode(part));
+  }
+  return frag;
 }
 
 export function clear(el, ...children) {

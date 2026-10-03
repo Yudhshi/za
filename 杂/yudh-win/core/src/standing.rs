@@ -6,22 +6,33 @@ use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};
 
-use crate::posture::Transition;
+use crate::posture::{Mark, MarkKind, Transition};
 
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+/// 胶带(一日の時間軸)の印:この時刻からこの状態(UNIX ミリ秒)
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DayMark {
+    pub at: i64,
+    pub kind: MarkKind,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default, rename_all = "camelCase")]
 pub struct DayStand {
     pub stand_seconds: i64,
     pub switches: u32,
+    /// 胶带の印(時刻順)
+    pub marks: Vec<DayMark>,
 }
+
+/// 一日の印はこれより増やさない(30 秒ごとの判定が暴走しても設定ファイルが膨らまないように)
+const MARKS_PER_DAY: usize = 400;
 
 impl DayStand {
     /// いま立っている分(まだ切り替わっていない)を足したもの
-    pub fn plus_open(self, open_seconds: i64) -> DayStand {
-        DayStand {
-            stand_seconds: self.stand_seconds + open_seconds.max(0),
-            switches: self.switches,
-        }
+    pub fn plus_open(mut self, open_seconds: i64) -> DayStand {
+        self.stand_seconds += open_seconds.max(0);
+        self
     }
 }
 
@@ -43,10 +54,43 @@ pub fn record(log: &mut StandLog, day: &str, t: &Transition) {
 }
 
 pub fn today(log: &StandLog, day: &str) -> DayStand {
-    log.get(day).copied().unwrap_or_default()
+    log.get(day).cloned().unwrap_or_default()
+}
+
+/// 胶带の印を足す(同じ時刻・同じ種類が続けば 1 つに)。60 日より古いものは捨てる
+pub fn record_mark(log: &mut StandLog, day: &str, mark: &Mark) {
+    let entry = log.entry(day.to_string()).or_default();
+    let at = mark.at.timestamp_millis();
+    if let Some(last) = entry.marks.last_mut() {
+        if last.kind == mark.kind && (at - last.at).abs() < 1000 {
+            return;
+        }
+        if (at - last.at).abs() < 1000 {
+            last.kind = mark.kind;
+            return;
+        }
+    }
+    if entry.marks.len() >= MARKS_PER_DAY {
+        return;
+    }
+    entry.marks.push(DayMark {
+        at,
+        kind: mark.kind,
+    });
+    while log.len() > 60 {
+        let oldest = log.keys().next().cloned();
+        match oldest {
+            Some(key) => log.remove(&key),
+            None => break,
+        };
+    }
 }
 
 /// 「1 小时 30 分」「25 分钟」
+pub fn minutes_text(minutes: i64) -> String {
+    time_text(minutes)
+}
+
 fn time_text(minutes: i64) -> String {
     match (minutes / 60, minutes % 60) {
         (0, m) => format!("{m} 分钟"),
@@ -104,7 +148,8 @@ mod tests {
             today(&log, "2026-10-01"),
             DayStand {
                 stand_seconds: 2700,
-                switches: 2
+                switches: 2,
+                marks: vec![]
             }
         );
         record(&mut log, "2026-10-02", &t(-99, -5));
@@ -127,51 +172,56 @@ mod tests {
     #[test]
     fn summary_reads_naturally() {
         assert_eq!(summary(DayStand::default()), "今天还没站过");
+        let d = |stand_seconds: i64, switches: u32| DayStand {
+            stand_seconds,
+            switches,
+            marks: vec![],
+        };
+        assert_eq!(summary(d(59, 0)), "今天还没站过");
         assert_eq!(
-            summary(DayStand {
-                stand_seconds: 59,
-                switches: 0
-            }),
-            "今天还没站过"
-        );
-        assert_eq!(
-            summary(DayStand {
-                stand_seconds: 25 * 60 + 30,
-                switches: 1
-            }),
+            summary(d(25 * 60 + 30, 1)),
             "今天站了 25 分钟，换了 1 次姿势"
         );
+        assert_eq!(summary(d(3600, 2)), "今天站了 1 小时，换了 2 次姿势");
         assert_eq!(
-            summary(DayStand {
-                stand_seconds: 3600,
-                switches: 2
-            }),
-            "今天站了 1 小时，换了 2 次姿势"
-        );
-        assert_eq!(
-            summary(DayStand {
-                stand_seconds: 3 * 3600 + 40 * 60,
-                switches: 7
-            }),
+            summary(d(3 * 3600 + 40 * 60, 7)),
             "今天站了 3 小时 40 分，换了 7 次姿势"
         );
         assert_eq!(
-            summary(
-                DayStand {
-                    stand_seconds: 600,
-                    switches: 1
-                }
-                .plus_open(300)
-            ),
+            summary(d(600, 1).plus_open(300)),
             "今天站了 15 分钟，换了 1 次姿势"
         );
         assert_eq!(short_summary(DayStand::default()), "还没站过");
         assert_eq!(
-            short_summary(DayStand {
-                stand_seconds: 3 * 3600 + 40 * 60,
-                switches: 7
-            }),
+            short_summary(d(3 * 3600 + 40 * 60, 7)),
             "站了 3 小时 40 分 · 换了 7 次"
         );
+    }
+
+    #[test]
+    fn marks_are_kept_in_order_and_merged_when_they_coincide() {
+        let mut log = StandLog::new();
+        let t = tokyo(2026, 10, 1, 10, 0, 0);
+        let m = |kind, secs: i64| Mark {
+            at: t + chrono::Duration::seconds(secs),
+            kind,
+        };
+        record_mark(&mut log, "2026-10-01", &m(MarkKind::Sit, 0));
+        record_mark(&mut log, "2026-10-01", &m(MarkKind::Stand, 1800));
+        // 同じ時刻の印は後のものが勝つ(ゲームの終わりと切り替えが同じ tick)
+        record_mark(&mut log, "2026-10-01", &m(MarkKind::Game, 3600));
+        record_mark(&mut log, "2026-10-01", &m(MarkKind::Sit, 3600));
+        record_mark(&mut log, "2026-10-01", &m(MarkKind::Sit, 3600));
+        let day = today(&log, "2026-10-01");
+        let kinds: Vec<MarkKind> = day.marks.iter().map(|x| x.kind).collect();
+        assert_eq!(kinds, vec![MarkKind::Sit, MarkKind::Stand, MarkKind::Sit]);
+        assert_eq!(
+            day.marks[1].at,
+            (t + chrono::Duration::seconds(1800)).timestamp_millis()
+        );
+        for i in 0..500 {
+            record_mark(&mut log, "2026-10-01", &m(MarkKind::Away, 4000 + i * 2));
+        }
+        assert!(today(&log, "2026-10-01").marks.len() <= 400);
     }
 }

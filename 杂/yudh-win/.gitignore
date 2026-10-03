@@ -1,5 +1,8 @@
 target/
 app/node_modules/
 app/ui/material/
-app/ui/fonts/
+# 字体从 ../nippo/Resources 复制（Archivo / JetBrains Mono 不进 git）；中文标题的子集和它的许可是这边自己的
+app/ui/fonts/*
+!app/ui/fonts/NotoSansCJKsc-Black-subset.woff2
+!app/ui/fonts/OFL-NotoSansCJK.txt
 app/src-tauri/gen/

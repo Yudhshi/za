@@ -11,39 +11,48 @@
   flex-direction: column;
 }
 
-/* 最初は細い帯:坐站の状態・今日の数字・泡完澡了。「打开面板」で全体に */
+/* 最初は細い帯:姿勢の札・今日の一行・泡完澡了。「打开」で全体に。帯は焼いた黒い帯(strip-black-night)、全体は面板の枠 */
 .panel.strip-mode {
   height: 64px;
-  padding: 0 18px 0 22px;
+  padding: 0 18px 0 16px;
   justify-content: center;
 }
 
 .panel.strip-mode > .header,
 .panel.strip-mode > .seam,
 .panel.strip-mode > .view,
-.panel.strip-mode > .footer,
 .panel:not(.strip-mode) > .strip {
   display: none;
 }
 
 .strip {
-  gap: 16px;
+  position: relative;
+  isolation: isolate;
+  height: 50px;
+  padding: 0 14px 0 10px;
+  gap: 14px;
   color: var(--text-2);
   font-size: 12.5px;
   font-weight: 600;
   white-space: nowrap;
 }
 
+.strip.fallback {
+  background: var(--black);
+  border-radius: 6px;
+}
+
 .strip .status {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 4px;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
-.strip .status b {
+.strip .status b,
+.posture-line .big {
   color: var(--text);
   font-weight: 800;
 }
@@ -52,6 +61,48 @@
   color: var(--text);
   font-size: 13px;
   font-weight: 800;
+}
+
+/* 帯 → 全体:帯の黒い帯は 120 ms で消え、面板の枠は上へ 200 ms で広がる */
+.panel.expanding > .paint {
+  animation: frame-in 0.2s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  transform-origin: 50% 100%;
+}
+
+@keyframes frame-in {
+  from {
+    transform: scaleY(0.12);
+    opacity: 0;
+  }
+}
+
+/* 「坐 | 站」の札(混凝土の上。牛皮纸の上は posture.html) */
+.posture-chip {
+  display: inline-flex;
+  align-items: stretch;
+  height: 26px;
+  padding: 0;
+  font-size: 13px;
+  font-weight: 900;
+  color: var(--text-2);
+  flex: none;
+}
+
+.posture-chip .half {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 10px;
+  min-width: 34px;
+}
+
+.posture-chip .half.on {
+  color: var(--white);
+}
+
+.posture-chip:hover .half:not(.on) {
+  color: var(--text);
 }
 
 .wall {
@@ -132,37 +183,141 @@
   scrollbar-color: rgba(244, 243, 238, 0.25) transparent;
 }
 
-/* 底栏は 2 行:上が今日の数字(いまの姿勢・今日立った時間・呼吸)、下が操作 */
-.footer {
-  min-height: 56px;
-  flex: none;
+/* 今天(家):姿勢の一行、一日の胶带、呼吸・英語・日课・明天の一行ずつ */
+.today {
+  display: flex;
   flex-direction: column;
-  align-items: stretch;
-  justify-content: flex-end;
-  gap: 4px;
-  color: var(--text-2);
-  font-size: 12.5px;
-  font-weight: 600;
+  gap: 14px;
+  padding-top: 4px;
 }
 
-.footer .line {
-  gap: 16px;
-  min-height: 24px;
+.posture-line {
+  gap: 12px;
 }
 
-.footer .status {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  min-width: 0;
+.posture-line .big {
+  font-size: 20px;
+}
+
+.posture-line .next {
   white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
 
-.footer .status b {
-  color: var(--text);
-  font-weight: 800;
+.today .total {
+  margin-top: -6px;
+}
+
+.today-row {
+  gap: 12px;
+  min-height: 34px;
+  padding: 6px 0;
+  border-top: 1px solid rgba(244, 243, 238, 0.08);
+}
+
+.today-row .label {
+  width: 64px;
+  flex: none;
+}
+
+.today-row .value {
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.breath-dots {
+  gap: 3px;
+}
+
+.breath-dots .dot {
+  width: 10px;
+  height: 14px;
+  background: var(--teal);
+}
+
+/* 一日の胶带:黒 = 座った、青 = 立った、灰 = 離席 / ゲーム / 休み、点線 = 予定、橙の刻み = いま */
+.daytape-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.daytape {
+  position: relative;
+  height: 22px;
+  background: rgba(15, 16, 17, 0.5);
+}
+
+.daytape .seg {
+  position: absolute;
+  top: 3px;
+  height: 16px;
+  display: block;
+}
+
+.daytape .seg.sit {
+  background: var(--black);
+}
+
+.daytape .seg.stand {
+  background: var(--teal);
+}
+
+.daytape .seg.away {
+  background: repeating-linear-gradient(135deg, rgba(196, 156, 105, 0.45) 0 3px, transparent 3px 6px);
+}
+
+.daytape .seg.game {
+  background: repeating-linear-gradient(135deg, rgba(171, 175, 178, 0.45) 0 3px, transparent 3px 6px);
+}
+
+.daytape .seg.rest {
+  background: rgba(171, 175, 178, 0.18);
+}
+
+.daytape .seg.plan {
+  background: none;
+  border: 1.5px dashed rgba(244, 243, 238, 0.55);
+  top: 4px;
+  height: 13px;
+}
+
+.daytape .seg.plan.stand {
+  border-color: var(--teal);
+}
+
+.daytape .now {
+  position: absolute;
+  top: -2px;
+  width: 0;
+  display: flex;
+  justify-content: center;
+}
+
+.daytape .now .notch-fallback {
+  width: 2px;
+  height: 26px;
+  background: var(--orange);
+}
+
+.daytape-wrap .hours {
+  position: relative;
+  height: 14px;
+}
+
+.daytape-wrap .hours span {
+  position: absolute;
+  transform: translateX(-50%);
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--text-2);
+}
+
+.daytape-wrap .hours span:first-child {
+  transform: none;
+}
+
+.daytape-wrap .hours span:last-child {
+  transform: translateX(-100%);
 }
 
 /* 初回:計画の説明(同期フォルダより先) */
@@ -735,4 +890,108 @@
   color: var(--text-2);
   font-size: 13px;
   font-weight: 700;
+}
+
+/* 設定:計画という「もの」の行 */
+.plan {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.plan-line {
+  font-size: 17px;
+  font-weight: 900;
+}
+
+.plan-row {
+  gap: 6px;
+  font-size: 13.5px;
+  font-weight: 600;
+}
+
+.form input.hour {
+  width: 54px;
+  padding: 4px 6px;
+  text-align: center;
+}
+
+/* 拉伸库:一覧 → 行を開いて手順を直す */
+.library-group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 6px 0 10px;
+  border-top: 1px solid rgba(244, 243, 238, 0.08);
+}
+
+.lib-head {
+  min-height: 24px;
+}
+
+.lib-row {
+  gap: 10px;
+  min-height: 46px;
+  padding: 2px 0;
+}
+
+/* 姿勢の絵は黒い墨なので、小さな牛皮纸の上に */
+.lib-pose {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  flex: none;
+  background: var(--kraft);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.lib-pose .sprite {
+  margin: 0 !important;
+}
+
+.lib-name {
+  font-size: 14px;
+  font-weight: 800;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.lib-meta {
+  font-family: var(--mono);
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--text-2);
+  white-space: nowrap;
+}
+
+.lib-item.open {
+  padding-bottom: 8px;
+}
+
+.lib-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 4px 0 0 50px;
+}
+
+.lib-step {
+  gap: 8px;
+}
+
+.lib-step .t-count {
+  width: 18px;
+  flex: none;
+  color: var(--text-2);
+}
+
+.lib-step input[type="text"] {
+  flex: 1;
+  min-width: 0;
+  padding: 5px 8px;
+  font-size: 13px;
 }

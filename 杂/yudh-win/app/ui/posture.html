@@ -138,17 +138,72 @@
         font-size: 13px;
         color: var(--kraft-text-2);
       }
-      /* この手順の残り秒(模板の大字)と、第 N/M 步 */
+      /* この手順の残り秒(模板の大字 count-black、字高 40)と、第 N/M 步 */
       .count {
-        gap: 12px;
-        margin-top: 14px;
-        margin-bottom: 8px;
+        gap: 10px;
+        margin-top: 12px;
+        margin-bottom: 6px;
         align-items: baseline;
-        min-height: 60px;
+        min-height: 48px;
       }
       .count .unit {
-        font-size: 15px;
-        font-weight: 800;
+        font-size: 17px;
+        font-weight: 900;
+      }
+      /* 数字が替わるたびに模板を一度「押す」(60 ms) */
+      .tick-count {
+        animation: stamp 0.06s ease-out;
+      }
+      @keyframes stamp {
+        from {
+          transform: scale(1.06);
+        }
+      }
+      /* 手順が替わる:前の中身は左へ剥がれ、新しい中身は上から落ちる */
+      .wrap.swap .body,
+      .wrap.swap .count {
+        animation: drop 0.14s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+      }
+      @keyframes drop {
+        from {
+          transform: translateY(-6px);
+          opacity: 0;
+        }
+      }
+      .wrap.swap .buttons {
+        animation: fade-in 0.12s ease-out 0.08s both;
+      }
+      /* 「坐 | 站」の札 */
+      .posture-chip {
+        display: inline-flex;
+        align-items: stretch;
+        height: 26px;
+        padding: 0;
+        gap: 0;
+        font-size: 13px;
+        font-weight: 900;
+        color: var(--kraft-text-2);
+      }
+      .posture-chip .half {
+        position: relative;
+        display: inline-flex;
+        align-items: center;
+        padding: 0 10px;
+        min-width: 34px;
+        justify-content: center;
+      }
+      .posture-chip .half.on {
+        color: var(--white);
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .wrap.entering .sheet,
+        .wrap.leaving .sheet,
+        .wrap.swap .body,
+        .wrap.swap .count,
+        .tick-count {
+          animation-duration: 0.01s;
+          transform: none;
+        }
       }
       .count .step-of {
         font-family: var(--mono);
@@ -156,7 +211,46 @@
         font-weight: 700;
         color: var(--kraft-text-2);
       }
-      /* 腹式呼吸:吸うと膨らみ、吐くと縮む円(牛皮纸の上の黒い墨。素材なし) */
+      /* 腹式呼吸:吸うと広がり、吐くと引く喷漆の溜まり(flood-teal の 8 枚を段で)。素材が無ければ下の円 */
+      .breath-flood {
+        width: 132px;
+        height: 132px;
+        flex: none;
+        position: relative;
+      }
+      .breath-flood .paint-pool {
+        position: absolute;
+        inset: 4px;
+        background: var(--teal);
+        opacity: 0.92;
+        -webkit-mask-size: 100% 100%;
+        mask-size: 100% 100%;
+        -webkit-mask-repeat: no-repeat;
+        mask-repeat: no-repeat;
+        -webkit-mask-position: center;
+        mask-position: center;
+        /* 蒙版は明るさ(白 = 塗る)。素材の alpha は全部 255 */
+        -webkit-mask-source-type: luminance;
+        mask-mode: luminance;
+        transition: transform 0.5s ease-in-out;
+      }
+      .breath-flood.inhale .paint-pool {
+        transform: scale(1);
+      }
+      .breath-flood.exhale .paint-pool {
+        transform: scale(0.94);
+      }
+      .breath-flood .ink-edge {
+        position: absolute;
+        inset: 0;
+        -webkit-mask-size: 100% 100%;
+        mask-size: 100% 100%;
+        -webkit-mask-repeat: no-repeat;
+        mask-repeat: no-repeat;
+        background: rgba(22, 22, 21, 0.35);
+        mix-blend-mode: multiply;
+        pointer-events: none;
+      }
       .breath-ring {
         width: 132px;
         height: 132px;

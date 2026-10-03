@@ -8,6 +8,14 @@
   font-stretch: 62% 125%;
 }
 
+/* 中文の見出し:Noto Sans CJK SC Black(OFL)。UI で使う字だけ切り出したもの。欧文・数字は Archivo が先に取る */
+@font-face {
+  font-family: "Yudh CJK";
+  src: url("../fonts/NotoSansCJKsc-Black-subset.woff2") format("woff2");
+  font-weight: 900;
+  font-display: swap;
+}
+
 @font-face {
   font-family: "JetBrains Mono";
   src: url("../fonts/JetBrainsMono[wght].ttf") format("truetype");
@@ -30,6 +38,8 @@
   --kraft-rule: rgba(40, 26, 10, 0.35);
   /* 欧文・数字は Archivo、中文は 微软雅黑、日文(仮名)は 游ゴシック */
   --mixed: "Archivo", "Microsoft YaHei UI", "Microsoft YaHei", "Yu Gothic UI", sans-serif;
+  /* 見出し:欧文は Archivo、中文は切り出した Noto Sans CJK Black(無ければ雅黑) */
+  --display: "Archivo", "Yudh CJK", "Microsoft YaHei UI", "Microsoft YaHei", sans-serif;
   --mono: "JetBrains Mono", "Cascadia Mono", Consolas, monospace;
 }
 
@@ -44,9 +54,32 @@ body {
   color: var(--text);
   font-family: var(--mixed);
   font-size: 15px;
+  font-variant-numeric: tabular-nums;
   -webkit-font-smoothing: antialiased;
   user-select: none;
   overflow: hidden;
+}
+
+/* 中文の行の数字(Archivo):基線を少し下げて中文と揃える */
+.num {
+  font-family: "Archivo", sans-serif;
+  font-weight: 800;
+  font-stretch: 100%;
+  font-variant-numeric: tabular-nums;
+  position: relative;
+  top: 0.04em;
+}
+
+/* 見出しの役割は display の字で(Archivo 900 と Noto Black の太さが揃う) */
+.t-title,
+.t-card-title,
+.title,
+.announce,
+.heading,
+.welcome .big,
+.plan-line,
+.empty-state .title {
+  font-family: var(--display);
 }
 
 button {
