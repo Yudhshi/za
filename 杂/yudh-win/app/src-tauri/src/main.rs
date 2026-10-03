@@ -46,6 +46,8 @@ pub struct AppState {
     pub blur_closed: Mutex<Option<Instant>>,
     /// いまトレイのメニューに出している状態(立っているか、ゲーム中か)。変わったときだけ作り直す
     pub tray_state: Mutex<Option<(bool, Option<String>)>>,
+    /// こちらで面板を動かした時刻(帯を広げたとき):その移動はユーザーの位置として覚えない
+    pub programmatic_move: Mutex<Option<Instant>>,
 }
 
 impl AppState {
@@ -90,6 +92,7 @@ fn main() {
                 settings_path,
                 blur_closed: Mutex::new(None),
                 tray_state: Mutex::new(None),
+                programmatic_move: Mutex::new(None),
             });
             apply_autostart(app.handle());
             build_tray(app.handle())?;
@@ -247,9 +250,9 @@ fn tray_icon() -> Option<tauri::image::Image<'static>> {
     None
 }
 
-/// 30 秒ごと:坐站の判定(全画面のゲーム中は出さない・長く遊んだら抜けたときに尋ねる)。
+/// 30 秒ごと:坐站の钟を進める(全画面のゲーム中は出さない・長く遊んだら抜けたときにすぐ立たせる)。
 /// 名単のゲーム(AION2 など)が動いているあいだは「完全に安静」:開いている窓を閉じ、窓を作らず、
-/// 無操作・全画面も問い合わせない(ゲーム中として計時だけ続け、抜けたら長いゲームの規則で尋ねる)
+/// 無操作・全画面も問い合わせない(ゲーム中として計時だけ続け、抜けたら長いゲームの規則ですぐ立たせる)
 fn ticker(app: AppHandle) {
     let mut last_tick = Utc::now();
     loop {

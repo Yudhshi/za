@@ -58,6 +58,8 @@ function renderWeekday() {
 }
 
 function renderTabs() {
+  // 初回の説明のあいだは札を出さない(押しても説明のままなので)
+  if (state.panel && !state.panel.welcomed) return clear($("tabs"));
   const remaining = state.panel?.stats
     ? Object.values(state.panel.stats.remaining).reduce((a, b) => a + b, 0)
     : null;
@@ -118,9 +120,12 @@ function ritualButton() {
 /** 先回りの操作(钟は自分で切り替えるので、ここにあるのは「今すぐ」だけ) */
 function postureActions() {
   const sitting = state.panel.posture === "sitting";
+  // 変わるのは姿勢と今日の数字だけ:見ている単語の卡や書きかけの設定は作り直さない
   const act = (action) => async () => {
     await call("posture_action", { action });
-    await refresh();
+    state.panel = await call("panel_state");
+    renderStrip();
+    renderFooter();
   };
   return sitting
     ? [h("button", { class: "bare", onclick: act("stood") }, "现在站起来")]
@@ -790,7 +795,7 @@ async function settingsView() {
     note("它不问你，默认你照做了：「站起来」之后先 3 次腹式呼吸，再 1 个拉伸，每一步到时间自动往下走；「坐下」15 秒后自己消失。它说错了就点「我还坐着」（10 分钟后再叫）或「我还站着」（再站 5 分钟）。一天 8 小时大约站 4 小时；每 30 分钟换一次姿势，比站多久更能放松斜角肌，也避免站太久。站着时把桌子升到手肘 90°。"),
     note("全屏游戏时不弹；连续玩 60 分钟以上，退出全屏马上让你站起来。离开座位 3 分钟以上，切换等你回来再说；坐着离开则重新计时。电脑睡眠后醒来，从头算。今天站了多久、换了几次，在面板底部和「坐下」的小窗里。"),
     h("h3", {}, "泡完澡后的日课"),
-    note("托盘右键「泡完澡了」：跟练视频 → 站着拉伸 → 隔天加肩袖力量 → 地上拉伸和腹式呼吸。视频看完点一下「下一个」，之后的拉伸和力量全部按时间自动往下走。泡完热水澡先喝点水，从地上站起来慢一点。夜里疼醒、抬手没力气、手发麻，或不舒服超过 6 周，请去看医生或理疗师。"),
+    note("托盘右键「泡完澡了」：跟练视频 → 站着拉伸 → 隔天加肩袖力量 → 地上拉伸和腹式呼吸。写了时长的视频放完自动跳下一个（YouTube 的还能收到播放器放完的消息），没写的看完点「跟练完了，下一个」；之后的拉伸和力量全部按时间自动往下走。泡完热水澡先喝点水，从地上站起来慢一点。夜里疼醒、抬手没力气、手发麻，或不舒服超过 6 周，请去看医生或理疗师。"),
     h(
       "details",
       {},
@@ -802,10 +807,10 @@ async function settingsView() {
         check("postureEnabled", "坐站提醒（关掉就完全不提醒）"),
         resettable("quietApps", "打游戏时让 Yudh 完全安静的程序（每行一个）", 3),
         note(
-          "这些程序运行时，Yudh 关掉自己所有的窗口、不再弹出任何东西，也不再读键鼠空闲和全屏状态，只留托盘图标；游戏关掉后自动恢复（玩了 60 分钟以上会马上问一次要不要站起来）。只看进程列表里的名字（和任务管理器的「详细信息」一样），不会打开或读取游戏进程。默认是 AION2。",
+          "这些程序运行时，Yudh 关掉自己所有的窗口、不再弹出任何东西，也不再读键鼠空闲和全屏状态，只留托盘图标；游戏关掉后自动恢复（连续玩了 60 分钟以上，关掉游戏就马上让你站起来）。只看进程列表里的名字（和任务管理器的「详细信息」一样），不会打开或读取游戏进程。默认是 AION2。",
         ),
         resettable("stretches", "站起来时的拉伸（每次轮到一个）", 10),
-        resettable("ritualVideos", "日课的跟练视频（每行：名字 + 链接）", 5),
+        resettable("ritualVideos", "日课的跟练视频（每行：名字 + 链接，链接后面可以写时长，如 4:04 或 4 分 35 秒）", 5),
         resettable("ritualStretches", "日课：站着做的拉伸", 10),
         resettable("ritualStrength", "日课：肩袖力量（在地上做）", 6),
         resettable("ritualFloor", "日课：最后在地上做的拉伸", 6),

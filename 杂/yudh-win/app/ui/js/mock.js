@@ -127,6 +127,7 @@ const handlers = {
       breathToday: 3,
       nextStretch: "斜角肌拉伸 · 2 分钟",
       today: "今天站了 1 小时 30 分，换了 3 次姿势",
+      lastStandMinutes: 30,
       caution: "※ 拉伸感可以，发麻或刺痛传到手上就停",
     };
   },

@@ -75,7 +75,7 @@ fn saved_position(app: &AppHandle, saved: Option<[f64; 2]>, width: f64) -> Optio
         .then_some((x, y))
 }
 
-/// 動かした位置を覚え、閉じたら設定に書く。作った直後にこちらで置いた分は数えない。
+/// 動かした位置を覚え、閉じたら設定に書く。作った直後にこちらで置いた分と、帯を広げるときにこちらで動かした分は数えない。
 /// 面板は左下(帯と全体で下の辺を揃える)、坐站の小窓は左上を覚える
 fn remember_position(
     window: &WebviewWindow,
@@ -90,6 +90,7 @@ fn remember_position(
         // 最小化(Win+D など)で (-32000, -32000) に動かされた分は覚えない
         WindowEvent::Moved(pos)
             if created.elapsed() > Duration::from_millis(800)
+                && !just_moved_by_us(&handle)
                 && pos.x > -32000
                 && pos.y > -32000 =>
         {
@@ -115,6 +116,16 @@ fn remember_position(
         }
         _ => {}
     });
+}
+
+/// こちらで動かした直後か(帯を広げたとき。ユーザーが動かした位置として覚えない)
+fn just_moved_by_us(app: &AppHandle) -> bool {
+    app.state::<AppState>()
+        .programmatic_move
+        .lock()
+        .ok()
+        .and_then(|t| *t)
+        .is_some_and(|t| t.elapsed() < Duration::from_millis(1000))
 }
 
 /// 名単のゲームが動いているか(動いていれば窓を作らない)
@@ -210,7 +221,7 @@ pub fn open_panel(app: &AppHandle) {
         .inner
         .lock()
         .ok()
-        .and_then(|inner| inner.settings.panel_pos)
+        .and_then(|inner| inner.settings.panel_anchor)
         .map(|[x, bottom]| [x, bottom - STRIP_SIZE.1]);
     let (x, y) = saved_position(app, saved, STRIP_SIZE.0).unwrap_or_else(|| {
         let (ax, ay, aw, ah) = area(app);
@@ -233,7 +244,7 @@ pub fn open_panel(app: &AppHandle) {
     let Ok(window) = built else {
         return;
     };
-    remember_position(&window, app, |s| &mut s.panel_pos, true);
+    remember_position(&window, app, |s| &mut s.panel_anchor, true);
     let handle = app.clone();
     window.on_window_event(move |event| match event {
         WindowEvent::Focused(false) => {
@@ -263,7 +274,8 @@ pub fn open_panel(app: &AppHandle) {
     });
 }
 
-/// 面板を帯から全体に広げる(下の辺はそのまま、上へ伸ばす。画面の上を越えるなら下げる)
+/// 面板を帯から全体に広げる(下の辺はそのまま、上へ伸ばす。画面の上を越えるなら下げる)。
+/// この移動は覚えない(覚えた左下は帯を置いた所のまま。画面の低いノートで下げた分を次の帯の位置にしない)
 pub fn expand_panel(app: &AppHandle) {
     let Some(window) = app.get_webview_window("panel") else {
         return;
@@ -276,6 +288,9 @@ pub fn expand_panel(app: &AppHandle) {
     let bottom = pos.y + f64::from(size.height) / scale;
     let (_, ay, _, _) = area(app);
     let y = (bottom - PANEL_SIZE.1).max(ay);
+    if let Ok(mut t) = app.state::<AppState>().programmatic_move.lock() {
+        *t = Some(Instant::now());
+    }
     let _ = window.set_size(LogicalSize::new(PANEL_SIZE.0, PANEL_SIZE.1));
     let _ = window.set_position(LogicalPosition::new(pos.x, y));
 }

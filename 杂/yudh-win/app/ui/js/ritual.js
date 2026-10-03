@@ -45,6 +45,9 @@ function cancel() {
 }
 
 function enter(i) {
+  // 映している最中の動画をもう一度選んだ(一覧の同じ行・最初の動画で ←):動画は続いているので数え直さない
+  const same = Math.max(0, i) === s.index && !s.finished && s.items[s.index]?.type === "video";
+  if (same && s.videoEndsAt) return render();
   cancel();
   s.token += 1;
   s.endsAt = s.pausedLeft = s.videoEndsAt = null;
@@ -251,7 +254,7 @@ function videoStage(item) {
 function videoNote(item) {
   if (s.videoEndsAt) return h("span", { class: "t-caption video-left" }, `${clock(s.videoEndsAt - Date.now())} 后自动下一个`);
   if (item.embed?.includes("youtube")) return h("span", { class: "t-caption" }, "放完自动下一个");
-  return h("span", { class: "t-caption" }, "没写时长：看完点「下一个」。设置里在链接后面写上时长（如 4:35）就会自动跳");
+  return h("span", { class: "t-caption" }, "没写时长：看完点「跟练完了，下一个」。设置里在链接后面写上时长（如 4:35）就会自动跳");
 }
 
 function doneStage() {

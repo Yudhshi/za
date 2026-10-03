@@ -430,6 +430,10 @@ pub struct PostureClock {
     pub step: usize,
     /// 全画面のゲームが始まった時刻(続いているあいだだけ)
     pub game_since: Option<DateTime<Utc>>,
+    /// 立ったまま席を外した時刻(3 分無操作になった最初の判定で、最後の操作の時刻)。立っていた長さはここまでしか数えない
+    away_since: Option<DateTime<Utc>>,
+    /// 直前に終えた立ち作業の長さ(秒。「坐下」の知らせに「站了 N 分钟」と書く)
+    pub last_stand_seconds: i64,
     /// まだ記録していない切り替わり(アプリが取り出して日ごとに足す)
     pending: Vec<Transition>,
 }
@@ -441,6 +445,8 @@ pub const GAME_BREAK_MINUTES: i64 = 60;
 /// 座っているあいだ、これだけ操作がなければ離席とみなして計り直す(秒)。
 /// 立っているあいだも、これだけ無操作なら席にいないので、「坐下」は戻ってから言う
 pub const IDLE_RESET_SECONDS: u64 = 180;
+/// 「我还坐着」の 10 分後の約束は、3 分の無操作(通話で聞いているだけ)では消さない。これだけ無操作なら本当に席を離れたので消す(秒)
+pub const AWAY_FOR_GOOD_SECONDS: u64 = 600;
 /// 「坐下」の知らせを出しておく長さ(秒)。画面側は 15 秒で閉じる。これは画面が無いときの保険
 pub const SIT_NOTE_SECONDS: i64 = 60;
 /// 「我还坐着」:これだけ後にもう一度「站起来」(分)
@@ -465,6 +471,8 @@ impl PostureClock {
             },
             step: 0,
             game_since: None,
+            away_since: None,
+            last_stand_seconds: 0,
             pending: Vec::new(),
         }
     }
@@ -510,11 +518,17 @@ impl PostureClock {
         settings: &PostureSettings,
         announced: bool,
     ) {
+        // 立っていた長さ。席を外していたなら、外した時刻まで(昼休みを立っていたことにしない。wake と同じ)
         let stood = if self.posture == Posture::Standing {
-            (now - self.since).num_seconds().max(0)
+            let end = self.away_since.map_or(now, |t| t.clamp(self.since, now));
+            (end - self.since).num_seconds().max(0)
         } else {
             0
         };
+        if self.posture == Posture::Standing {
+            self.last_stand_seconds = stood;
+        }
+        self.away_since = None;
         self.pending.push(Transition {
             to,
             at: now,
@@ -563,8 +577,13 @@ impl PostureClock {
         if long_game && self.posture == Posture::Sitting {
             self.remind_at = Some(now);
         } else if self.posture == Posture::Sitting && !suppressed && away {
-            // 座りっぱなしの計測だけ離席でリセット(立ち作業の残り時間は巻き戻さない)。古い「坐下」の知らせも要らない
+            // 座りっぱなしの計測だけ離席でリセット(立ち作業の残り時間は巻き戻さない)。古い「坐下」の知らせも要らない。
+            // 「我还坐着」の約束(remind_at)は 3 分では消さない(通話で聞いているだけ)。10 分無操作なら本当に離席:全部やり直し
+            let promise = self
+                .remind_at
+                .filter(|_| idle_seconds < AWAY_FOR_GOOD_SECONDS);
             self.reset(now);
+            self.remind_at = promise;
             self.announced = false;
         }
         // 時間が来た:钟が自分で切り替える。席を外しているあいだは戻るまで待つ(長いゲームの後は待たない)
@@ -574,6 +593,14 @@ impl PostureClock {
                 Posture::Standing => Posture::Sitting,
             };
             self.switch(to, now, settings, true);
+        }
+        // 立ったまま席を外した:外した時刻(最後の操作)を覚えておく(切り替えのあとで:戻った判定の tick で切り替えるとき、
+        // その長さは外した時刻までにする)。戻ったら忘れる
+        if self.posture == Posture::Standing && !suppressed && away {
+            let left = now - Duration::seconds(idle_seconds as i64);
+            self.away_since.get_or_insert(left.max(self.since));
+        } else {
+            self.away_since = None;
         }
         self.prompt = desired_prompt(
             self.posture,
@@ -591,10 +618,13 @@ impl PostureClock {
     pub fn wake(&mut self, now: DateTime<Utc>, last_seen: DateTime<Utc>) -> bool {
         let had_prompt = self.prompt.is_some();
         if self.posture == Posture::Standing {
+            let seen = last_seen.max(self.since);
+            let end = self.away_since.unwrap_or(seen).clamp(self.since, seen);
+            self.last_stand_seconds = (end - self.since).num_seconds().max(0);
             self.pending.push(Transition {
                 to: Posture::Sitting,
-                at: last_seen.max(self.since),
-                stand_seconds: (last_seen - self.since).num_seconds().max(0),
+                at: seen,
+                stand_seconds: self.last_stand_seconds,
                 switches: 0,
                 revert: false,
             });
@@ -605,6 +635,7 @@ impl PostureClock {
         self.announced = false;
         self.prompt = None;
         self.game_since = None;
+        self.away_since = None;
         had_prompt
     }
 
@@ -648,6 +679,7 @@ impl PostureClock {
         self.remind_at = Some(now + Duration::minutes(STILL_SITTING_MINUTES));
         self.announced = false;
         self.guide_dismissed = false;
+        self.away_since = None;
         self.prompt = None;
         true
     }
@@ -670,6 +702,7 @@ impl PostureClock {
         self.announced = false;
         // 拉伸はもう済んでいる:手順を出し直さない
         self.guide_dismissed = true;
+        self.away_since = None;
         self.prompt = None;
         true
     }
@@ -1000,6 +1033,12 @@ mod tests {
             !c.still_sitting(said, &settings),
             "only right after the clock stood you up"
         );
+        // 通話で聞いているだけ(3 分無操作)でも 10 分後の約束は消えない
+        assert!(!c.check(said + Duration::minutes(4), &settings, 200, false));
+        assert_eq!(
+            c.due_at(&settings),
+            said + Duration::minutes(STILL_SITTING_MINUTES)
+        );
         assert!(!c.check(said + Duration::minutes(9), &settings, 0, false));
         assert!(c.check(said + Duration::minutes(10), &settings, 0, false));
         assert_eq!(
@@ -1012,6 +1051,7 @@ mod tests {
         let down = stood + Duration::minutes(30);
         assert!(c.check(down, &settings, 0, false));
         assert_eq!(c.prompt, Some(Prompt::Sit));
+        assert_eq!(c.last_stand_seconds, 30 * 60, "the note says 站了 30 分钟");
         assert_eq!(tally(&mut c), (30 * 60, 2));
         assert!(c.still_standing(down + Duration::seconds(10)));
         assert_eq!(
@@ -1047,6 +1087,25 @@ mod tests {
     }
 
     #[test]
+    fn a_long_absence_drops_the_still_sitting_promise() {
+        let settings = PostureSettings::default();
+        let t0 = tokyo(2026, 10, 1, 9, 0, 0);
+        let mut c = PostureClock::new(t0, 0);
+        assert!(c.check(t0 + Duration::minutes(30), &settings, 0, false));
+        let said = t0 + Duration::minutes(31);
+        assert!(c.still_sitting(said, &settings));
+        // 10 分以上無操作:本当に席を離れた。戻ったら座り直しで 30 分から
+        let gone = said + Duration::minutes(12);
+        assert!(!c.check(gone, &settings, 700, false));
+        assert_eq!((c.remind_at, c.since), (None, gone));
+        assert!(!c.check(gone + Duration::minutes(1), &settings, 5, false));
+        assert_eq!(
+            c.due_at(&settings),
+            gone + Duration::minutes(settings.sit_minutes)
+        );
+    }
+
+    #[test]
     fn switches_wait_until_you_are_back_at_the_desk() {
         let settings = PostureSettings::default();
         let t0 = tokyo(2026, 10, 1, 10, 0, 0);
@@ -1064,7 +1123,18 @@ mod tests {
         let back = due + Duration::minutes(12);
         assert!(c.check(back, &settings, 5, false));
         assert_eq!((c.posture, c.prompt), (Posture::Sitting, Some(Prompt::Sit)));
-        assert_eq!(tally(&mut c), ((back - t0).num_seconds(), 1));
+        // 立っていたのは席を外すまで(30 分の時点で 400 秒無操作 = 23 分 20 秒で離席)。昼休みは数えない
+        assert_eq!(tally(&mut c), ((due - t0).num_seconds() - 400, 1));
+        assert_eq!(c.last_stand_seconds, 30 * 60 - 400);
+        // 一度戻ってからまた外した:戻っていた分は数える
+        let mut d = PostureClock::new(t0, 0);
+        d.confirm_stood(t0, &settings);
+        d.take_transitions();
+        assert!(!d.check(t0 + Duration::minutes(5), &settings, 200, false));
+        assert!(!d.check(t0 + Duration::minutes(10), &settings, 0, false));
+        assert!(!d.check(t0 + Duration::minutes(30), &settings, 190, false));
+        assert!(d.check(t0 + Duration::minutes(40), &settings, 0, false));
+        assert_eq!(tally(&mut d), (30 * 60 - 190, 1));
         // 座っているあいだ席を外せば計り直す(古い知らせも消える)
         assert!(c.check(back + Duration::minutes(5), &settings, 300, false));
         assert_eq!((c.prompt, c.since), (None, back + Duration::minutes(5)));
@@ -1125,6 +1195,7 @@ mod tests {
             (last_seen, 10 * 60, 0),
             "only the 10 minutes before sleep count as standing"
         );
+        assert_eq!(c.last_stand_seconds, 10 * 60);
         assert!(
             !c.check(morning + Duration::seconds(30), &settings, 5, false),
             "nothing right after waking"

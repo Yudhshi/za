@@ -23,7 +23,8 @@ let lingerSince = 0;
 let closing = false;
 /** 切り替えの音を鳴らした姿勢(since で区別。作り直しで二度鳴らさない) */
 let soundedSwitch = 0;
-let soundedDone = 0;
+/** 一度でも中身を描いたか(出場の動きは最初の中身で) */
+let entered = false;
 /** 注意書きは一日に一度だけ(見れば分かる。立っているときの小窓に 2 行は要らない) */
 let showCaution = null;
 
@@ -31,6 +32,8 @@ let showCaution = null;
 const ANNOUNCE_MS = 7000;
 const DONE_LINGER_MS = 15000;
 const SIT_LINGER_MS = 15000;
+/** 切り替えの音と「我还坐着」は切り替えてからこのあいだだけ(一言 + 呼吸 + 最初の手順。あとで小窓を開き直しても鳴らさない・出さない) */
+const FRESH_MS = 90000;
 const BREATH = { inhale: 4, exhale: 6, breaths: 3 };
 
 /** 「站起来」の一言の分(钟が自分で立たせたときだけ) */
@@ -127,9 +130,14 @@ function smallTimer() {
   return h("span", { class: "small-timer tick-timer" }, `还剩 ${clock(view.dueAt - Date.now())}`);
 }
 
-/** 钟が間違えたときの一言(钟が自分で立たせた / 座らせたときだけ。立たせたほうは最初の 1 分ほど:一言・呼吸・最初の手順) */
+/** 切り替えたばかりか(钟が自分で、かつ 1 分半以内) */
+function fresh() {
+  return view.announced && Date.now() - view.since < FRESH_MS;
+}
+
+/** 钟が間違えたときの一言(钟が自分で立たせた / 座らせた直後だけ:一言・呼吸・最初の手順のあいだ) */
 function correction() {
-  if (!view.announced) return null;
+  if (!fresh()) return null;
   const standing = view.posture === "standing";
   return h("button", { class: "bare on-kraft", onclick: () => leave(standing ? "stillSitting" : "stillStanding") }, standing ? "我还坐着" : "我还站着");
 }
@@ -147,12 +155,14 @@ function leave(action = "close") {
   setTimeout(() => act(action).finally(() => (closing = false)), 170);
 }
 
-/** 次の手順へ(ボタンからも自動送りからも、同時には 1 回だけ) */
+/** 次の手順へ(ボタンからも自動送りからも、同時には 1 回だけ)。最後の手順を終えたら「做完」の音 */
 async function next() {
   if (advancing) return;
   advancing = true;
   try {
+    const last = Math.min(view.step, view.steps.length) >= view.steps.length - 1;
     await act("next");
+    if (last && view?.prompt === "standing" && phase() === "done") sound("done");
   } finally {
     advancing = false;
   }
@@ -274,7 +284,7 @@ function sit() {
       "div",
       { class: "body row" },
       pose("sit-down"),
-      h("div", { class: "col" }, h("div", { class: "announce" }, "坐下"), h("div", { class: "text" }, "站了 30 分钟，坐下歇一歇"), h("div", { class: "muted" }, view.today)),
+      h("div", { class: "col" }, h("div", { class: "announce" }, "坐下"), h("div", { class: "text" }, view.lastStandMinutes >= 1 ? `站了 ${view.lastStandMinutes} 分钟，坐下歇一歇` : "坐下歇一歇"), h("div", { class: "muted" }, view.today)),
     ),
     h("div", { class: "buttons row" }, h("span", { class: "muted" }, "30 分钟后再叫你"), h("span", { class: "grow" }), h("button", { class: "bare on-kraft", onclick: () => leave("close") }, "关闭")),
   ];
@@ -304,10 +314,12 @@ function stateKey() {
 function render() {
   const sheet = $("sheet");
   const key = stateKey();
+  // 画面が替わったら、しばらく見せてから閉じる数え直し(做完 → 坐下 と続いても「坐下」を 15 秒見せる)
+  if (key !== drawnKey) lingerSince = 0;
   drawnKey = key;
   if (!view?.prompt) return clear(sheet);
-  // 切り替えの音は姿勢ごとに一度(钟が自分で切り替えたときだけ。自分でトレイから開いたときは鳴らさない)
-  if (view.announced && soundedSwitch !== view.since) {
+  // 切り替えの音は切り替えた直後に一度(钟が自分で切り替えたときだけ。あとで小窓を開き直したときや、トレイから開いたときは鳴らさない)
+  if (fresh() && soundedSwitch !== view.since) {
     soundedSwitch = view.since;
     sound("switch");
   }
@@ -326,16 +338,15 @@ function render() {
         act("breathDone").finally(() => (finishing = false));
       }
       return;
-    } else {
-      if (p === "done" && soundedDone !== view.since) {
-        soundedDone = view.since;
-        sound("done");
-      }
-      content = standing();
-    }
+    } else content = standing();
   }
   clear(sheet, content);
   if (!slice(sheet, "kraft-sheet-night")) sheet.classList.add("fallback");
+  // 出場の動き(胶带から紙が下へ広がる)は最初の中身と一緒に
+  if (!entered) {
+    entered = true;
+    $("wrap").classList.add("entering");
+  }
   // 中身の高さが変わったときだけ窓を合わせる(offset は出場の変形を含まない)
   requestAnimationFrame(() => {
     const wrap = $("wrap");
@@ -373,10 +384,13 @@ function tick() {
     return;
   }
   lingerSince = 0;
+  const count = view.steps.length;
+  const step = Math.min(view.step, count);
   const left = stepLeft();
   if (left === 0) {
     if (!advancing) {
-      sound("step");
+      // 次の手順がある:「换步」の音。最後の手順なら next() が「做完」の音を鳴らす
+      if (step < count - 1) sound("step");
       next();
     }
     return;

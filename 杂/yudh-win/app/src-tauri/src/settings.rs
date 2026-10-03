@@ -22,13 +22,15 @@ pub struct Settings {
     pub quiet_apps: String,
     /// 初回の説明(坐 30 站 30、到点小窗会叫你)を読んだ
     pub welcomed: bool,
-    /// 自分で動かした面板・坐站の小窓の左上(論理 px)。次からその位置に出す
-    pub panel_pos: Option<[f64; 2]>,
+    /// 自分で動かした面板の左下(論理 px。帯と全体で下の辺を揃えるため左下を覚える)。次からその位置に出す。
+    /// 前の版の panelPos(左上)は読まない
+    pub panel_anchor: Option<[f64; 2]>,
+    /// 自分で動かした坐站の小窓の左上(論理 px)
     pub posture_pos: Option<[f64; 2]>,
     pub posture: PostureSettings,
     /// 日ごとの立った時間と姿勢を変えた回数(「今天站了 1 小时 30 分，换了 3 次姿势」)
     pub stand_log: StandLog,
-    /// 次に出す拉伸の番号(実際に立ったときに進める)
+    /// 次に出す拉伸の番号(钟が立たせるたびに進める。「我还坐着」で戻す)
     pub stretch_index: usize,
     /// 立つたびに、拉伸の前に腹式呼吸を 3 回
     pub breath_habit: bool,
@@ -50,7 +52,7 @@ impl Default for Settings {
             autostart: true,
             quiet_apps: quiet::DEFAULT_QUIET_APPS.into(),
             welcomed: false,
-            panel_pos: None,
+            panel_anchor: None,
             posture_pos: None,
             posture: PostureSettings::default(),
             stand_log: StandLog::new(),

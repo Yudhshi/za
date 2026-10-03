@@ -14,12 +14,14 @@
         margin: 4px 14px 30px 14px;
         padding-top: 16px;
       }
-      /* 出場:胶带の所から紙が下へ広がる(150 ms)。閉じるときは揭がす */
+      /* 出場:胶带の所から紙が下へ広がる(150 ms。最初の中身を描いたときに entering を付ける)。閉じるときは揭がす */
       .sheet {
         transform-origin: 50% 0;
+      }
+      .wrap.entering .sheet {
         animation: unfold 0.16s cubic-bezier(0.2, 0.8, 0.2, 1) both;
       }
-      .tape {
+      .wrap.entering .tape {
         animation: fade-in 0.12s ease-out both;
       }
       .wrap.leaving .sheet {

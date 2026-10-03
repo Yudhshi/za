@@ -32,7 +32,7 @@ core/      yudh-core：没有界面的 Rust 库（这里的逻辑全部有测试
 ## 开发
 
 ```
-cargo test            # 核心 45 个 + app 1 个
+cargo test            # 核心 46 个 + app 1 个
 cargo clippy --all-targets -- -D warnings
 ```
 

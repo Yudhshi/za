@@ -307,6 +307,8 @@ pub struct PostureView {
     next_stretch: String,
     /// 「今天站了 1 小时 30 分，换了 3 次姿势」
     today: String,
+    /// 直前に終えた立ち作業の長さ(分。「坐下」の知らせの「站了 N 分钟」)
+    last_stand_minutes: i64,
     caution: &'static str,
 }
 
@@ -371,6 +373,7 @@ fn posture_view(inner: &Inner) -> PostureView {
         breath_today: today_breaths(&habits(inner)),
         next_stretch: posture::display_name(&clock.next_stretch(&inner.settings.posture).name),
         today: standing::summary(day_stand(inner, now)),
+        last_stand_minutes: (clock.last_stand_seconds + 30) / 60,
         caution: posture::CAUTION,
     }
 }
