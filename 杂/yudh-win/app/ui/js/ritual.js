@@ -1,5 +1,6 @@
 // 泡澡のあとの日课:跟练の動画(公式の埋め込み)→ 立ってやる拉伸 →(隔天)肩袖の力 → 床の拉伸 → 仰向けの腹式呼吸。
-// 拉伸は 1 歩ずつ:声で読み終えて 1.5 秒(声なしなら 3 秒)してから数え、終われば鳴らして次へ
+// 動画は長さが分かっていれば放し終わる時刻に自動で次へ(YouTube は播放器の「終わった」の知らせでも)。
+// 拉伸は 1 歩ずつ:読んで構える 4〜9 秒のあと数え、終われば鳴らして次へ
 import { loadMaterial, slice, sprite, stencil, tile, h, button, first } from "./baked.js";
 import { call, openUrl, closeWindow } from "./api.js";
 import { loadIcons, icon, clock, chime, clear } from "./common.js";
@@ -20,7 +21,12 @@ const s = {
   token: 0,
   timer: null,
   lead: null,
+  /// 動画が放し終わる予定の時刻(長さが分かっているとき)
+  videoEndsAt: null,
 };
+
+/** 読み込みと広告の分の余白(秒)。長さどおりに切ると最後が欠ける */
+const VIDEO_SLACK = 8;
 
 function build(plan) {
   s.plan = plan;
@@ -41,14 +47,48 @@ function cancel() {
 function enter(i) {
   cancel();
   s.token += 1;
-  s.endsAt = s.pausedLeft = null;
+  s.endsAt = s.pausedLeft = s.videoEndsAt = null;
   s.preparing = false;
   if (i >= s.items.length) return finish();
   s.index = Math.max(0, i);
   s.finished = false;
   const item = s.items[s.index];
   if (item.type === "stretch") prepare(item);
+  else if (item.seconds) runVideo(item.seconds + VIDEO_SLACK);
   render();
+}
+
+/** 長さの分かっている動画:放し終わる頃に自動で次へ */
+function runVideo(seconds) {
+  s.videoEndsAt = Date.now() + seconds * 1000;
+  const mine = s.token;
+  s.timer = setTimeout(() => {
+    if (s.token !== mine) return;
+    chime();
+    enter(s.index + 1);
+  }, seconds * 1000);
+}
+
+/** YouTube の播放器からの知らせ(enablejsapi):終わったら次へ。いま映している播放器からの知らせだけ受ける
+ *  (終わった知らせは 2 通り来るし、前の動画の播放器からも遅れて来る:二度進めない) */
+function onPlayerMessage(e) {
+  const item = s.items[s.index];
+  if (item?.type !== "video" || !item.embed?.includes("youtube")) return;
+  const frame = $("stage").querySelector("iframe");
+  if (!frame || e.source !== frame.contentWindow) return;
+  let data = e.data;
+  if (typeof data === "string") {
+    try {
+      data = JSON.parse(data);
+    } catch {
+      return;
+    }
+  }
+  const ended = (data?.event === "onStateChange" && data.info === 0) || (data?.event === "infoDelivery" && data.info?.playerState === 0);
+  if (ended) {
+    chime();
+    enter(s.index + 1);
+  }
 }
 
 /** 読んで構える時間(語音播报は無い):文の長さに合わせて 4〜9 秒。そのあと自動で計時 */
@@ -186,13 +226,32 @@ function videoStage(item) {
       h("span", { class: "t-caption" }, item.page),
     );
   }
+  const youtube = item.embed.includes("youtube");
+  // YouTube には自分の origin を伝えて、播放器の知らせ(終わった)を受け取る
+  const src = youtube && /^https?:/.test(location.origin) ? `${item.embed}&origin=${encodeURIComponent(location.origin)}` : item.embed;
   const frame = h("iframe", {
-    src: item.embed,
+    src,
     allow: "autoplay; encrypted-media; fullscreen; picture-in-picture",
     allowfullscreen: true,
     referrerpolicy: "strict-origin-when-cross-origin",
   });
+  if (youtube) {
+    frame.addEventListener("load", () => {
+      try {
+        frame.contentWindow.postMessage(JSON.stringify({ event: "listening", id: 1, channel: "widget" }), "*");
+      } catch {
+        /* 知らせが来なければ長さで進む */
+      }
+    });
+  }
   return h("div", { class: "video" }, frame);
+}
+
+/** 動画の下の一言:自動で進むか、押して進むか */
+function videoNote(item) {
+  if (s.videoEndsAt) return h("span", { class: "t-caption video-left" }, `${clock(s.videoEndsAt - Date.now())} 后自动下一个`);
+  if (item.embed?.includes("youtube")) return h("span", { class: "t-caption" }, "放完自动下一个");
+  return h("span", { class: "t-caption" }, "没写时长：看完点「下一个」。设置里在链接后面写上时长（如 4:35）就会自动跳");
 }
 
 function doneStage() {
@@ -245,6 +304,7 @@ function renderControls(item) {
     row = [
       bare("‹ 上一个", () => enter(s.index - 1), s.index === 0),
       bare("在浏览器里打开", () => openUrl(item.page)),
+      videoNote(item),
       h("span", { class: "grow" }),
       button("跟练完了，下一个", { kind: "teal", onClick: () => enter(s.index + 1) }),
     ];
@@ -301,10 +361,16 @@ async function init() {
   build(await call("ritual_plan", { short: false }));
   s.streak = s.plan.streak;
   bindKeys();
+  window.addEventListener("message", onPlayerMessage);
   enter(0);
   // 残り秒の数字だけ差し替える(画面を作り直すと、押している途中のボタンが消えて押せない)
   setInterval(() => {
     const item = s.items[s.index];
+    if (item?.type === "video") {
+      const left = $("controls").querySelector(".video-left");
+      if (left && s.videoEndsAt) left.textContent = `${clock(s.videoEndsAt - Date.now())} 后自动下一个`;
+      return;
+    }
     if (item?.type !== "stretch") return;
     const holder = $("stage").querySelector(".time");
     if (holder) clear(holder, timerText(clock(stepLeft(item))));

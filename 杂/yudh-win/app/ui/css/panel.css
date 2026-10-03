@@ -11,6 +11,49 @@
   flex-direction: column;
 }
 
+/* 最初は細い帯:坐站の状態・今日の数字・泡完澡了。「打开面板」で全体に */
+.panel.strip-mode {
+  height: 64px;
+  padding: 0 18px 0 22px;
+  justify-content: center;
+}
+
+.panel.strip-mode > .header,
+.panel.strip-mode > .seam,
+.panel.strip-mode > .view,
+.panel.strip-mode > .footer,
+.panel:not(.strip-mode) > .strip {
+  display: none;
+}
+
+.strip {
+  gap: 16px;
+  color: var(--text-2);
+  font-size: 12.5px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.strip .status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.strip .status b {
+  color: var(--text);
+  font-weight: 800;
+}
+
+.strip .open {
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 800;
+}
+
 .wall {
   position: absolute;
   inset: 0;
@@ -89,19 +132,69 @@
   scrollbar-color: rgba(244, 243, 238, 0.25) transparent;
 }
 
+/* 底栏は 2 行:上が今日の数字(いまの姿勢・今日立った時間・呼吸)、下が操作 */
 .footer {
-  height: 38px;
-  gap: 20px;
+  min-height: 56px;
   flex: none;
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: flex-end;
+  gap: 4px;
   color: var(--text-2);
   font-size: 12.5px;
   font-weight: 600;
+}
+
+.footer .line {
+  gap: 16px;
+  min-height: 24px;
 }
 
 .footer .status {
   display: inline-flex;
   align-items: center;
   gap: 6px;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.footer .status b {
+  color: var(--text);
+  font-weight: 800;
+}
+
+/* 初回:計画の説明(同期フォルダより先) */
+.welcome {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 18px 4px 8px;
+}
+
+.welcome .big {
+  font-size: 26px;
+  font-weight: 900;
+  line-height: 1.25;
+}
+
+.welcome .body {
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.6;
+}
+
+.welcome .body em {
+  font-style: normal;
+  color: var(--teal);
+}
+
+.welcome .aside {
+  color: var(--text-2);
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.55;
 }
 
 /* 英語 */

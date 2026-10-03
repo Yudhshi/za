@@ -14,6 +14,46 @@
         margin: 4px 14px 30px 14px;
         padding-top: 16px;
       }
+      /* 出場:胶带の所から紙が下へ広がる(150 ms)。閉じるときは揭がす */
+      .sheet {
+        transform-origin: 50% 0;
+        animation: unfold 0.16s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+      }
+      .tape {
+        animation: fade-in 0.12s ease-out both;
+      }
+      .wrap.leaving .sheet {
+        animation: peel 0.16s ease-in forwards;
+      }
+      .wrap.leaving .tape {
+        animation: fade-out 0.16s ease-in forwards;
+      }
+      @keyframes unfold {
+        from {
+          transform: translateY(-6px) scaleY(0.25);
+          opacity: 0;
+        }
+        to {
+          transform: none;
+          opacity: 1;
+        }
+      }
+      @keyframes peel {
+        to {
+          transform: translateY(-10px) rotate(-2.5deg) scaleY(0.35);
+          opacity: 0;
+        }
+      }
+      @keyframes fade-in {
+        from {
+          opacity: 0;
+        }
+      }
+      @keyframes fade-out {
+        to {
+          opacity: 0;
+        }
+      }
       .tape {
         position: absolute;
         top: 0;
@@ -49,9 +89,19 @@
         font-weight: 900;
         letter-spacing: 0.02em;
       }
+      /* 播报の一言(「站起来」「坐下」)は離れていても読める大きさ */
+      .announce {
+        font-size: 40px;
+        font-weight: 900;
+        letter-spacing: 0.04em;
+        line-height: 1.1;
+      }
       .head {
-        gap: 8px;
+        gap: 10px;
         min-height: 40px;
+      }
+      .head > * {
+        white-space: nowrap;
       }
       .head .label {
         font-size: 15px;
@@ -72,6 +122,77 @@
       .heading {
         font-size: 20px;
         font-weight: 800;
+      }
+      /* 立っているときの小窓は「遠くから見る」:動作の名前を大きく */
+      .heading.far {
+        font-size: 26px;
+        font-weight: 900;
+        line-height: 1.15;
+      }
+      .small-timer {
+        font-family: "Archivo", sans-serif;
+        font-weight: 800;
+        font-variant-numeric: tabular-nums;
+        font-size: 13px;
+        color: var(--kraft-text-2);
+      }
+      /* この手順の残り秒(模板の大字)と、第 N/M 步 */
+      .count {
+        gap: 12px;
+        margin-top: 14px;
+        margin-bottom: 8px;
+        align-items: baseline;
+        min-height: 60px;
+      }
+      .count .unit {
+        font-size: 15px;
+        font-weight: 800;
+      }
+      .count .step-of {
+        font-family: var(--mono);
+        font-size: 12px;
+        font-weight: 700;
+        color: var(--kraft-text-2);
+      }
+      /* 腹式呼吸:吸うと膨らみ、吐くと縮む円(牛皮纸の上の黒い墨。素材なし) */
+      .breath-ring {
+        width: 132px;
+        height: 132px;
+        flex: none;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+      .breath-ring .ink {
+        width: 118px;
+        height: 118px;
+        border-radius: 50%;
+        border: 3px solid var(--kraft-text);
+        background: rgba(22, 22, 21, 0.14);
+        box-shadow: inset 0 0 0 6px rgba(22, 22, 21, 0.08);
+        transform: scale(0.55);
+      }
+      .breath-ring.inhale .ink {
+        animation: breath-in 4s cubic-bezier(0.45, 0, 0.55, 1) both;
+      }
+      .breath-ring.exhale .ink {
+        animation: breath-out 6s cubic-bezier(0.45, 0, 0.55, 1) both;
+      }
+      @keyframes breath-in {
+        from {
+          transform: scale(0.55);
+        }
+        to {
+          transform: scale(1);
+        }
+      }
+      @keyframes breath-out {
+        from {
+          transform: scale(1);
+        }
+        to {
+          transform: scale(0.55);
+        }
       }
       .text {
         font-size: 14px;

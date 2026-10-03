@@ -1,4 +1,5 @@
-// 面板:英語(単語・考点词・听写)/ 明天的会 / 设置。底栏は坐站の状態と「泡完澡了」
+// 面板:最初は細い帯(坐站の状態・今日立った時間・泡完澡了)。「打开面板」で全体:英語(単語・考点词・听写)/ 明天的会 / 设置。
+// 初回は計画の説明を先に見せる(同期フォルダは英語と会議にだけ要る)
 import { loadMaterial, slice, sprite, tile, h, button, first, asset } from "./baked.js";
 import { call, closeWindow, openUrl, enableDragging } from "./api.js";
 import { loadIcons, icon, weekdays, weekdaysZh, hhmm, speak, stopSpeaking, clear, voiceFor, voicesReady } from "./common.js";
@@ -17,6 +18,8 @@ const state = {
   listened: false,
   undoable: false,
   settings: null,
+  /** 帯から全体に広げたか */
+  expanded: false,
 };
 
 function safeGet(key) {
@@ -90,33 +93,70 @@ function switchTab(key) {
   renderView();
 }
 
-function renderFooter() {
+/** いまの姿勢と今日の数字(帯は短い形) */
+function postureStatus(short = false) {
   const p = state.panel;
   const sitting = p.posture === "sitting";
+  return h(
+    "span",
+    { class: "status" },
+    icon(sitting ? "seat" : "stand", 15),
+    h("b", {}, `${sitting ? "已坐" : "已站"} ${Math.max(0, p.minutesInPosture)} 分钟`),
+    ` · ${short ? p.todayShort : p.today}`,
+  );
+}
+
+function ritualButton() {
+  return h(
+    "button",
+    { class: "bare row", style: { gap: "6px" }, onclick: () => call("open_surface", { which: "ritual" }), title: "跟练视频 → 肩颈拉伸 → 躺着做腹式呼吸" },
+    icon("play", 13),
+    "泡完澡了",
+  );
+}
+
+/** 先回りの操作(钟は自分で切り替えるので、ここにあるのは「今すぐ」だけ) */
+function postureActions() {
+  const sitting = state.panel.posture === "sitting";
+  const act = (action) => async () => {
+    await call("posture_action", { action });
+    await refresh();
+  };
+  return sitting
+    ? [h("button", { class: "bare", onclick: act("stood") }, "现在站起来")]
+    : [h("button", { class: "bare", onclick: act("open") }, "看拉伸"), h("button", { class: "bare", onclick: act("sat") }, "坐下了")];
+}
+
+function renderStrip() {
+  clear($("strip"), postureStatus(true), h("span", { class: "grow" }), ritualButton(), h("button", { class: "bare open", onclick: expand }, "打开 ›"));
+}
+
+function renderFooter() {
+  const p = state.panel;
   clear(
     $("footer"),
-    h(
-      "span",
-      { class: "status" },
-      icon(sitting ? "seat" : "stand", 15),
-      `${sitting ? "已坐" : "已站"} ${Math.max(0, p.minutesInPosture)} 分钟`,
-    ),
-    h("button", { class: "bare", onclick: () => call("posture_action", { action: "open" }) }, sitting ? "站起来了吗？" : "看拉伸"),
-    h("span", { class: "grow" }),
-    h("span", { class: "status" }, `腹式呼吸今天 ${p.breathToday} 次`),
-    h(
-      "button",
-      { class: "bare row", style: { gap: "6px" }, onclick: () => call("open_surface", { which: "ritual" }), title: "跟练视频 → 肩颈拉伸 → 躺着做腹式呼吸" },
-      icon("play", 13),
-      "泡完澡了",
-    ),
+    h("div", { class: "line row" }, postureStatus(), h("span", { class: "grow" }), h("span", { class: "status" }, `腹式呼吸今天 ${p.breathToday} 次`)),
+    h("div", { class: "line row" }, ...postureActions(), h("span", { class: "grow" }), ritualButton()),
   );
+}
+
+/** 帯から全体へ(窓は Rust が下の辺を揃えて上へ伸ばす) */
+async function expand() {
+  if (state.expanded) return;
+  state.expanded = true;
+  $("panel").classList.remove("strip-mode");
+  await call("open_surface", { which: "panel-full" });
+  renderTabs();
+  renderFooter();
+  await renderView();
 }
 
 // MARK: 本体
 
 async function refresh() {
   state.panel = await call("panel_state");
+  renderStrip();
+  if (!state.expanded) return;
   renderTabs();
   renderFooter();
   await renderView();
@@ -124,6 +164,7 @@ async function refresh() {
 
 async function renderView() {
   const view = $("view");
+  if (!state.panel.welcomed) return clear(view, welcomeView());
   if (state.tab === "tomorrow") return clear(view, tomorrowView());
   if (state.tab === "settings") return clear(view, await settingsView());
   clear(view, await englishView());
@@ -133,6 +174,34 @@ async function renderView() {
 /** 听写は入力欄に焦点を置く(開いてすぐ打てる・Enter で続けられるように) */
 function focusSpell() {
   if (state.card?.kind === "spell" && !state.graded) $("spell-input")?.focus();
+}
+
+/** 初回:計画を先に(同期フォルダは英語と会議にだけ要るので、あとで) */
+function welcomeView() {
+  return h(
+    "div",
+    { class: "welcome" },
+    h("div", { class: "big" }, "从现在开始：坐 30 分钟，站 30 分钟"),
+    h(
+      "div",
+      { class: "body" },
+      "到点屏幕上方的小窗会说",
+      h("em", {}, "「站起来」"),
+      "，接着 3 次腹式呼吸、1 个肩颈拉伸，每一步到时间自动往下走，做完自己关。30 分钟后它说",
+      h("em", {}, "「坐下」"),
+      "。你什么都不用点；它说错了，就点一下角上的「我还坐着 / 我还站着」。",
+    ),
+    h("div", { class: "aside" }, "有声音：换姿势两个音，换动作一个音，做完一个短音。全屏游戏时不弹；AION2 运行时完全安静，关掉游戏自动恢复。"),
+    h("div", { class: "aside" }, "英语和明天的会议要和 Mac 共用一个同步文件夹，以后在「设置」里选就行。"),
+    button("知道了", {
+      kind: "teal",
+      width: 160,
+      onClick: async () => {
+        await call("settings_save", { patch: { welcomed: true } });
+        await refresh();
+      },
+    }),
+  );
 }
 
 function emptyState(title, note, action) {
@@ -717,9 +786,9 @@ async function settingsView() {
     ),
     h("div", { class: "field" }, "这台电脑的名字", text("device"), h("div", { class: "hint" }, "进度文件按名字分开写，两台设备不要同名。")),
     h("h3", {}, "坐站计划（已经帮你定好，不用调）"),
-    line(`坐 ${s.sitMinutes} 分钟 → 站 ${s.standMinutes} 分钟，一直循环`),
-    note("每次站起来：先 3 次腹式呼吸，再做 1 个拉伸，每一步到时间自动往下走，不用点。一天 8 小时大约站 4 小时；每 30 分钟换一次姿势，比站多久更能放松斜角肌，也避免站太久。站着时把桌子升到手肘 90°。"),
-    note("全屏游戏时不弹；连续玩 60 分钟以上，退出全屏马上问一次。坐着 3 分钟没操作当作离开座位，重新计时；「站起来了吗？」弹出后 10 分钟没回应也没操作，同样算离开，小窗自己关。电脑睡眠后醒来，从头算。"),
+    line(`坐 ${s.sitMinutes} 分钟 → 站 ${s.standMinutes} 分钟，一直循环，到点小窗直接说「站起来」「坐下」`),
+    note("它不问你，默认你照做了：「站起来」之后先 3 次腹式呼吸，再 1 个拉伸，每一步到时间自动往下走；「坐下」15 秒后自己消失。它说错了就点「我还坐着」（10 分钟后再叫）或「我还站着」（再站 5 分钟）。一天 8 小时大约站 4 小时；每 30 分钟换一次姿势，比站多久更能放松斜角肌，也避免站太久。站着时把桌子升到手肘 90°。"),
+    note("全屏游戏时不弹；连续玩 60 分钟以上，退出全屏马上让你站起来。离开座位 3 分钟以上，切换等你回来再说；坐着离开则重新计时。电脑睡眠后醒来，从头算。今天站了多久、换了几次，在面板底部和「坐下」的小窗里。"),
     h("h3", {}, "泡完澡后的日课"),
     note("托盘右键「泡完澡了」：跟练视频 → 站着拉伸 → 隔天加肩袖力量 → 地上拉伸和腹式呼吸。视频看完点一下「下一个」，之后的拉伸和力量全部按时间自动往下走。泡完热水澡先喝点水，从地上站起来慢一点。夜里疼醒、抬手没力气、手发麻，或不舒服超过 6 周，请去看医生或理疗师。"),
     h(
@@ -810,6 +879,8 @@ async function init() {
   renderWeekday();
   enableDragging();
   await refresh();
+  // 初回は説明を読んでもらう:帯でなく全体を開く
+  if (!state.panel.welcomed) await expand();
   bindKeys();
 }
 

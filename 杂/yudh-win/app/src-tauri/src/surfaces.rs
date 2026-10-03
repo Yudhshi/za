@@ -5,8 +5,8 @@
 use std::time::{Duration, Instant};
 
 use tauri::{
-    AppHandle, Emitter, LogicalSize, Manager, WebviewUrl, WebviewWindow, WebviewWindowBuilder,
-    WindowEvent,
+    AppHandle, Emitter, LogicalPosition, LogicalSize, Manager, WebviewUrl, WebviewWindow,
+    WebviewWindowBuilder, WindowEvent,
 };
 
 use crate::settings::Settings;
@@ -14,6 +14,25 @@ use crate::AppState;
 
 /// 面板の大きさ(Mac と同じ 520 幅 + 焼いた枠のはみ出し)
 const PANEL_SIZE: (f64, f64) = (560.0, 760.0);
+/// 面板は最初は細い帯(坐站の状態・今日の数字・泡完澡了)。「打开」で PANEL_SIZE に広がる
+const STRIP_SIZE: (f64, f64) = (560.0, 100.0);
+/// WebView2 の起動引数:小窓の音(切り替え・手順・做完)を操作なしで鳴らせるように。
+/// 既定の引数(Edge の UI を切る)はそのまま残す。全部の窓で同じにする(違う引数の窓は別のデータフォルダが要る)
+#[cfg(windows)]
+const BROWSER_ARGS: &str =
+    "--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection --autoplay-policy=no-user-gesture-required";
+
+/// 窓の作り方のうち、全部の窓で同じ分
+fn builder<'a>(
+    app: &'a AppHandle,
+    label: &str,
+    page: &str,
+) -> WebviewWindowBuilder<'a, tauri::Wry, AppHandle> {
+    let b = WebviewWindowBuilder::new(app, label, WebviewUrl::App(page.into())).title("Yudh");
+    #[cfg(windows)]
+    let b = b.additional_browser_args(BROWSER_ARGS);
+    b
+}
 /// 坐站の小窓(牛皮纸 360 + はみ出し。高さは中身に合わせて画面側が変える)
 const POSTURE_SIZE: (f64, f64) = (400.0, 520.0);
 
@@ -56,11 +75,13 @@ fn saved_position(app: &AppHandle, saved: Option<[f64; 2]>, width: f64) -> Optio
         .then_some((x, y))
 }
 
-/// 動かした位置を覚え、閉じたら設定に書く。作った直後にこちらで置いた分は数えない
+/// 動かした位置を覚え、閉じたら設定に書く。作った直後にこちらで置いた分は数えない。
+/// 面板は左下(帯と全体で下の辺を揃える)、坐站の小窓は左上を覚える
 fn remember_position(
     window: &WebviewWindow,
     app: &AppHandle,
     slot: fn(&mut Settings) -> &mut Option<[f64; 2]>,
+    bottom: bool,
 ) {
     let created = Instant::now();
     let handle = app.clone();
@@ -74,8 +95,15 @@ fn remember_position(
         {
             let scale = this.scale_factor().unwrap_or(1.0);
             let logical = pos.to_logical::<f64>(scale);
+            let height = if bottom {
+                this.inner_size()
+                    .map(|size| f64::from(size.height) / scale)
+                    .unwrap_or(0.0)
+            } else {
+                0.0
+            };
             if let Ok(mut inner) = handle.state::<AppState>().inner.lock() {
-                *slot(&mut inner.settings) = Some([logical.x, logical.y]);
+                *slot(&mut inner.settings) = Some([logical.x, logical.y + height]);
             }
         }
         WindowEvent::Destroyed => {
@@ -117,7 +145,7 @@ pub fn quiet_changed(app: &AppHandle, game: Option<&str>) {
     refresh_tray_menu(app);
 }
 
-/// トレイのメニューの文字(看拉伸 / 站起来了吗?、ゲーム中)を今の状態に合わせる。変わったときだけ作り直す
+/// トレイのメニューの文字(看拉伸・坐下了 / 现在站起来、ゲーム中)を今の状態に合わせる。変わったときだけ作り直す
 pub fn refresh_tray_menu(app: &AppHandle) {
     let state = app.state::<AppState>();
     let wanted = match state.inner.lock() {
@@ -167,7 +195,8 @@ pub fn toggle_panel(app: &AppHandle) {
     open_panel(app);
 }
 
-/// 面板を開く(開いていれば前に出す)。タスクバーを除いた範囲の右下(タスクバーが横や上にあっても重ならない)
+/// 面板を開く(開いていれば前に出す)。まず細い帯で、タスクバーを除いた範囲の右下(タスクバーが横や上にあっても重ならない)。
+/// 覚えている位置は左下の角(帯でも全体でも下の辺が同じ所に来る)
 pub fn open_panel(app: &AppHandle) {
     if quiet(app) {
         return;
@@ -181,17 +210,17 @@ pub fn open_panel(app: &AppHandle) {
         .inner
         .lock()
         .ok()
-        .and_then(|inner| inner.settings.panel_pos);
-    let (x, y) = saved_position(app, saved, PANEL_SIZE.0).unwrap_or_else(|| {
+        .and_then(|inner| inner.settings.panel_pos)
+        .map(|[x, bottom]| [x, bottom - STRIP_SIZE.1]);
+    let (x, y) = saved_position(app, saved, STRIP_SIZE.0).unwrap_or_else(|| {
         let (ax, ay, aw, ah) = area(app);
         (
-            (ax + aw - PANEL_SIZE.0 - 4.0).max(ax),
-            (ay + ah - PANEL_SIZE.1 - 4.0).max(ay),
+            (ax + aw - STRIP_SIZE.0 - 4.0).max(ax),
+            (ay + ah - STRIP_SIZE.1 - 4.0).max(ay),
         )
     });
-    let built = WebviewWindowBuilder::new(app, "panel", WebviewUrl::App("index.html".into()))
-        .title("Yudh")
-        .inner_size(PANEL_SIZE.0, PANEL_SIZE.1)
+    let built = builder(app, "panel", "index.html")
+        .inner_size(STRIP_SIZE.0, STRIP_SIZE.1)
         .position(x, y)
         .decorations(false)
         .transparent(true)
@@ -204,7 +233,7 @@ pub fn open_panel(app: &AppHandle) {
     let Ok(window) = built else {
         return;
     };
-    remember_position(&window, app, |s| &mut s.panel_pos);
+    remember_position(&window, app, |s| &mut s.panel_pos, true);
     let handle = app.clone();
     window.on_window_event(move |event| match event {
         WindowEvent::Focused(false) => {
@@ -232,6 +261,23 @@ pub fn open_panel(app: &AppHandle) {
         }
         _ => {}
     });
+}
+
+/// 面板を帯から全体に広げる(下の辺はそのまま、上へ伸ばす。画面の上を越えるなら下げる)
+pub fn expand_panel(app: &AppHandle) {
+    let Some(window) = app.get_webview_window("panel") else {
+        return;
+    };
+    let scale = window.scale_factor().unwrap_or(1.0);
+    let (Ok(pos), Ok(size)) = (window.outer_position(), window.inner_size()) else {
+        return;
+    };
+    let pos = pos.to_logical::<f64>(scale);
+    let bottom = pos.y + f64::from(size.height) / scale;
+    let (_, ay, _, _) = area(app);
+    let y = (bottom - PANEL_SIZE.1).max(ay);
+    let _ = window.set_size(LogicalSize::new(PANEL_SIZE.0, PANEL_SIZE.1));
+    let _ = window.set_position(LogicalPosition::new(pos.x, y));
 }
 
 /// 坐站の小窓を、いまの状態に合わせて出す / 閉じる / 中身を更新する
@@ -266,21 +312,19 @@ pub fn sync_posture(app: &AppHandle) {
                 let (ax, ay, aw, _) = area(app);
                 (ax + ((aw - POSTURE_SIZE.0) / 2.0).max(0.0), ay + 12.0)
             });
-            let built =
-                WebviewWindowBuilder::new(app, "posture", WebviewUrl::App("posture.html".into()))
-                    .title("Yudh")
-                    .inner_size(POSTURE_SIZE.0, POSTURE_SIZE.1)
-                    .position(x, y)
-                    .decorations(false)
-                    .transparent(true)
-                    .shadow(false)
-                    .resizable(false)
-                    .skip_taskbar(true)
-                    .always_on_top(true)
-                    .focused(false)
-                    .build();
+            let built = builder(app, "posture", "posture.html")
+                .inner_size(POSTURE_SIZE.0, POSTURE_SIZE.1)
+                .position(x, y)
+                .decorations(false)
+                .transparent(true)
+                .shadow(false)
+                .resizable(false)
+                .skip_taskbar(true)
+                .always_on_top(true)
+                .focused(false)
+                .build();
             if let Ok(window) = built {
-                remember_position(&window, app, |s| &mut s.posture_pos);
+                remember_position(&window, app, |s| &mut s.posture_pos, false);
             }
         }
         (false, Some(window)) => {
@@ -299,7 +343,7 @@ pub fn open_ritual(app: &AppHandle) {
         let _ = window.set_focus();
         return;
     }
-    let _ = WebviewWindowBuilder::new(app, "ritual", WebviewUrl::App("ritual.html".into()))
+    let _ = builder(app, "ritual", "ritual.html")
         .title("泡完澡后的日课")
         .inner_size(1040.0, 680.0)
         .min_inner_size(880.0, 580.0)

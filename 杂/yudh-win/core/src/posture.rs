@@ -1,5 +1,5 @@
-//! 坐站の切り替え(Swift の `BreakReminder` / `StretchGuide` / `AppCoordinator+Posture` の判定だけ)。
-//! Windows はカレンダーを読まないので会議の判定は無い。代わりに全画面のゲーム中(`suppressed`)は小窓を出さない
+//! 坐站の切り替え(Swift の `BreakReminder` / `StretchGuide` / `AppCoordinator+Posture` と同じ計画。Windows は播报:
+//! 尋ねずに钟が自分で切り替えて言う)。カレンダーを読まないので会議の判定は無い。代わりに全画面のゲーム中(`suppressed`)は小窓を出さない
 
 use chrono::{DateTime, Duration, Utc};
 use serde::{Deserialize, Serialize};
@@ -15,12 +15,10 @@ pub enum Posture {
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub enum Prompt {
-    /// 站起来了吗?
-    AskStand,
-    /// 立ち作業の残り時間 + 拉伸の手順
+    /// 「站起来」→ 腹式呼吸 → 拉伸の手順 → 自分で閉じる(立ち作業の残り時間も)
     Standing,
-    /// 坐下了吗?
-    AskSit,
+    /// 「坐下」の知らせ(しばらくして消える)
+    Sit,
 }
 
 /// 拉伸 1 つ:名前(目安時間つき)と手順
@@ -349,28 +347,38 @@ pub fn clock(due: DateTime<Utc>, now: DateTime<Utc>) -> String {
 
 // MARK: 判定と状態
 
-/// 30 秒ごとの判定:いま出すべき小窓。全画面のゲーム中は何も出さない。
-/// 切り替え時刻を過ぎたら姿勢に応じて尋ね、立った後の手順は立ち作業の終わりまで出し続ける
+/// 姿勢の切り替わり(記録用)。钟が自分で切り替えたものも、トレイから言ったものも、取り消し(「我还坐着」)も残す。
+/// 日ごとの記録はこれを足すだけ:`stand_seconds` は立っていた秒数(取り消しは負)、`switches` は回数(+1 / −1)
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
+pub struct Transition {
+    pub to: Posture,
+    pub at: DateTime<Utc>,
+    pub stand_seconds: i64,
+    pub switches: i32,
+    /// 「我还坐着」「我还站着」:前の切り替えを取り消した
+    pub revert: bool,
+}
+
+/// いま出す小窓(播报:尋ねない。時間が来たら钟が自分で切り替えて、言うだけ)。
+/// 立っているあいだは手順(閉じるまで)、钟が自分で座らせた直後は「坐下」の知らせ(1 分で消える)
 pub fn desired_prompt(
     posture: Posture,
     now: DateTime<Utc>,
-    due_at: DateTime<Utc>,
+    since: DateTime<Utc>,
     suppressed: bool,
     guide_dismissed: bool,
+    announced: bool,
 ) -> Option<Prompt> {
-    if suppressed {
+    if suppressed || guide_dismissed {
         return None;
     }
-    if now >= due_at {
-        return Some(match posture {
-            Posture::Sitting => Prompt::AskStand,
-            Posture::Standing => Prompt::AskSit,
-        });
+    match posture {
+        Posture::Standing => Some(Prompt::Standing),
+        Posture::Sitting if announced && now - since < Duration::seconds(SIT_NOTE_SECONDS) => {
+            Some(Prompt::Sit)
+        }
+        Posture::Sitting => None,
     }
-    if posture == Posture::Standing && !guide_dismissed {
-        return Some(Prompt::Standing);
-    }
-    None
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -399,35 +407,46 @@ impl Default for PostureSettings {
     }
 }
 
-/// 坐站の状態(Mac の AppCoordinator+Posture と同じ動き)
+/// 坐站の状態。播报の钟:時間が来たら自分で姿勢を切り替えて小窓で言う(「站起来」→ 呼吸 → 拉伸 → 自分で閉じる、
+/// 「坐下」→ 1 分で消える)。ユーザーがするのは、钟が間違えたときに「我还坐着」「我还站着」と直すことだけ。
+/// 記録は「計画どおりにした」ことになる(本当に立ったかは聞かない)
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct PostureClock {
     pub posture: Posture,
     pub since: DateTime<Utc>,
-    /// 「15 分后」などで決めた次の時刻(優先)
+    /// 「我还坐着」「我还站着」で決めた次の時刻(優先)
     pub remind_at: Option<DateTime<Utc>>,
     pub prompt: Option<Prompt>,
-    /// 立ち作業中に自分で閉じた手順
+    /// 立ち作業中に自分で閉じた手順(座ったあとの「坐下」を閉じたときも)
     pub guide_dismissed: bool,
-    /// トレイから自分で開いた「站起来了吗?」(時間前でも閉じない)
-    pub pinned: bool,
-    /// 次に出す拉伸の番号(実際に立ったときに進める)
+    /// いまの姿勢は钟が自分で切り替えたもの(「坐下」の知らせを出す・取り消せる)
+    pub announced: bool,
+    /// 取り消したときに戻す、前の姿勢を始めた時刻
+    prev_since: DateTime<Utc>,
+    /// 次に出す拉伸の番号(立つたびに進める。「我还坐着」なら戻す)
     pub stretch_index: usize,
     pub stretch: Stretch,
     /// 手順の何番目か(steps.len() = 完了)
     pub step: usize,
     /// 全画面のゲームが始まった時刻(続いているあいだだけ)
     pub game_since: Option<DateTime<Utc>>,
+    /// まだ記録していない切り替わり(アプリが取り出して日ごとに足す)
+    pending: Vec<Transition>,
 }
 
-/// これより長く全画面で遊んだら、抜けたときに時間に関係なくすぐ「站起来了吗?」を出す(分)。
+/// これより長く全画面で遊んだら、抜けたときに時間に関係なくすぐ立たせる(分)。
 /// 遊んでいるあいだは出さないが、腕を前に浮かせて前のめりの長い時間こそ斜角肌が張る
 pub const GAME_BREAK_MINUTES: i64 = 60;
 
-/// 座っているあいだ、これだけ操作がなければ離席とみなして計り直す(秒)
+/// 座っているあいだ、これだけ操作がなければ離席とみなして計り直す(秒)。
+/// 立っているあいだも、これだけ無操作なら席にいないので、「坐下」は戻ってから言う
 pub const IDLE_RESET_SECONDS: u64 = 180;
-/// 自動で出た「站起来了吗?」が開いたまま、これだけ無操作なら席を外したとみなす(Mac と同じ 10 分)
-pub const AWAY_WITH_PROMPT_SECONDS: u64 = 600;
+/// 「坐下」の知らせを出しておく長さ(秒)。画面側は 15 秒で閉じる。これは画面が無いときの保険
+pub const SIT_NOTE_SECONDS: i64 = 60;
+/// 「我还坐着」:これだけ後にもう一度「站起来」(分)
+pub const STILL_SITTING_MINUTES: i64 = 10;
+/// 「我还站着」:これだけ後に「坐下」(分)
+pub const STILL_STANDING_MINUTES: i64 = 5;
 
 impl PostureClock {
     pub fn new(now: DateTime<Utc>, stretch_index: usize) -> PostureClock {
@@ -437,7 +456,8 @@ impl PostureClock {
             remind_at: None,
             prompt: None,
             guide_dismissed: false,
-            pinned: false,
+            announced: false,
+            prev_since: now,
             stretch_index,
             stretch: Stretch {
                 name: String::new(),
@@ -445,6 +465,7 @@ impl PostureClock {
             },
             step: 0,
             game_since: None,
+            pending: Vec::new(),
         }
     }
 
@@ -476,6 +497,46 @@ impl PostureClock {
         self.remind_at = None;
     }
 
+    /// まだ記録していない切り替わりを取り出す(アプリが日ごとの記録に足す)
+    pub fn take_transitions(&mut self) -> Vec<Transition> {
+        std::mem::take(&mut self.pending)
+    }
+
+    /// 姿勢を切り替える(钟が自分で = announced、トレイから = !announced)。立つなら拉伸を選んで番号を進める
+    fn switch(
+        &mut self,
+        to: Posture,
+        now: DateTime<Utc>,
+        settings: &PostureSettings,
+        announced: bool,
+    ) {
+        let stood = if self.posture == Posture::Standing {
+            (now - self.since).num_seconds().max(0)
+        } else {
+            0
+        };
+        self.pending.push(Transition {
+            to,
+            at: now,
+            stand_seconds: stood,
+            switches: 1,
+            revert: false,
+        });
+        self.prev_since = self.since;
+        self.posture = to;
+        self.reset(now);
+        self.guide_dismissed = false;
+        self.announced = announced;
+        if to == Posture::Standing {
+            self.pick_stretch(settings);
+            let count = Self::list(settings).len().max(1);
+            self.stretch_index = (self.stretch_index + 1) % count;
+            self.prompt = Some(Prompt::Standing);
+        } else {
+            self.prompt = announced.then_some(Prompt::Sit);
+        }
+    }
+
     /// 定期の判定。小窓が変わったら true
     pub fn check(
         &mut self,
@@ -484,12 +545,12 @@ impl PostureClock {
         idle_seconds: u64,
         suppressed: bool,
     ) -> bool {
+        let before = self.prompt;
         if !settings.enabled {
-            let changed = self.prompt.is_some();
             self.prompt = None;
-            return changed;
+            return before.is_some();
         }
-        // 長いゲームから抜けた:座っていれば、すぐ尋ねる(離席の判定より先に。パッドの操作は無操作に数えられる)
+        // 長いゲームから抜けた:座っていれば、すぐ立たせる(離席の判定より先に。パッドの操作は無操作に数えられる)
         let long_game = if suppressed {
             self.game_since.get_or_insert(now);
             false
@@ -498,114 +559,124 @@ impl PostureClock {
                 .take()
                 .is_some_and(|start| now - start >= Duration::minutes(GAME_BREAK_MINUTES))
         };
-        // 離席の判定:小窓が無ければ 3 分、自動で出た「站起来了吗?」が開いたままなら 10 分(答えずに席を立った:
-        // 戻ってから古い問いと水増しした分数を見せない。Mac と同じ)。自分で開いた問いと、立っているあいだは数えない
-        let away_after = match (self.prompt, self.pinned) {
-            (None, _) => Some(IDLE_RESET_SECONDS),
-            (Some(Prompt::AskStand), false) => Some(AWAY_WITH_PROMPT_SECONDS),
-            _ => None,
-        };
+        let away = idle_seconds >= IDLE_RESET_SECONDS;
         if long_game && self.posture == Posture::Sitting {
             self.remind_at = Some(now);
-        } else if self.posture == Posture::Sitting
-            && !suppressed
-            && away_after.is_some_and(|limit| idle_seconds >= limit)
-        {
-            // 座りっぱなしの計測だけ離席でリセット(立ち作業の残り時間は巻き戻さない)
+        } else if self.posture == Posture::Sitting && !suppressed && away {
+            // 座りっぱなしの計測だけ離席でリセット(立ち作業の残り時間は巻き戻さない)。古い「坐下」の知らせも要らない
             self.reset(now);
+            self.announced = false;
         }
-        let desired = desired_prompt(
+        // 時間が来た:钟が自分で切り替える。席を外しているあいだは戻るまで待つ(長いゲームの後は待たない)
+        if !suppressed && now >= self.due_at(settings) && (!away || long_game) {
+            let to = match self.posture {
+                Posture::Sitting => Posture::Standing,
+                Posture::Standing => Posture::Sitting,
+            };
+            self.switch(to, now, settings, true);
+        }
+        self.prompt = desired_prompt(
             self.posture,
             now,
-            self.due_at(settings),
+            self.since,
             suppressed,
             self.guide_dismissed,
+            self.announced,
         );
-        if desired.is_none() && self.pinned && self.prompt == Some(Prompt::AskStand) && !suppressed
-        {
-            return false;
-        }
-        if desired == self.prompt {
-            return false;
-        }
-        self.pinned = false;
-        if desired == Some(Prompt::AskStand) {
-            self.pick_stretch(settings);
-        }
-        self.prompt = desired;
-        true
+        self.prompt != before
     }
 
     /// スリープから覚めた(tick が長く止まっていた):座り直したものとして計り直し、古い小窓は閉じる。
-    /// 眠っていた時間を座っていた時間に数えない(朝いちばんに「站起来了吗?」を出さない)。小窓が消えるなら true
-    pub fn wake(&mut self, now: DateTime<Utc>) -> bool {
+    /// 眠っていた時間を座っていた時間にも立っていた時間にも数えない(立ったまま眠ったなら、最後に見た時刻まで)。小窓が消えるなら true
+    pub fn wake(&mut self, now: DateTime<Utc>, last_seen: DateTime<Utc>) -> bool {
         let had_prompt = self.prompt.is_some();
+        if self.posture == Posture::Standing {
+            self.pending.push(Transition {
+                to: Posture::Sitting,
+                at: last_seen.max(self.since),
+                stand_seconds: (last_seen - self.since).num_seconds().max(0),
+                switches: 0,
+                revert: false,
+            });
+        }
         self.posture = Posture::Sitting;
         self.reset(now);
         self.guide_dismissed = false;
-        self.pinned = false;
+        self.announced = false;
         self.prompt = None;
         self.game_since = None;
         had_prompt
     }
 
-    /// 「站起来了」:立ち作業の残り時間と拉伸の手順を出す
+    /// トレイの「现在站起来」:すぐ立ち作業にする(立っていれば手順を開き直すだけ)
     pub fn confirm_stood(&mut self, now: DateTime<Utc>, settings: &PostureSettings) {
-        if self.prompt != Some(Prompt::AskStand) {
-            self.pick_stretch(settings);
+        if self.posture == Posture::Standing {
+            self.guide_dismissed = false;
+            self.prompt = Some(Prompt::Standing);
+            return;
         }
-        // 実際に立ったときに初めて「この拉伸はやった」と数える
-        let count = Self::list(settings).len().max(1);
-        self.stretch_index = (self.stretch_index + 1) % count;
-        self.posture = Posture::Standing;
-        self.reset(now);
-        self.guide_dismissed = false;
-        self.pinned = false;
-        self.prompt = Some(Prompt::Standing);
+        self.switch(Posture::Standing, now, settings, false);
     }
 
-    /// 「坐下了」
-    pub fn confirm_sat(&mut self, now: DateTime<Utc>) {
-        self.posture = Posture::Sitting;
-        self.reset(now);
-        self.guide_dismissed = false;
-        self.pinned = false;
-        self.prompt = None;
+    /// トレイの「坐下了」:すぐ座り作業にする(知らせは出さない)
+    pub fn confirm_sat(&mut self, now: DateTime<Utc>, settings: &PostureSettings) {
+        if self.posture == Posture::Sitting {
+            self.announced = false;
+            self.prompt = None;
+            return;
+        }
+        self.switch(Posture::Sitting, now, settings, false);
     }
 
-    /// 「15 分后」「再 5 分钟」
-    /// 「15 分钟后」「再站 5 分钟」。自分で開いた(時間前の)問いからなら、計画の時刻より早めない
-    pub fn snooze(&mut self, now: DateTime<Utc>, minutes: i64, settings: &PostureSettings) {
-        let later = now + Duration::minutes(minutes);
-        self.remind_at = Some(if self.pinned {
-            later.max(self.due_at(settings))
-        } else {
-            later
+    /// 「我还坐着」:钟が「站起来」と言ったが立っていない。座ったままに戻し(拉伸の番号も戻す)、10 分後にもう一度。
+    /// 钟が自分で立たせた直後だけ効く(それ以外は false)
+    pub fn still_sitting(&mut self, now: DateTime<Utc>, settings: &PostureSettings) -> bool {
+        if self.posture != Posture::Standing || !self.announced {
+            return false;
+        }
+        self.pending.push(Transition {
+            to: Posture::Sitting,
+            at: now,
+            stand_seconds: 0,
+            switches: -1,
+            revert: true,
         });
-        self.pinned = false;
+        let count = Self::list(settings).len().max(1);
+        self.stretch_index = (self.stretch_index + count - 1) % count;
+        self.posture = Posture::Sitting;
+        self.since = self.prev_since;
+        self.remind_at = Some(now + Duration::minutes(STILL_SITTING_MINUTES));
+        self.announced = false;
+        self.guide_dismissed = false;
         self.prompt = None;
+        true
     }
 
-    /// トレイから開く:立ち作業中は手順、座り作業中は「站起来了吗?」(切り替え時刻は変えない)
-    pub fn open_prompt(&mut self, settings: &PostureSettings) {
-        match self.posture {
-            Posture::Standing => {
-                self.guide_dismissed = false;
-                self.prompt = Some(Prompt::Standing);
-            }
-            Posture::Sitting => {
-                self.pinned = true;
-                if self.prompt != Some(Prompt::AskStand) {
-                    self.pick_stretch(settings);
-                }
-                self.prompt = Some(Prompt::AskStand);
-            }
+    /// 「我还站着」:钟が「坐下」と言ったがまだ立っている。立ったままに戻し(その分の記録も戻す)、5 分後にもう一度
+    pub fn still_standing(&mut self, now: DateTime<Utc>) -> bool {
+        if self.posture != Posture::Sitting || !self.announced {
+            return false;
         }
+        self.pending.push(Transition {
+            to: Posture::Standing,
+            at: now,
+            stand_seconds: -(self.since - self.prev_since).num_seconds().max(0),
+            switches: -1,
+            revert: true,
+        });
+        self.posture = Posture::Standing;
+        self.since = self.prev_since;
+        self.remind_at = Some(now + Duration::minutes(STILL_STANDING_MINUTES));
+        self.announced = false;
+        // 拉伸はもう済んでいる:手順を出し直さない
+        self.guide_dismissed = true;
+        self.prompt = None;
+        true
     }
 
+    /// 小窓を閉じた(手順・「坐下」の知らせ)。姿勢はそのまま
     pub fn close_prompt(&mut self) {
-        self.guide_dismissed = self.posture == Posture::Standing;
-        self.pinned = false;
+        self.guide_dismissed = true;
         self.prompt = None;
     }
 
@@ -792,61 +863,81 @@ mod tests {
     }
 
     #[test]
-    fn prompts_follow_the_timer_and_stay_quiet_in_games() {
+    fn prompts_follow_the_posture_and_stay_quiet_in_games() {
         let t0 = tokyo(2026, 10, 1, 20, 0, 0);
-        let due = t0 + Duration::minutes(45);
         assert_eq!(
-            desired_prompt(Posture::Sitting, t0, due, false, false),
-            None
+            desired_prompt(Posture::Sitting, t0, t0, false, false, false),
+            None,
+            "sitting by choice: nothing to say"
         );
         assert_eq!(
-            desired_prompt(Posture::Sitting, due, due, false, false),
-            Some(Prompt::AskStand)
+            desired_prompt(Posture::Sitting, t0, t0, false, false, true),
+            Some(Prompt::Sit),
+            "the clock just sat you down"
         );
         assert_eq!(
-            desired_prompt(Posture::Sitting, due, due, true, false),
+            desired_prompt(
+                Posture::Sitting,
+                t0 + Duration::seconds(SIT_NOTE_SECONDS),
+                t0,
+                false,
+                false,
+                true
+            ),
+            None,
+            "the sit note fades"
+        );
+        assert_eq!(
+            desired_prompt(Posture::Sitting, t0, t0, true, false, true),
             None,
             "fullscreen game"
         );
         assert_eq!(
-            desired_prompt(Posture::Standing, t0, due, false, false),
+            desired_prompt(Posture::Standing, t0, t0, false, false, true),
             Some(Prompt::Standing)
         );
         assert_eq!(
-            desired_prompt(Posture::Standing, t0, due, false, true),
+            desired_prompt(Posture::Standing, t0, t0, false, true, true),
             None,
             "guide closed"
         );
-        assert_eq!(
-            desired_prompt(Posture::Standing, due, due, false, true),
-            Some(Prompt::AskSit)
-        );
+    }
+
+    /// 取り出した切り替わりを日ごとに足したもの(秒・回数)
+    fn tally(c: &mut PostureClock) -> (i64, i32) {
+        c.take_transitions()
+            .iter()
+            .fold((0, 0), |(s, n), t| (s + t.stand_seconds, n + t.switches))
     }
 
     #[test]
-    fn clock_runs_sit_stand_sit_with_idle_reset_and_snooze() {
+    fn the_clock_switches_by_itself_and_runs_sit_stand_sit() {
         let settings = PostureSettings::default();
         let t0 = tokyo(2026, 10, 1, 20, 0, 0);
         let mut c = PostureClock::new(t0, 6);
         // 離席(3 分無操作)で座りの計測をやり直す
         assert!(!c.check(t0 + Duration::minutes(30), &settings, 200, false));
         assert_eq!(c.since, t0 + Duration::minutes(30));
-        // 座る時間(計画の 30 分)がたつと「站起来了吗?」、拉伸は 7 番目(走一走)
-        let ask = c.since + Duration::minutes(settings.sit_minutes);
-        assert!(c.check(ask, &settings, 0, false));
-        assert_eq!(c.prompt, Some(Prompt::AskStand));
+        // 座る時間(計画の 30 分)がたつと钟が自分で立たせる:手順(呼吸 → 拉伸)が出る。拉伸は 7 番目(走一走)
+        let up = c.since + Duration::minutes(settings.sit_minutes);
+        assert!(!c.check(up - Duration::seconds(30), &settings, 0, false));
+        assert!(c.check(up, &settings, 0, false));
+        assert_eq!(
+            (c.posture, c.prompt),
+            (Posture::Standing, Some(Prompt::Standing))
+        );
+        assert!(c.announced);
         assert_eq!(c.stretch.name, "走一走（1〜2 分钟）");
-        // ゲームを全画面にしたら引っ込む
-        assert!(c.check(ask, &settings, 0, true));
-        assert_eq!(c.prompt, None);
-        assert!(c.check(ask + Duration::seconds(30), &settings, 0, false));
-        c.confirm_stood(ask + Duration::minutes(1), &settings);
-        assert_eq!(c.posture, Posture::Standing);
-        assert_eq!(c.prompt, Some(Prompt::Standing));
         assert_eq!(
             c.stretch_index, 0,
             "next time starts over from the first stretch"
         );
+        assert_eq!(tally(&mut c), (0, 1), "one switch, no standing yet");
+        // ゲームを全画面にしたら引っ込む、抜けたら戻る
+        assert!(c.check(up + Duration::minutes(1), &settings, 0, true));
+        assert_eq!(c.prompt, None);
+        assert!(c.check(up + Duration::minutes(2), &settings, 0, false));
+        assert_eq!(c.prompt, Some(Prompt::Standing));
         c.move_step(5);
         assert_eq!(c.step, 2, "clamped to done (走一走 has 2 steps)");
         c.move_step(-1);
@@ -854,34 +945,133 @@ mod tests {
         c.close_prompt();
         assert!(c.guide_dismissed);
         assert!(
-            !c.check(ask + Duration::minutes(5), &settings, 0, false),
+            !c.check(up + Duration::minutes(5), &settings, 0, false),
             "closed guide stays closed"
         );
-        // 立ってから計画の立つ時間(30 分)がたつと「坐下了吗?」
-        let sit = ask + Duration::minutes(1 + settings.stand_minutes);
-        assert!(c.check(sit, &settings, 0, false));
-        assert_eq!(c.prompt, Some(Prompt::AskSit));
-        c.snooze(sit, 5, &settings);
-        assert_eq!(c.due_at(&settings), sit + Duration::minutes(5));
-        assert!(!c.check(sit + Duration::minutes(4), &settings, 0, false));
-        assert!(c.check(sit + Duration::minutes(5), &settings, 0, false));
-        c.confirm_sat(sit + Duration::minutes(5));
-        assert_eq!((c.posture, c.prompt), (Posture::Sitting, None));
-        // トレイから開いた「站起来了吗?」は時間前でも閉じない
-        c.open_prompt(&settings);
-        assert!(c.pinned);
-        assert!(!c.check(sit + Duration::minutes(6), &settings, 0, false));
-        assert_eq!(c.prompt, Some(Prompt::AskStand));
+        // 立ってから計画の立つ時間(30 分)がたつと钟が自分で座らせる:「坐下」の知らせ
+        let down = up + Duration::minutes(settings.stand_minutes);
+        assert!(!c.check(down - Duration::seconds(30), &settings, 0, false));
+        assert!(c.check(down, &settings, 0, false));
+        assert_eq!((c.posture, c.prompt), (Posture::Sitting, Some(Prompt::Sit)));
+        assert_eq!(tally(&mut c), (30 * 60, 1), "30 minutes stood, one switch");
+        // 知らせは 1 分で消える(画面側は 15 秒で閉じる)
+        assert!(!c.check(down + Duration::seconds(30), &settings, 0, false));
+        assert!(c.check(
+            down + Duration::seconds(SIT_NOTE_SECONDS),
+            &settings,
+            0,
+            false
+        ));
+        assert_eq!(c.prompt, None);
+        // 次の「站起来」は座ってから 30 分
+        assert_eq!(
+            c.due_at(&settings),
+            down + Duration::minutes(settings.sit_minutes)
+        );
         let off = PostureSettings {
             enabled: false,
             ..PostureSettings::default()
         };
-        assert!(c.check(sit + Duration::minutes(7), &off, 0, false));
+        c.confirm_stood(down + Duration::minutes(1), &settings);
+        assert_eq!(c.prompt, Some(Prompt::Standing));
+        assert!(c.check(down + Duration::minutes(2), &off, 0, false));
         assert_eq!(c.prompt, None);
     }
 
     #[test]
-    fn a_long_game_asks_right_after_it_ends() {
+    fn corrections_put_the_clock_back() {
+        let settings = PostureSettings::default();
+        let t0 = tokyo(2026, 10, 1, 9, 0, 0);
+        let mut c = PostureClock::new(t0, 0);
+        let up = t0 + Duration::minutes(30);
+        assert!(c.check(up, &settings, 0, false));
+        assert_eq!(c.stretch_index, 1);
+        // 「我还坐着」:座ったままに戻す。座り始めは元のまま、10 分後にもう一度、拉伸の番号も戻る
+        let said = up + Duration::seconds(20);
+        assert!(c.still_sitting(said, &settings));
+        assert_eq!((c.posture, c.prompt, c.since), (Posture::Sitting, None, t0));
+        assert_eq!(c.stretch_index, 0);
+        assert_eq!(
+            c.due_at(&settings),
+            said + Duration::minutes(STILL_SITTING_MINUTES)
+        );
+        assert_eq!(tally(&mut c), (0, 0), "the switch is undone");
+        assert!(
+            !c.still_sitting(said, &settings),
+            "only right after the clock stood you up"
+        );
+        assert!(!c.check(said + Duration::minutes(9), &settings, 0, false));
+        assert!(c.check(said + Duration::minutes(10), &settings, 0, false));
+        assert_eq!(
+            (c.posture, c.prompt),
+            (Posture::Standing, Some(Prompt::Standing))
+        );
+        assert_eq!(c.stretch_index, 1);
+        // 30 分立って钟が座らせた → 「我还站着」:立ったままに戻す(立っていた記録も戻す)、5 分後に「坐下」。手順は出し直さない
+        let stood = said + Duration::minutes(10);
+        let down = stood + Duration::minutes(30);
+        assert!(c.check(down, &settings, 0, false));
+        assert_eq!(c.prompt, Some(Prompt::Sit));
+        assert_eq!(tally(&mut c), (30 * 60, 2));
+        assert!(c.still_standing(down + Duration::seconds(10)));
+        assert_eq!(
+            (c.posture, c.prompt, c.since),
+            (Posture::Standing, None, stood)
+        );
+        assert_eq!(tally(&mut c), (-30 * 60, -1), "the sit is undone");
+        assert!(!c.check(down + Duration::minutes(1), &settings, 0, false));
+        assert_eq!(c.prompt, None, "the guide was already done");
+        let later = down + Duration::seconds(10) + Duration::minutes(STILL_STANDING_MINUTES);
+        assert!(c.check(later, &settings, 0, false));
+        assert_eq!((c.posture, c.prompt), (Posture::Sitting, Some(Prompt::Sit)));
+        assert_eq!(
+            tally(&mut c),
+            ((later - stood).num_seconds(), 1),
+            "the whole stand counts once"
+        );
+        // トレイの「坐下了」「现在站起来」は知らせを出さない。立っていれば手順を開き直すだけ
+        c.confirm_sat(later + Duration::minutes(1), &settings);
+        assert_eq!((c.posture, c.prompt), (Posture::Sitting, None));
+        assert_eq!(tally(&mut c), (0, 0));
+        c.confirm_stood(later + Duration::minutes(2), &settings);
+        assert_eq!(
+            (c.posture, c.prompt),
+            (Posture::Standing, Some(Prompt::Standing))
+        );
+        assert!(!c.announced);
+        c.close_prompt();
+        c.confirm_stood(later + Duration::minutes(3), &settings);
+        assert_eq!(c.prompt, Some(Prompt::Standing));
+        assert_eq!(c.since, later + Duration::minutes(2), "no new stand");
+        assert_eq!(tally(&mut c), (0, 1));
+    }
+
+    #[test]
+    fn switches_wait_until_you_are_back_at_the_desk() {
+        let settings = PostureSettings::default();
+        let t0 = tokyo(2026, 10, 1, 10, 0, 0);
+        let mut c = PostureClock::new(t0, 0);
+        c.confirm_stood(t0, &settings);
+        c.take_transitions();
+        // 立ったまま席を外した(3 分以上無操作):時間が来ても「坐下」は言わない。戻ったら言う
+        let due = t0 + Duration::minutes(30);
+        assert!(!c.check(due, &settings, 400, false));
+        assert_eq!(
+            (c.posture, c.prompt),
+            (Posture::Standing, Some(Prompt::Standing))
+        );
+        assert!(!c.check(due + Duration::minutes(10), &settings, 1000, false));
+        let back = due + Duration::minutes(12);
+        assert!(c.check(back, &settings, 5, false));
+        assert_eq!((c.posture, c.prompt), (Posture::Sitting, Some(Prompt::Sit)));
+        assert_eq!(tally(&mut c), ((back - t0).num_seconds(), 1));
+        // 座っているあいだ席を外せば計り直す(古い知らせも消える)
+        assert!(c.check(back + Duration::minutes(5), &settings, 300, false));
+        assert_eq!((c.prompt, c.since), (None, back + Duration::minutes(5)));
+    }
+
+    #[test]
+    fn a_long_game_stands_you_up_right_after_it_ends() {
         let settings = PostureSettings::default();
         let t0 = tokyo(2026, 10, 1, 21, 0, 0);
         let mut c = PostureClock::new(t0, 0);
@@ -890,10 +1080,13 @@ mod tests {
         assert!(!c.check(start, &settings, 0, true));
         assert!(!c.check(start + Duration::minutes(50), &settings, 900, true));
         assert_eq!(c.since, t0, "no idle reset while playing");
-        // 70 分で抜けた:座る時間はとうに過ぎているので、すぐ尋ねる(パッドの無操作で計り直さない)
+        // 70 分で抜けた:座る時間はとうに過ぎているので、すぐ立たせる(パッドの無操作で待たない)
         let end = start + Duration::minutes(70);
         assert!(c.check(end, &settings, 900, false));
-        assert_eq!(c.prompt, Some(Prompt::AskStand));
+        assert_eq!(
+            (c.posture, c.prompt),
+            (Posture::Standing, Some(Prompt::Standing))
+        );
         assert_eq!(c.stretch.name, "斜角肌拉伸（约 2 分钟）");
 
         // 短いゲーム(20 分)は普通の計時のまま
@@ -902,7 +1095,7 @@ mod tests {
         assert!(!d.check(t0 + Duration::minutes(21), &settings, 0, false));
         assert_eq!(d.prompt, None);
         assert_eq!(d.game_since, None);
-        // 座る時間が来る前に 60 分以上遊んで抜けても、立ち作業中なら手順のまま(尋ねるのは座っているときだけ)
+        // 立ち作業中に 60 分以上遊んで抜けても、手順に戻るだけ(立たせるのは座っているときだけ)
         let mut e = PostureClock::new(t0, 0);
         e.confirm_stood(t0, &settings);
         assert!(e.check(t0 + Duration::minutes(1), &settings, 0, true));
@@ -912,49 +1105,39 @@ mod tests {
     }
 
     #[test]
-    fn leaving_the_desk_with_the_stand_prompt_open_closes_it_after_ten_minutes() {
-        let settings = PostureSettings::default();
-        let t0 = tokyo(2026, 10, 1, 10, 0, 0);
-        let mut c = PostureClock::new(t0, 0);
-        let due = t0 + Duration::minutes(settings.sit_minutes);
-        assert!(c.check(due, &settings, 60, false));
-        assert_eq!(c.prompt, Some(Prompt::AskStand));
-        // 3 分では閉じない(答える時間)。10 分無操作で席を外したとみなし、閉じて計り直す
-        assert!(!c.check(due + Duration::minutes(4), &settings, 240, false));
-        assert_eq!(c.prompt, Some(Prompt::AskStand));
-        let back = due + Duration::minutes(10);
-        assert!(
-            c.check(back, &settings, 600, false),
-            "the stale prompt closes"
-        );
-        assert_eq!((c.prompt, c.since), (None, back));
-        // 自分で開いた問いは離席で閉じない
-        c.open_prompt(&settings);
-        assert!(!c.check(back + Duration::minutes(20), &settings, 1200, false));
-        assert_eq!(c.prompt, Some(Prompt::AskStand));
-        // 自分で開いた問いからの「15 分钟后」は計画(30 分)より早めない
-        c.snooze(back + Duration::minutes(2), 15, &settings);
-        assert_eq!(c.due_at(&settings), back + Duration::minutes(30));
-    }
-
-    #[test]
     fn waking_from_sleep_starts_a_fresh_sit_and_drops_the_prompt() {
         let settings = PostureSettings::default();
         let t0 = tokyo(2026, 10, 1, 18, 0, 0);
         let mut c = PostureClock::new(t0, 0);
         c.confirm_stood(t0 + Duration::minutes(30), &settings);
+        c.take_transitions();
+        let last_seen = t0 + Duration::minutes(40);
         let morning = tokyo(2026, 10, 2, 9, 0, 0);
-        assert!(c.wake(morning), "the standing guide was up");
+        assert!(c.wake(morning, last_seen), "the standing guide was up");
         assert_eq!(
             (c.posture, c.prompt, c.since),
             (Posture::Sitting, None, morning)
         );
+        let t = c.take_transitions();
+        assert_eq!(t.len(), 1);
+        assert_eq!(
+            (t[0].at, t[0].stand_seconds, t[0].switches),
+            (last_seen, 10 * 60, 0),
+            "only the 10 minutes before sleep count as standing"
+        );
         assert!(
             !c.check(morning + Duration::seconds(30), &settings, 5, false),
-            "no ask right after waking"
+            "nothing right after waking"
         );
         assert!(c.check(morning + Duration::minutes(30), &settings, 5, false));
-        assert_eq!(c.prompt, Some(Prompt::AskStand));
+        assert_eq!(
+            (c.posture, c.prompt),
+            (Posture::Standing, Some(Prompt::Standing))
+        );
+        // 座ったまま眠ったなら記録は無い
+        let mut d = PostureClock::new(t0, 0);
+        assert!(!d.wake(morning, t0 + Duration::minutes(5)));
+        assert!(d.take_transitions().is_empty());
     }
 
     #[test]

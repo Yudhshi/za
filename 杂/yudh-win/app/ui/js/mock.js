@@ -1,4 +1,6 @@
-// ブラウザで画面を確かめるための見本(Tauri の中では読まない)。?prompt=askStand などで坐站の小窓を切り替える
+// ブラウザで画面を確かめるための見本(Tauri の中では読まない)。
+// posture.html?prompt=standing|sit、&phase=announce|breath|stretch|done、&step=N、&manual=1(トレイから開いた)
+// index.html?welcome=0(初回の説明)、?configured=0
 
 const q = new URLSearchParams(location.search);
 const now = Date.now();
@@ -55,8 +57,11 @@ const handlers = {
     posture: "sitting",
     minutesInPosture: 23,
     prompt: null,
+    today: "今天站了 1 小时 30 分，换了 3 次姿势",
+    todayShort: "站了 1 小时 30 分 · 换了 3 次",
     breathToday: 4,
     ritualStreak: 5,
+    welcomed: q.get("welcome") !== "0",
   }),
   english_card: ({ kind }) =>
     kind === "spell"
@@ -103,29 +108,35 @@ const handlers = {
   english_more: () => null,
   posture_state: () => {
     const prompt = q.get("prompt") || "standing";
+    const phase = q.get("phase") || "stretch";
+    // announce:いま言ったところ。breath:一言のあと呼吸 3 秒目。stretch / done:呼吸は済んだ
+    const since = phase === "announce" ? now - 1000 : phase === "breath" ? now - 7000 - 3000 : now - 5 * 60 * 1000;
     return {
       prompt,
-      posture: prompt === "askStand" ? "sitting" : "standing",
-      dueAt: now + 12.5 * 60 * 1000,
+      posture: prompt === "sit" ? "sitting" : "standing",
+      since,
+      dueAt: since + 30 * 60 * 1000,
+      announced: q.get("manual") !== "1",
       stretch: { name: "肩颈三步（约 2 分钟）", steps: steps.map((s) => s.text) },
       steps,
       durations: [12, 30, 30],
-      step: Number(q.get("step") || 1),
+      step: phase === "done" ? 3 : Number(q.get("step") || 1),
       heading: "转肩",
       frieze: true,
-      breathStartedAt: q.get("breath") ? now - 3000 : null,
+      breathStartedAt: phase === "announce" || phase === "breath" ? since : null,
       breathToday: 3,
       nextStretch: "斜角肌拉伸 · 2 分钟",
+      today: "今天站了 1 小时 30 分，换了 3 次姿势",
       caution: "※ 拉伸感可以，发麻或刺痛传到手上就停",
     };
   },
   posture_action: () => handlers.posture_state(),
   ritual_plan: ({ short }) => ({
     videos: [
-      { title: "跟练 1", page: "https://www.bilibili.com/video/BV1JW4y1k7F7/", embed: null },
-      { title: "跟练 2", page: "https://www.bilibili.com/video/BV1UL411F7Hk/", embed: null },
-      { title: "跟练 3", page: "https://www.youtube.com/watch?v=SGPBSqxKGAc", embed: null },
-      { title: "跟练 4", page: "https://www.youtube.com/watch?v=aHlNoTpXf_8", embed: null },
+      { title: "跟练 1", page: "https://www.bilibili.com/video/BV1JW4y1k7F7/", embed: null, seconds: 244 },
+      { title: "跟练 2", page: "https://www.bilibili.com/video/BV1UL411F7Hk/", embed: null, seconds: null },
+      { title: "跟练 3", page: "https://www.youtube.com/watch?v=SGPBSqxKGAc", embed: null, seconds: null },
+      { title: "跟练 4", page: "https://www.youtube.com/watch?v=aHlNoTpXf_8", embed: null, seconds: null },
     ],
     steps: [
       { heading: "斜角肌拉伸", name: "斜角肌拉伸 · 2 分钟", text: "右手按住右侧锁骨下方，头向左倒，拉伸右侧颈部，停 20 秒", pose: "neck-side", meta: "20 秒", duration: 20, stepNumber: 0, stepCount: 4, stretchNumber: 0 },
@@ -144,6 +155,7 @@ const handlers = {
     device: "DESKTOP-9F2",
     autostart: true,
     quietApps: "Aion2.exe\nAion2-Win64-Shipping.exe",
+    welcomed: true,
     postureEnabled: true,
     sitMinutes: 30,
     standMinutes: 30,

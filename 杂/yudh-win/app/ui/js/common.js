@@ -1,4 +1,4 @@
-// 画面に共通の道具:模板アイコン、曜日、時刻、読み上げ、短い音
+// 画面に共通の道具:模板アイコン、曜日、時刻、読み上げ、短い音(3 種類)
 import { h } from "./baked.js";
 
 let iconsLoaded = null;
@@ -89,22 +89,45 @@ export function stopSpeaking() {
   if ("speechSynthesis" in window) speechSynthesis.cancel();
 }
 
-/** 歩が終わったときの短い音 */
-export function chime() {
+/** 短い音(WebAudio。素材なし。見ていなくても何が起きたか分かるように 3 種類):
+ *  switch = 姿勢の切り替え(低 → 高の 2 音)、step = 手順が替わった(1 音)、done = 全部終わった(高 → 低の短い 2 音) */
+const TONES = {
+  switch: [
+    [660, 0, 0.18],
+    [990, 0.2, 0.3],
+  ],
+  step: [[1320, 0, 0.35]],
+  done: [
+    [990, 0, 0.14],
+    [660, 0.15, 0.32],
+  ],
+};
+
+export function sound(kind = "step") {
+  const notes = TONES[kind] ?? TONES.step;
   try {
     const ctx = new AudioContext();
-    const osc = ctx.createOscillator();
-    const gain = ctx.createGain();
-    osc.frequency.value = 1320;
-    gain.gain.setValueAtTime(0.0001, ctx.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.18, ctx.currentTime + 0.01);
-    gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.35);
-    osc.connect(gain).connect(ctx.destination);
-    osc.start();
-    osc.stop(ctx.currentTime + 0.4);
+    for (const [freq, at, len] of notes) {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.frequency.value = freq;
+      const t = ctx.currentTime + at;
+      gain.gain.setValueAtTime(0.0001, t);
+      gain.gain.exponentialRampToValueAtTime(0.18, t + 0.01);
+      gain.gain.exponentialRampToValueAtTime(0.0001, t + len);
+      osc.connect(gain).connect(ctx.destination);
+      osc.start(t);
+      osc.stop(t + len + 0.05);
+    }
+    setTimeout(() => ctx.close().catch(() => {}), 1500);
   } catch {
     /* 音が出なくても進む */
   }
+}
+
+/** 歩が終わったときの短い音 */
+export function chime() {
+  sound("step");
 }
 
 export function clear(el, ...children) {

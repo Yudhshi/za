@@ -10,10 +10,15 @@ use serde::Serialize;
 use crate::day::{self, Zone};
 use crate::posture::{stretches, StepMeta, Stretch};
 
-pub const DEFAULT_VIDEOS: &str = "跟练 1 https://www.bilibili.com/video/BV1JW4y1k7F7/
+/// 1 行 1 本:名前 + リンク(+ 長さ「4:04」や「4 分钟」。書いてあれば放し終わる時刻に自動で次へ)
+pub const DEFAULT_VIDEOS: &str = "跟练 1 https://www.bilibili.com/video/BV1JW4y1k7F7/ 4:04
 跟练 2 https://www.bilibili.com/video/BV1UL411F7Hk/
 跟练 3 https://www.youtube.com/watch?v=SGPBSqxKGAc
 跟练 4 https://www.youtube.com/watch?v=aHlNoTpXf_8";
+
+/// 既定の動画の長さ(秒)。設定に長さを書いていなくても、この表にあれば使う(古い設定ファイルのまま更新した人のため)
+const KNOWN_VIDEO_SECONDS: &[(&str, u32)] =
+    &[("https://www.bilibili.com/video/BV1JW4y1k7F7/", 244)];
 
 /// 跟练のあとの拉伸、立ってやる分(先に立ったまま全部やってから床へ)
 pub const DEFAULT_STRETCHES: &str = "斜角肌拉伸（约 2 分钟）
@@ -114,6 +119,8 @@ pub struct Video {
     pub page: String,
     pub site: Site,
     pub id: Option<String>,
+    /// 長さ(秒)。分かっていれば、放し終わる時刻に自動で次へ進める
+    pub seconds: Option<u32>,
 }
 
 impl Video {
@@ -124,8 +131,9 @@ impl Video {
             Site::Bilibili => Some(format!(
                 "https://player.bilibili.com/player.html?bvid={id}&page=1&autoplay=1&danmaku=0&high_quality=1"
             )),
+            // enablejsapi:播放器が「終わった」と知らせてくれる(画面側が次へ進める)
             Site::Youtube => Some(format!(
-                "https://www.youtube-nocookie.com/embed/{id}?autoplay=1&rel=0&playsinline=1"
+                "https://www.youtube-nocookie.com/embed/{id}?autoplay=1&rel=0&playsinline=1&enablejsapi=1"
             )),
             Site::Other => None,
         }
@@ -161,6 +169,7 @@ fn video(url: &str, title: String) -> Option<Video> {
                     page: format!("https://www.bilibili.com/video/{bv}/"),
                     site: Site::Bilibili,
                     id: Some(bv.clone()),
+                    seconds: None,
                 });
             }
         }
@@ -183,6 +192,7 @@ fn video(url: &str, title: String) -> Option<Video> {
             page: format!("https://www.youtube.com/watch?v={id}"),
             site: Site::Youtube,
             id: Some(id),
+            seconds: None,
         });
     }
     Some(Video {
@@ -190,10 +200,32 @@ fn video(url: &str, title: String) -> Option<Video> {
         page: url.to_string(),
         site: Site::Other,
         id: None,
+        seconds: None,
     })
 }
 
-/// 1 行 1 本:最初の http から URL、その前が名前(無ければ「视频 N」)
+/// リンクの後ろに書いた長さ:「4:04」「1:02:03」「4 分钟」「4 分 4 秒」「244 秒」(全角の数字も)。無ければ None
+pub fn video_seconds(rest: &str) -> Option<u32> {
+    let text: String = crate::posture::halfwidth(rest).into_iter().collect();
+    for token in text.split_whitespace() {
+        if token.contains(':') {
+            let parts: Vec<Option<u32>> = token.split(':').map(|p| p.parse().ok()).collect();
+            if parts.iter().all(Option::is_some) && (2..=3).contains(&parts.len()) {
+                return Some(
+                    parts
+                        .iter()
+                        .flatten()
+                        .fold(0, |total, part| total * 60 + part),
+                );
+            }
+        }
+    }
+    let minutes: u32 = numbers_before(&text, '分').iter().sum();
+    let seconds: u32 = numbers_before(&text, '秒').iter().sum();
+    (minutes + seconds > 0).then_some(minutes * 60 + seconds)
+}
+
+/// 1 行 1 本:最初の http から URL、その前が名前(無ければ「视频 N」)、その後ろに長さ(あれば)
 pub fn videos(text: &str) -> Vec<Video> {
     let mut result = Vec::new();
     for line in text.lines().map(str::trim) {
@@ -201,13 +233,20 @@ pub fn videos(text: &str) -> Vec<Video> {
             continue;
         };
         let url = line[start..].split_whitespace().next().unwrap_or("");
+        let rest = &line[start + url.len()..];
         let name = line[..start].trim();
         let title = if name.is_empty() {
             format!("视频 {}", result.len() + 1)
         } else {
             name.to_string()
         };
-        if let Some(v) = video(url, title) {
+        if let Some(mut v) = video(url, title) {
+            v.seconds = video_seconds(rest).or_else(|| {
+                KNOWN_VIDEO_SECONDS
+                    .iter()
+                    .find(|(page, _)| *page == v.page)
+                    .map(|(_, s)| *s)
+            });
             result.push(v);
         }
     }
@@ -346,12 +385,29 @@ mod tests {
         assert_eq!(
             v[3].embed().as_deref(),
             Some(
-                "https://www.youtube-nocookie.com/embed/aHlNoTpXf_8?autoplay=1&rel=0&playsinline=1"
+                "https://www.youtube-nocookie.com/embed/aHlNoTpXf_8?autoplay=1&rel=0&playsinline=1&enablejsapi=1"
             )
         );
-        let pasted = videos("https://www.bilibili.com/video/BV1UL411F7Hk/?spm_id_from=333&vd_source=abc\n晨间 https://youtu.be/SGPBSqxKGAc?t=10\n短 https://www.youtube.com/shorts/abcDEF12345\n随便写的一行\n\n别处 https://example.com/v/1");
+        let seconds: Vec<Option<u32>> = v.iter().map(|x| x.seconds).collect();
+        assert_eq!(
+            seconds,
+            vec![Some(244), None, None, None],
+            "the first video's length is written after the link"
+        );
+        assert_eq!(
+            videos("https://www.bilibili.com/video/BV1JW4y1k7F7/")[0].seconds,
+            Some(244),
+            "a saved list without lengths still gets the known one"
+        );
+        let pasted = videos("https://www.bilibili.com/video/BV1UL411F7Hk/?spm_id_from=333&vd_source=abc 4 分 35 秒\n晨间 https://youtu.be/SGPBSqxKGAc?t=10 12:30\n短 https://www.youtube.com/shorts/abcDEF12345 １：０２：０３\n随便写的一行\n\n别处 https://example.com/v/1 约 5 分钟");
         let titles: Vec<&str> = pasted.iter().map(|x| x.title.as_str()).collect();
         assert_eq!(titles, vec!["视频 1", "晨间", "短", "别处"]);
+        let seconds: Vec<Option<u32>> = pasted.iter().map(|x| x.seconds).collect();
+        assert_eq!(seconds, vec![Some(275), Some(750), Some(3723), Some(300)]);
+        assert_eq!(video_seconds(" 4:04 "), Some(244));
+        assert_eq!(video_seconds("4:4:4:4"), None);
+        assert_eq!(video_seconds("x:y"), None);
+        assert_eq!(video_seconds(""), None);
         assert_eq!(
             pasted[0].page,
             "https://www.bilibili.com/video/BV1UL411F7Hk/"

@@ -17,6 +17,7 @@ use yudh_core::ritual;
 use yudh_core::round::RoundMark;
 use yudh_core::spell::{self, SpellMarks, SpellResult};
 use yudh_core::srs::Rating;
+use yudh_core::standing;
 use yudh_core::sync::SyncFolder;
 use yudh_core::{English, Zone};
 
@@ -92,8 +93,13 @@ pub struct PanelState {
     posture: Posture,
     minutes_in_posture: i64,
     prompt: Option<Prompt>,
+    /// 「今天站了 1 小时 30 分，换了 3 次姿势」(いま立っている分も入れて)と、帯に入る短い形「站了 1 小时 30 分 · 换了 3 次」
+    today: String,
+    today_short: String,
     breath_today: u32,
     ritual_streak: usize,
+    /// 初回の説明をまだ読んでいない:面板は先に計画を見せる
+    welcomed: bool,
 }
 
 #[tauri::command]
@@ -121,8 +127,11 @@ pub fn panel_state(state: State<'_, AppState>) -> PanelState {
         posture: inner.posture.posture,
         minutes_in_posture: (now - inner.posture.since).num_minutes(),
         prompt: inner.posture.prompt,
+        today: standing::summary(day_stand(&inner, now)),
+        today_short: standing::short_summary(day_stand(&inner, now)),
         breath_today: today_breaths(&all),
         ritual_streak: ritual::streak(&all.ritual, now, Zone::Local),
+        welcomed: inner.settings.welcomed,
     }
 }
 
@@ -279,14 +288,16 @@ pub fn english_more(state: State<'_, AppState>, kind: String) -> Result<(), Stri
 pub struct PostureView {
     prompt: Option<Prompt>,
     posture: Posture,
+    /// いまの姿勢を始めた時刻(UNIX ミリ秒。「站起来」「坐下」と言った時刻)
+    since: i64,
     /// 切り替えの時刻(UNIX ミリ秒)
     due_at: i64,
+    /// いまの姿勢は钟が自分で切り替えた(「我还坐着」「我还站着」で直せる)
+    announced: bool,
     stretch: Stretch,
     steps: Vec<Step>,
     /// 各手順の秒数(秒・回数から。読めなければ 10 秒、どの手順も 10 秒より短くしない)。時間が来たら自動で次へ進む
     durations: Vec<u32>,
-    /// 自分で開いた「站起来了吗?」(時間前。閉じるだけの指令も出す)
-    pinned: bool,
     step: usize,
     heading: String,
     frieze: bool,
@@ -294,17 +305,53 @@ pub struct PostureView {
     breath_started_at: Option<i64>,
     breath_today: u32,
     next_stretch: String,
+    /// 「今天站了 1 小时 30 分，换了 3 次姿势」
+    today: String,
     caution: &'static str,
+}
+
+/// 今日の立った時間と回数(いま立っている分も足して)
+fn day_stand(inner: &Inner, now: chrono::DateTime<Utc>) -> standing::DayStand {
+    let clock = &inner.posture;
+    let open = match clock.posture {
+        Posture::Standing => (now - clock.since).num_seconds(),
+        Posture::Sitting => 0,
+    };
+    standing::today(&inner.settings.stand_log, &today()).plus_open(open)
+}
+
+/// 钟の切り替わりを記録に落とす(日ごとの立った時間・回数、次の拉伸の番号、立ってすぐの腹式呼吸)。
+/// 判定のあと・操作のあとに毎回呼ぶ。記録が増えたら true(設定を保存する)
+pub fn settle(inner: &mut Inner, now: chrono::DateTime<Utc>) -> bool {
+    let transitions = inner.posture.take_transitions();
+    if transitions.is_empty() {
+        return false;
+    }
+    for t in &transitions {
+        standing::record(&mut inner.settings.stand_log, &Zone::Local.key(t.at), t);
+        match t.to {
+            // 立ったらまず腹式呼吸を 3 回(习惯にする。拉伸はそのあと)。「我还站着」で戻ったときはもう済んでいる
+            Posture::Standing => {
+                inner.breath_started = (inner.settings.breath_habit && !t.revert).then_some(now);
+            }
+            Posture::Sitting => inner.breath_started = None,
+        }
+    }
+    inner.settings.stretch_index = inner.posture.stretch_index;
+    true
 }
 
 fn posture_view(inner: &Inner) -> PostureView {
     let clock = &inner.posture;
     let steps = posture::steps(&clock.stretch);
     let step = clock.step.min(steps.len());
+    let now = Utc::now();
     PostureView {
         prompt: clock.prompt,
         posture: clock.posture,
+        since: clock.since.timestamp_millis(),
         due_at: clock.due_at(&inner.settings.posture).timestamp_millis(),
+        announced: clock.announced,
         heading: posture::heading(&clock.stretch, &steps, step),
         frieze: posture::shows_frieze(&steps),
         durations: clock
@@ -317,13 +364,13 @@ fn posture_view(inner: &Inner) -> PostureView {
                     .max(ritual::SETUP_SECONDS)
             })
             .collect(),
-        pinned: clock.pinned,
         stretch: clock.stretch.clone(),
         steps,
         step,
         breath_started_at: inner.breath_started.map(|t| t.timestamp_millis()),
         breath_today: today_breaths(&habits(inner)),
         next_stretch: posture::display_name(&clock.next_stretch(&inner.settings.posture).name),
+        today: standing::summary(day_stand(inner, now)),
         caution: posture::CAUTION,
     }
 }
@@ -333,7 +380,8 @@ pub fn posture_state(state: State<'_, AppState>) -> PostureView {
     posture_view(&state.inner.lock().expect("state"))
 }
 
-/// 坐站の操作(トレイからも呼ぶ)。小窓の出し入れまでする
+/// 坐站の操作(トレイからも呼ぶ)。小窓の出し入れまでする。
+/// 播报の钟なので操作は少ない:钟が間違えたときの「我还坐着」「我还站着」、トレイの「现在站起来」「坐下了」、手順の送り、閉じる
 pub fn apply_posture(app: &AppHandle, action: &str) -> PostureView {
     let view = {
         let state = app.state::<AppState>();
@@ -341,30 +389,16 @@ pub fn apply_posture(app: &AppHandle, action: &str) -> PostureView {
         let now = Utc::now();
         let settings = inner.settings.posture.clone();
         match action {
-            "stood" => {
-                inner.posture.confirm_stood(now, &settings);
-                inner.settings.stretch_index = inner.posture.stretch_index;
-                // 立ったらまず腹式呼吸を 3 回(习惯にする。拉伸はそのあと)
-                inner.breath_started = inner.settings.breath_habit.then_some(now);
-                state.save(&inner);
+            // トレイ:座っていればすぐ立ち作業に、立っていれば手順を開き直す
+            "stood" | "open" => inner.posture.confirm_stood(now, &settings),
+            "sat" => inner.posture.confirm_sat(now, &settings),
+            "stillSitting" => {
+                inner.posture.still_sitting(now, &settings);
             }
-            "sat" => {
-                inner.posture.confirm_sat(now);
-                inner.breath_started = None;
+            "stillStanding" => {
+                inner.posture.still_standing(now);
             }
-            "snooze15" => {
-                inner.posture.snooze(now, 15, &settings);
-                inner.breath_started = None;
-            }
-            "snooze5" => {
-                inner.posture.snooze(now, 5, &settings);
-                inner.breath_started = None;
-            }
-            "close" => {
-                inner.posture.close_prompt();
-                inner.breath_started = None;
-            }
-            "open" => inner.posture.open_prompt(&settings),
+            "close" => inner.posture.close_prompt(),
             "next" => inner.posture.move_step(1),
             "prev" => inner.posture.move_step(-1),
             "breathDone" => {
@@ -376,6 +410,9 @@ pub fn apply_posture(app: &AppHandle, action: &str) -> PostureView {
             }
             "breathSkip" => inner.breath_started = None,
             _ => {}
+        }
+        if settle(&mut inner, now) {
+            state.save(&inner);
         }
         posture_view(&inner)
     };
@@ -397,6 +434,8 @@ pub struct RitualVideo {
     title: String,
     page: String,
     embed: Option<String>,
+    /// 長さ(秒)。あれば放し終わったら自動で次へ
+    seconds: Option<u32>,
 }
 
 #[derive(Serialize)]
@@ -462,6 +501,7 @@ pub fn ritual_plan(state: State<'_, AppState>, short: bool) -> RitualPlan {
             .into_iter()
             .map(|v| RitualVideo {
                 embed: v.embed(),
+                seconds: v.seconds,
                 title: v.title,
                 page: v.page,
             })
@@ -502,6 +542,7 @@ pub struct SettingsView {
     device: String,
     autostart: bool,
     quiet_apps: String,
+    welcomed: bool,
     posture_enabled: bool,
     sit_minutes: i64,
     stand_minutes: i64,
@@ -524,6 +565,7 @@ pub fn settings_get(state: State<'_, AppState>) -> SettingsView {
         device: s.device.clone(),
         autostart: s.autostart,
         quiet_apps: s.quiet_apps.clone(),
+        welcomed: s.welcomed,
         posture_enabled: s.posture.enabled,
         sit_minutes: s.posture.sit_minutes,
         stand_minutes: s.posture.stand_minutes,
@@ -622,13 +664,14 @@ pub struct Fit {
     height: f64,
 }
 
-/// 窓を開く("ritual" / "panel")・大きさを合わせる("fit:posture")。
+/// 窓を開く("ritual" / "panel")・面板を細い帯から全体に広げる("panel-full")・大きさを合わせる(fit)。
 /// 窓を作るので async(同期の命令の中で窓を作ると Windows では止まる)
 #[tauri::command]
 pub async fn open_surface(app: AppHandle, which: String, fit: Option<Fit>) {
     match (which.as_str(), fit) {
         ("ritual", _) => surfaces::open_ritual(&app),
         ("panel", _) => surfaces::toggle_panel(&app),
+        ("panel-full", _) => surfaces::expand_panel(&app),
         (label, Some(size)) => surfaces::fit(&app, label, size.width, size.height),
         _ => {}
     }

@@ -6,6 +6,7 @@ use std::path::Path;
 
 use serde::{Deserialize, Serialize};
 use yudh_core::posture::{self, PostureSettings};
+use yudh_core::standing::StandLog;
 use yudh_core::{quiet, ritual};
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -19,10 +20,14 @@ pub struct Settings {
     pub autostart: bool,
     /// 打游戏时让 Yudh 完全安静的程序(1 行 1 つ。exe 名)
     pub quiet_apps: String,
+    /// 初回の説明(坐 30 站 30、到点小窗会叫你)を読んだ
+    pub welcomed: bool,
     /// 自分で動かした面板・坐站の小窓の左上(論理 px)。次からその位置に出す
     pub panel_pos: Option<[f64; 2]>,
     pub posture_pos: Option<[f64; 2]>,
     pub posture: PostureSettings,
+    /// 日ごとの立った時間と姿勢を変えた回数(「今天站了 1 小时 30 分，换了 3 次姿势」)
+    pub stand_log: StandLog,
     /// 次に出す拉伸の番号(実際に立ったときに進める)
     pub stretch_index: usize,
     /// 立つたびに、拉伸の前に腹式呼吸を 3 回
@@ -44,9 +49,11 @@ impl Default for Settings {
             device: std::env::var("COMPUTERNAME").unwrap_or_else(|_| "Windows PC".into()),
             autostart: true,
             quiet_apps: quiet::DEFAULT_QUIET_APPS.into(),
+            welcomed: false,
             panel_pos: None,
             posture_pos: None,
             posture: PostureSettings::default(),
+            stand_log: StandLog::new(),
             stretch_index: 0,
             breath_habit: true,
             breath_log: BTreeMap::new(),
@@ -88,6 +95,7 @@ pub struct SettingsPatch {
     pub device: Option<String>,
     pub autostart: Option<bool>,
     pub quiet_apps: Option<String>,
+    pub welcomed: Option<bool>,
     pub posture_enabled: Option<bool>,
     pub stretches: Option<String>,
     pub breath_habit: Option<bool>,
@@ -116,6 +124,9 @@ impl Settings {
         }
         if let Some(v) = patch.quiet_apps {
             self.quiet_apps = v;
+        }
+        if let Some(v) = patch.welcomed {
+            self.welcomed = v;
         }
         if let Some(v) = patch.posture_enabled {
             self.posture.enabled = v;
@@ -154,6 +165,10 @@ mod tests {
         let dir = std::env::temp_dir().join(format!("yudh-settings-{}", std::process::id()));
         let path = dir.join("settings.json");
         assert!(Settings::load(&path).breath_habit);
+        assert!(
+            !Settings::load(&path).welcomed,
+            "the first run shows the plan"
+        );
         let mut s = Settings::default();
         s.breath_log.insert("2026-10-01".into(), 3);
         s.save(&path).unwrap();
@@ -181,6 +196,11 @@ mod tests {
             ..Default::default()
         }));
         assert_eq!(loaded.sync_root, None, "blank clears the folder");
+        assert!(!loaded.apply(SettingsPatch {
+            welcomed: Some(true),
+            ..Default::default()
+        }));
+        assert!(loaded.welcomed);
         std::fs::remove_dir_all(&dir).ok();
     }
 }

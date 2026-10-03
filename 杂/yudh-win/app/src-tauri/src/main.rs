@@ -1,4 +1,4 @@
-//! Yudh for Windows:常駐はトレイだけ(30 秒ごとに坐站を計り、同期フォルダは開いたときに読む)。
+//! Yudh for Windows:常駐はトレイだけ(30 秒ごとに坐站の钟を進め、同期フォルダは開いたときに読む)。
 //! 面板・坐站の小窓・日课の窓は、出すときに作り、閉じたら捨てる(ゲームの邪魔をしない・メモリを返す)
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
@@ -146,7 +146,8 @@ pub fn apply_autostart(app: &AppHandle) {
     }
 }
 
-/// トレイのメニュー。立っているあいだは「看拉伸」(面板の底と同じ言い方)、ゲーム中は 3 つとも押せない
+/// トレイのメニュー。钟は自分で切り替えるので、ここにあるのは先回りだけ:座っていれば「现在站起来」、
+/// 立っていれば「看拉伸」と「坐下了」。ゲーム中はどれも押せない
 pub fn tray_menu(
     app: &AppHandle,
     standing: bool,
@@ -157,7 +158,7 @@ pub fn tray_menu(
         Some(name) => format!("游戏中，已暂停（{name}）"),
         None => "打开面板".to_string(),
     };
-    Menu::with_items(
+    let menu = Menu::with_items(
         app,
         &[
             &MenuItem::with_id(app, "panel", panel_label, on, None::<&str>)?,
@@ -168,15 +169,25 @@ pub fn tray_menu(
                 if standing {
                     "看拉伸"
                 } else {
-                    "站起来了吗？"
+                    "现在站起来"
                 },
                 on,
                 None::<&str>,
             )?,
-            &PredefinedMenuItem::separator(app)?,
-            &MenuItem::with_id(app, "quit", "退出 Yudh", true, None::<&str>)?,
         ],
-    )
+    )?;
+    if standing {
+        menu.append(&MenuItem::with_id(app, "sat", "坐下了", on, None::<&str>)?)?;
+    }
+    menu.append(&PredefinedMenuItem::separator(app)?)?;
+    menu.append(&MenuItem::with_id(
+        app,
+        "quit",
+        "退出 Yudh",
+        true,
+        None::<&str>,
+    )?)?;
+    Ok(menu)
 }
 
 fn build_tray(app: &AppHandle) -> tauri::Result<()> {
@@ -193,6 +204,9 @@ fn build_tray(app: &AppHandle) -> tauri::Result<()> {
             "ritual" => surfaces::open_ritual(app),
             "posture" => {
                 commands::apply_posture(app, "open");
+            }
+            "sat" => {
+                commands::apply_posture(app, "sat");
             }
             "quit" => app.exit(0),
             _ => {}
@@ -256,18 +270,23 @@ fn ticker(app: AppHandle) {
             // スリープから覚めた(2 分以上 tick が止まっていた):眠っていた時間を座っていた時間に数えない
             let now = Utc::now();
             let woke = now - last_tick > chrono::Duration::minutes(2);
+            let last_seen = last_tick;
             last_tick = now;
             if woke {
-                inner.posture.wake(now);
+                inner.posture.wake(now, last_seen);
                 inner.breath_started = None;
             }
             let changed = if game.is_some() {
-                inner.posture.check(Utc::now(), &settings, 0, true)
+                inner.posture.check(now, &settings, 0, true)
             } else {
                 let busy = platform::fullscreen_busy();
                 let idle = platform::idle_seconds();
-                inner.posture.check(Utc::now(), &settings, idle, busy)
+                inner.posture.check(now, &settings, idle, busy)
             };
+            // 钟が切り替えた分を記録(今日の立った時間・回数、立ってすぐの呼吸)
+            if commands::settle(&mut inner, now) {
+                state.save(&inner);
+            }
             if changed && inner.posture.prompt.is_none() {
                 inner.breath_started = None;
             }
