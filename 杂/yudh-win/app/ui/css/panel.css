@@ -11,7 +11,7 @@
   flex-direction: column;
 }
 
-/* 最初は細い帯:姿勢の札・今日の一行・泡完澡了。「打开」で全体に。帯は焼いた黒い帯(strip-black-night)、全体は面板の枠 */
+/* 最初は細い帯:姿勢の札・今日の一行・打开。「打开」で全体に。帯は焼いた黒い帯(strip-black-night)、全体は面板の枠 */
 .panel.strip-mode {
   height: 64px;
   padding: 0 18px 0 16px;

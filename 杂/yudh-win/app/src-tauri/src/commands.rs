@@ -103,6 +103,8 @@ pub struct PanelState {
     resting: bool,
     rest_reason: Option<&'static str>,
     quiet_to: u32,
+    /// 坐站提醒が入っているか(切ってあれば钟は止まっている)
+    enabled: bool,
     /// 今日の胶带の印(時間軸)
     marks: Vec<DayMark>,
     /// 「今天站了 1 小时 30 分，换了 3 次姿势」(いま立っている分も入れて)と、帯に入る短い形「站了 1 小时 30 分 · 换了 3 次」
@@ -153,6 +155,7 @@ pub fn panel_state(state: State<'_, AppState>) -> PanelState {
         resting: inner.posture.resting,
         rest_reason: rest_reason(&inner, now),
         quiet_to: inner.settings.posture.quiet_to,
+        enabled: inner.settings.posture.enabled,
         marks: day_stand(&inner, now).marks,
         today: standing::summary(day_stand(&inner, now)),
         today_short: standing::short_summary(day_stand(&inner, now)),
@@ -209,9 +212,11 @@ pub struct PostureSummary {
     resting: bool,
     rest_reason: Option<&'static str>,
     quiet_to: u32,
+    enabled: bool,
     marks: Vec<DayMark>,
     today: String,
     today_short: String,
+    pinned: bool,
 }
 
 #[tauri::command]
@@ -232,14 +237,19 @@ pub fn posture_summary(state: State<'_, AppState>) -> PostureSummary {
         resting: inner.posture.resting,
         rest_reason: rest_reason(&inner, now),
         quiet_to: inner.settings.posture.quiet_to,
+        enabled: inner.settings.posture.enabled,
+        pinned: inner.settings.pinned,
         today: standing::summary(day.clone()),
         today_short: standing::short_summary(day.clone()),
         marks: day.marks,
     }
 }
 
-/// 帯・トレイ・小窓で同じ一行:「已坐 23 分钟 · 站了 1 小时 30 分 · 换了 3 次」(夜は「夜里不叫」)
+/// 帯・トレイ・小窓で同じ一行:「已坐 23 分钟 · 站了 1 小时 30 分 · 换了 3 次」(夜・日课のあとは「休息中 · …」)
 pub fn status_line(inner: &Inner, now: chrono::DateTime<Utc>) -> String {
+    if !inner.settings.posture.enabled {
+        return "坐站提醒已关".to_string();
+    }
     if inner.posture.resting {
         return format!(
             "休息中 · {}",
@@ -561,7 +571,7 @@ pub fn posture_state(state: State<'_, AppState>) -> PostureView {
 }
 
 /// 坐站の操作(トレイからも呼ぶ)。小窓の出し入れまでする。
-/// 播报の钟なので操作は少ない:钟が間違えたときの「我还坐着」「我还站着」、トレイの「现在站起来」「坐下了」、手順の送り、閉じる
+/// 播报の钟なので操作は少ない:「坐 | 站」の札(90 秒以内は取り消し、あとは今ここで切り替え)、トレイの「看拉伸」、手順の送り、閉じる
 pub fn apply_posture(app: &AppHandle, action: &str) -> PostureView {
     let view = {
         let state = app.state::<AppState>();
@@ -702,12 +712,16 @@ pub fn ritual_plan(state: State<'_, AppState>, short: bool) -> RitualPlan {
     let has_strength = !short
         && s.ritual_strength_on
         && ritual::includes_strength(&all.ritual_strength, now, Zone::Local);
-    let stretches = ritual::plan(
+    // 手順の無い拉伸(拉伸库で全部消した)は日课に出さない(一覧と番号がずれる)
+    let stretches: Vec<Stretch> = ritual::plan(
         &s.ritual_stretches,
         has_strength.then_some(s.ritual_strength.as_str()),
         &s.ritual_floor,
         short,
-    );
+    )
+    .into_iter()
+    .filter(|st| !st.steps.is_empty())
+    .collect();
     let mut steps = Vec::new();
     for (number, stretch) in stretches.iter().enumerate() {
         let guide = posture::steps(stretch);
@@ -838,6 +852,7 @@ pub fn settings_save(
     {
         let mut inner = state.inner.lock().expect("state");
         let before = folder(&inner);
+        let was_enabled = inner.settings.posture.enabled;
         if inner.settings.apply(patch) {
             inner.english = None;
             inner.undo = None;
@@ -847,6 +862,13 @@ pub fn settings_save(
                     let _ = std::fs::remove_file(old.habits_file());
                 }
             }
+        }
+        // 坐站提醒を入れ直した:切っていたあいだを座っていた時間に数えない(入れた途端に「站起来」と言わない)
+        if !was_enabled && inner.settings.posture.enabled {
+            let now = Utc::now();
+            let settings = inner.settings.posture.clone();
+            inner.posture.confirm_sat(now, &settings);
+            inner.posture.reset(now);
         }
         inner
             .settings

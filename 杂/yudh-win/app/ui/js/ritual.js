@@ -59,7 +59,8 @@ function enter(i) {
   // 映している最中の動画をもう一度選んだ(一覧の同じ行・最初の動画で ←):動画は続いているので数え直さない
   const current = s.items[s.index];
   const same = Math.max(0, i) === s.index && !s.finished && current?.type === "video";
-  if (same && s.videoEndsAt) return render();
+  // 長さが分かっていてもいなくても、映している動画は続いている:計時も、覚えるための開始時刻も触らない
+  if (same) return render();
   // 長さの分からない動画から次へ進んだ:見ていた時間を長さとして覚える(撤销できる)
   s.learned = null;
   if (!s.finished && current?.type === "video" && !current.seconds && i === s.index + 1 && s.videoStartedAt) {
@@ -315,7 +316,9 @@ function videoStage(item) {
 function videoNote(item) {
   if (s.videoEndsAt) return h("span", { class: "t-caption video-left" }, `${clock(s.videoEndsAt - Date.now())} 后自动下一个`);
   if (item.embed?.includes("youtube")) return h("span", { class: "t-caption" }, "放完自动下一个");
-  return h("span", { class: "t-caption" }, "第一次：看完点「跟练完了，下一个」，记住时长后下次自动跳");
+  // 覚えられるのは bilibili / YouTube の链接だけ(行を探す id が要る)
+  if (videoId(item.page)) return h("span", { class: "t-caption" }, "第一次：看完点「跟练完了，下一个」，记住时长后下次自动跳");
+  return h("span", { class: "t-caption" }, "没写时长：看完点「跟练完了，下一个」。设置里在链接后面写上时长（如 4:35）就会自动跳");
 }
 
 function doneStage() {
@@ -405,7 +408,7 @@ function renderList() {
     rows.push(h("span", { class: "t-section", style: { marginTop: "12px" } }, p.short ? "拉伸（简版）" : p.hasStrength ? "拉伸 · 今天加肩袖力量" : "拉伸"));
     p.stretchNames.forEach((name, n) => {
       const firstItem = s.items.findIndex((it) => it.type === "stretch" && it.stretchNumber === n);
-      const nextFirst = s.items.findIndex((it) => it.type === "stretch" && it.stretchNumber === n + 1);
+      const nextFirst = s.items.findIndex((it) => it.type === "stretch" && it.stretchNumber > n);
       const last = (nextFirst < 0 ? s.items.length : nextFirst) - 1;
       if (firstItem >= 0) rows.push(row(name, state(firstItem, last), firstItem));
     });

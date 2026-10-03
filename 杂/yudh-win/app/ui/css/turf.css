@@ -257,7 +257,7 @@ button:disabled {
   -webkit-app-region: drag;
 }
 
-/* 一日の胶带:黒 = 座った、青 = 立った、灰 = 離席 / ゲーム / 休み、点線 = 予定、橙の刻み = いま */
+/* 一日の胶带:黒 = 座った、青 = 立った、斜線 = 離席(牛皮纸色)/ ゲーム(灰)、薄い灰 = 休み、点線 = 予定、橙の刻み = いま */
 .daytape-wrap {
   display: flex;
   flex-direction: column;

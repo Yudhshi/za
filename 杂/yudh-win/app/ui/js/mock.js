@@ -1,8 +1,11 @@
 // ブラウザで画面を確かめるための見本(Tauri の中では読まない)。
 // posture.html?prompt=standing|sit、&phase=announce|breath|stretch|done、&step=N、&manual=1(トレイから開いた)、&preview=1(试做)
-// index.html?welcome=0(初回の説明)、?configured=0、?pinned=1(常駐の帯)
+// index.html?welcome=0(初回の説明)、?configured=0、?pinned=1(常駐の帯)、?resting=1(夜)、?off=1(坐站提醒を切った)、?tomorrow=none、?new=1
+// ritual.html?embed=1(Rust と同じ埋め込みの地址。外のサイトを読む)
 
 const q = new URLSearchParams(location.search);
+/** 小窓の見本が受けた操作(手順を進めた数・閉じた・呼吸を終えた) */
+const mockPosture = { stepDelta: 0, closed: false, breathDone: false };
 const now = Date.now();
 let answered = 7;
 let revealed = 0;
@@ -81,6 +84,7 @@ const handlers = {
     ritualToday: false,
     welcomed: q.get("welcome") !== "0",
     pinned: q.get("pinned") === "1",
+    enabled: q.get("off") !== "1",
   }),
   english_card: ({ kind }) =>
     kind === "spell"
@@ -126,12 +130,13 @@ const handlers = {
   english_undo: () => "vocab",
   english_more: () => null,
   posture_state: () => {
-    const prompt = q.get("prompt") || "standing";
+    const prompt = mockPosture.closed ? null : q.get("prompt") || "standing";
     const phase = q.get("phase") || "stretch";
     const preview = q.get("preview") === "1";
     // announce:いま言ったところ。breath:一言のあと呼吸 3 秒目。stretch / done:呼吸は済んだ
     const since = phase === "announce" ? now - 1000 : phase === "breath" ? now - 7000 - 3000 : now - 5 * 60 * 1000;
-    const step = phase === "done" ? steps.length : Number(q.get("step") || 5);
+    const count = preview ? 3 : steps.length;
+    const step = Math.max(0, Math.min(count, (phase === "done" ? steps.length : Number(q.get("step") || 5)) + mockPosture.stepDelta));
     const current = steps[Math.min(step, steps.length - 1)];
     return {
       prompt,
@@ -147,7 +152,7 @@ const handlers = {
       heading: current.titled ? current.name : current.section,
       frieze: false,
       preview,
-      breathStartedAt: phase === "announce" || phase === "breath" ? since : null,
+      breathStartedAt: !mockPosture.breathDone && (phase === "announce" || phase === "breath") ? since : null,
       breathToday: 3,
       nextStretch: "斜角肌拉伸 · 2 分钟",
       today: "今天站了 1 小时 30 分，换了 3 次姿势",
@@ -157,13 +162,21 @@ const handlers = {
       caution: "※ 拉伸感可以，发麻或刺痛传到手上就停",
     };
   },
-  posture_action: () => handlers.posture_state(),
+  // 操作を見本の状態に当てる(当てないと自動送りが同じ歩で回り続ける)
+  posture_action: ({ action }) => {
+    if (action === "next") mockPosture.stepDelta += 1;
+    else if (action === "prev") mockPosture.stepDelta -= 1;
+    else if (action === "close" || action === "flip") mockPosture.closed = true;
+    else if (action === "breathDone" || action === "breathSkip") mockPosture.breathDone = true;
+    return handlers.posture_state();
+  },
   ritual_plan: ({ short }) => ({
     videos: [
-      { title: "跟练 1", page: "https://www.bilibili.com/video/BV1JW4y1k7F7/", embed: null, seconds: 244 },
-      { title: "跟练 2", page: "https://www.bilibili.com/video/BV1UL411F7Hk/", embed: null, seconds: null },
-      { title: "跟练 3", page: "https://www.youtube.com/watch?v=SGPBSqxKGAc", embed: null, seconds: null },
-      { title: "跟练 4", page: "https://www.youtube.com/watch?v=aHlNoTpXf_8", embed: null, seconds: null },
+      // ?embed=1 で Rust と同じ埋め込み地址(外のサイトを読む)。既定はブラウザで開く舞台(素材だけで見られる)
+      { title: "跟练 1", page: "https://www.bilibili.com/video/BV1JW4y1k7F7/", embed: q.get("embed") ? "https://player.bilibili.com/player.html?bvid=BV1JW4y1k7F7&page=1&autoplay=1&danmaku=0&high_quality=1" : null, seconds: 244 },
+      { title: "跟练 2", page: "https://www.bilibili.com/video/BV1UL411F7Hk/", embed: q.get("embed") ? "https://player.bilibili.com/player.html?bvid=BV1UL411F7Hk&page=1&autoplay=1&danmaku=0&high_quality=1" : null, seconds: null },
+      { title: "跟练 3", page: "https://www.youtube.com/watch?v=SGPBSqxKGAc", embed: q.get("embed") ? "https://www.youtube-nocookie.com/embed/SGPBSqxKGAc?autoplay=1&rel=0&playsinline=1&enablejsapi=1" : null, seconds: null },
+      { title: "跟练 4", page: "https://www.youtube.com/watch?v=aHlNoTpXf_8", embed: q.get("embed") ? "https://www.youtube-nocookie.com/embed/aHlNoTpXf_8?autoplay=1&rel=0&playsinline=1&enablejsapi=1" : null, seconds: null },
     ],
     steps: [
       { heading: "斜角肌拉伸", name: "斜角肌拉伸 · 2 分钟", text: "右手按住右侧锁骨下方，头向左倒，拉伸右侧颈部，停 20 秒", pose: "neck-side", meta: "20 秒", duration: 20, stepNumber: 0, stepCount: 4, stretchNumber: 0 },
@@ -197,7 +210,7 @@ const handlers = {
     ritualStrength: "肩袖力量（隔天做，约 6 分钟）\n坐在地上，右手肘贴腰弯 90°，左手握住右手腕；右手往外推、左手顶住不让动，用 5 成力，停 10 秒 × 5 次\n换左手往外推，停 10 秒 × 5 次",
     ritualFloor: "仰躺腹式呼吸（约 3 分钟）\n仰躺，膝盖弯曲，一只手放肚子上，一只手放胸口\n用鼻子吸气 4 秒只让肚子鼓起来，用嘴呼气 6 秒，做 12 次",
     ritualStrengthOn: true,
-    defaults: { quietApps: "Aion2.exe\nAion2-Win64-Shipping.exe" },
+    defaults: { quietApps: "Aion2.exe\nAion2-Win64-Shipping.exe", fixed: "斜角肌拉伸（约 1 分半）\n停 20 秒", stretches: "W 字收肩（约 1 分钟）\n停 5 秒后放松。做 12 次", ritualStretches: "斜角肌拉伸（约 2 分钟）\n停 20 秒", ritualStrength: "肩袖力量\n停 10 秒 × 5 次", ritualFloor: "仰躺腹式呼吸\n做 12 次" },
   }),
   settings_save: ({ patch }) => {
     window.__saved = patch;
@@ -208,7 +221,7 @@ const handlers = {
   posture_preview: () => null,
   posture_summary: () => {
     const p = handlers.panel_state();
-    return { posture: p.posture, minutesInPosture: p.minutesInPosture, prompt: p.prompt, since: p.since, dueAt: p.dueAt, announced: p.announced, resting: p.resting, restReason: p.restReason, quietTo: p.quietTo, marks: p.marks, today: p.today, todayShort: p.todayShort };
+    return { posture: p.posture, minutesInPosture: p.minutesInPosture, prompt: p.prompt, since: p.since, dueAt: p.dueAt, announced: p.announced, resting: p.resting, restReason: p.restReason, quietTo: p.quietTo, enabled: p.enabled, pinned: p.pinned, marks: p.marks, today: p.today, todayShort: p.todayShort };
   },
 };
 

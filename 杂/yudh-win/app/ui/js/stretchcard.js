@@ -165,8 +165,9 @@ export function title(name) {
   return (name ?? "").split(/[（(]/)[0].trim() || name;
 }
 
-export function totalSeconds(stretch) {
-  return stretch.steps.reduce((a, l) => a + Math.max(10, stepSeconds(l)), 0);
+/** 拉伸の長さ。坐站の小窓は一歩を 10 秒より短くしない(floor)、日课はしない(Rust の posture_view / ritual_plan と同じ) */
+export function totalSeconds(stretch, floor = true) {
+  return stretch.steps.reduce((a, l) => a + (floor ? Math.max(10, stepSeconds(l)) : stepSeconds(l)), 0);
 }
 
 export function mmss(seconds) {

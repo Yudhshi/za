@@ -25,6 +25,25 @@ let lingerSince = 0;
 let closing = false;
 /** 切り替えの音を鳴らした姿勢(since で区別。作り直しで二度鳴らさない) */
 let soundedSwitch = 0;
+
+/** 切り替えの音を鳴らした姿勢の since(窓を作り直しても覚えている:同じ切り替えで二度鳴らさない) */
+function alreadySounded(since) {
+  if (soundedSwitch === since) return true;
+  try {
+    return localStorage.getItem("soundedSince") === String(since);
+  } catch {
+    return false;
+  }
+}
+
+function markSounded(since) {
+  soundedSwitch = since;
+  try {
+    localStorage.setItem("soundedSince", String(since));
+  } catch {
+    /* 覚えられなくても、この窓では二度鳴らさない */
+  }
+}
 /** 一度でも中身を描いたか(出場の動きは最初の中身で) */
 let entered = false;
 /** 注意書きは一日に一度だけ(見れば分かる。立っているときの小窓に 2 行は要らない) */
@@ -64,7 +83,8 @@ function stepLeft() {
   const count = view.steps.length;
   const step = Math.min(view.step, count);
   if (step >= count) return null;
-  const key = `${view.stretch?.name ?? ""}#${step}`;
+  // 试做か钟か・いつ立ったかも鍵に入れる(同じ拉伸の同じ歩でも、別の回なら数え直す)
+  const key = `${view.preview ? "p" : "c"}|${view.since}|${view.stretch?.name ?? ""}#${step}`;
   if (key !== stepKey) {
     stepKey = key;
     stepStart = Date.now();
@@ -192,7 +212,10 @@ function breathArt(s) {
   if (has("flood-teal-0")) {
     const pool = h("div", { class: "paint-pool" });
     setFloodFrame(pool, s);
-    return h("div", { class: `breath-flood ${s.inhaling ? "inhale" : "exhale"}` }, pool);
+    // 吸う / 吐くが替わるたびに作り直すので、前の段の大きさで作ってから次の描画で切り替える(0.5 秒で膨らむ / 縮む)
+    const el = h("div", { class: `breath-flood ${s.inhaling ? "exhale" : "inhale"}` }, pool);
+    requestAnimationFrame(() => requestAnimationFrame(() => (el.className = `breath-flood ${s.inhaling ? "inhale" : "exhale"}`)));
+    return el;
   }
   return h("div", { class: `breath-ring ${s.inhaling ? "inhale" : "exhale"}` }, h("div", { class: "ink", style: { animationDelay: `${-s.inPhase}s` } }));
 }
@@ -240,7 +263,7 @@ function standing() {
       ];
     }
     return [
-      h("div", { class: "head row" }, h("span", { class: "label" }, "做完了"), smallTimer(), h("span", { class: "grow" }), chip(), dots(count, step)),
+      h("div", { class: "head row" }, h("span", { class: "label" }, "做完了"), smallTimer(), h("span", { class: "grow" }), chip()),
       stretchBody({ pose: "walk", heading: "站着把剩下的时间用完", text: "到点我会说「坐下」。这个小窗一会儿自己关。" }),
       h("div", { class: "buttons row" }, h("span", { class: "grow" }), button("关闭", { kind: "frame", onKraft: true, width: 135, onClick: () => leave("close") })),
     ];
@@ -304,7 +327,7 @@ function stateKey() {
     return `breath|${s.breath}|${s.inhaling}`;
   }
   if (p === "breath-done") return "breath-done";
-  return `stretch|${view.stretch?.name ?? ""}#${Math.min(view.step, view.steps.length)}|${view.posture}`;
+  return `stretch|${view.preview ? "p" : "c"}|${view.since}|${view.stretch?.name ?? ""}#${Math.min(view.step, view.steps.length)}|${view.posture}`;
 }
 
 function render() {
@@ -317,9 +340,11 @@ function render() {
   }
   drawnKey = key;
   if (!view?.prompt) return clear(sheet);
+  // 閉じようとして剥がしたのに、まだ見せるものがある(试做を閉じたら钟の手順が残っていた):剥がしたままにしない
+  $("wrap").classList.remove("leaving");
   // 切り替えの音は切り替えた直後に一度(钟が自分で切り替えたときだけ。あとで小窓を開き直したときや、トレイから開いたときは鳴らさない)
-  if (fresh() && soundedSwitch !== view.since) {
-    soundedSwitch = view.since;
+  if (fresh() && !alreadySounded(view.since)) {
+    markSounded(view.since);
     sound(view.prompt === "sit" ? "sit" : "switch");
   }
   let content;

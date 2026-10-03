@@ -17,7 +17,7 @@ pub struct Habits {
     pub ritual: BTreeMap<String, u32>,
     /// 日课に肩袖の力量が入っていた回数(隔天の判定に使う)
     pub ritual_strength: BTreeMap<String, u32>,
-    /// 腹式呼吸を 3 回やった回数(立ったとき・日课の最後)
+    /// 腹式呼吸をやり終えた回数(立ったときの 3 回、日课の最後の 12 回を、それぞれ 1 回と数える)
     pub breath: BTreeMap<String, u32>,
 }
 

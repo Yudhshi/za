@@ -9,9 +9,15 @@ use yudh_core::posture::{self, PostureSettings};
 use yudh_core::standing::StandLog;
 use yudh_core::{quiet, ritual};
 
+/// 設定ファイルの版。上げたら `Settings::load` に一度だけの移し替えを書く
+pub const SETTINGS_VERSION: u32 = 1;
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(default, rename_all = "camelCase")]
 pub struct Settings {
+    /// 設定ファイルの版(無いファイル = 0:前の版)。移し替えを一度だけにするため
+    #[serde(default)]
+    pub settings_version: u32,
     /// 同期フォルダ(OneDrive などの中。Mac と同じフォルダ)
     pub sync_root: Option<String>,
     /// 出来事に付ける端末名(ファイル名にもなる)
@@ -49,6 +55,7 @@ pub struct Settings {
 impl Default for Settings {
     fn default() -> Self {
         Settings {
+            settings_version: SETTINGS_VERSION,
             sync_root: None,
             device: std::env::var("COMPUTERNAME").unwrap_or_else(|_| "Windows PC".into()),
             autostart: true,
@@ -83,11 +90,15 @@ impl Settings {
             .unwrap_or_default();
         settings.posture.sit_minutes = posture::PLAN_SIT_MINUTES;
         settings.posture.stand_minutes = posture::PLAN_STAND_MINUTES;
-        // 前の版は斜角肌を順番の 1 つ目に置いていた。いまは毎回の分(fixed)なので、順番からは外す(二重にやらない)
+        // 版 0 → 1:前の版は斜角肌を順番の 1 つ目に置いていた。いまは毎回の分(fixed)なので、順番からは外す(二重にやらない)。
+        // 一度だけ(あとで自分で斜角肌の拉伸を順番の先頭に置いても消さない)
         let rotating = posture::stretches(&settings.posture.stretches);
-        if rotating
-            .first()
-            .is_some_and(|s| s.name.starts_with("斜角肌"))
+        let migrate = settings.settings_version < 1;
+        settings.settings_version = SETTINGS_VERSION;
+        if migrate
+            && rotating
+                .first()
+                .is_some_and(|s| s.name.starts_with("斜角肌"))
         {
             settings.posture.stretches = rotating[1..]
                 .iter()
@@ -246,10 +257,28 @@ mod tests {
             posture::DEFAULT_STRETCHES
         );
         old.save(&path).unwrap();
+        old.settings_version = 0;
+        old.save(&path).unwrap();
         let migrated = Settings::load(&path);
         assert_eq!(migrated.posture.stretches, posture::DEFAULT_STRETCHES);
         assert_eq!(migrated.posture.fixed, posture::DEFAULT_FIXED);
+        assert_eq!(migrated.settings_version, SETTINGS_VERSION);
         assert!(!migrated.pinned);
+        // 移し替えたあとで自分で斜角肌を順番の先頭に置いても、消さない
+        let mut mine = migrated.clone();
+        mine.posture.stretches = format!(
+            "斜角肌加强（约 1 分钟）\n停 30 秒\n\n{}",
+            posture::DEFAULT_STRETCHES
+        );
+        mine.save(&path).unwrap();
+        assert!(Settings::load(&path)
+            .posture
+            .stretches
+            .starts_with("斜角肌加强"));
+        // 版の無い前の版のファイルは 0 として読む
+        std::fs::write(&path, r#"{"device":"PC","posture":{"stretches":"斜角肌拉伸（约 2 分钟）\n停 10 秒\n\n走一走\n走 1 分钟"}}"#).unwrap();
+        let legacy = Settings::load(&path);
+        assert_eq!(legacy.posture.stretches, "走一走\n走 1 分钟");
         std::fs::remove_dir_all(&dir).ok();
     }
 }

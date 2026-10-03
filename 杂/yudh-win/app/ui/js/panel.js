@@ -1,4 +1,4 @@
-// 面板:最初は細い帯(姿勢の札・今日の一行・泡完澡了)。「打开」で全体:今天 / 英語(単語・考点词・听写)/ 明天的会 / 设置。
+// 面板:最初は細い帯(姿勢の札・今日の一行・打开)。「打开」で全体:今天 / 英語(単語・考点词・听写)/ 明天的会 / 设置。
 // 「今天」が家:姿勢という「もの」(坐 | 站 の札)、一日の胶带(時間軸)、呼吸・英語・日课・明天の一行ずつ。
 // 初回は計画の説明を先に見せる(同期フォルダは英語と会議にだけ要る)
 import { loadMaterial, slice, sprite, tile, h, button, first, asset, has } from "./baked.js";
@@ -128,9 +128,10 @@ async function refreshAfterFlip() {
   if (state.expanded && state.tab === "today" && state.panel.welcomed) clear($("view"), todayView());
 }
 
-/** 「已坐 23 分钟」(夜は「休息中」) */
+/** 「已坐 23 分钟」(夜・日课のあとは「休息中」、坐站提醒を切っていれば「坐站提醒已关」) */
 function postureWord() {
   const p = state.panel;
+  if (p.enabled === false) return "坐站提醒已关";
   if (p.resting) return "休息中";
   return `${p.posture === "sitting" ? "已坐" : "已站"} ${Math.max(0, p.minutesInPosture)} 分钟`;
 }
@@ -138,6 +139,7 @@ function postureWord() {
 /** 次の切り替え:「12:30 坐下」。休み中は理由と朝の時刻 */
 function nextSwitch() {
   const p = state.panel;
+  if (p.enabled === false) return "在设置里打开";
   if (p.resting) {
     const morning = `早上 ${p.quietTo ?? 8} 点重新开始`;
     return p.restReason === "ritual" ? `日课做完了，今天不叫了 · ${morning}` : `夜里不叫 · ${morning}`;
@@ -161,7 +163,7 @@ function renderStrip() {
   // 帯に入るのは姿勢という「もの」とその一行だけ(泡完澡了は「今天」とトレイに)
   clear(
     strip,
-    postureChip(p.posture, flip, { disabled: p.resting }),
+    postureChip(p.posture, flip, { disabled: p.resting || p.enabled === false }),
     h("span", { class: "status" }, h("b", {}, withNums(postureWord())), " · ", withNums(p.todayShort)),
     h("span", { class: "grow" }),
     h("button", { class: "bare open", onclick: expand }, "打开 ›"),
@@ -193,7 +195,7 @@ function todayView() {
     h(
       "div",
       { class: "posture-line row" },
-      postureChip(p.posture, flip, { disabled: p.resting }),
+      postureChip(p.posture, flip, { disabled: p.resting || p.enabled === false }),
       h("span", { class: "big" }, withNums(postureWord())),
       h("span", { class: "grow" }),
       h("span", { class: "next t-caption" }, withNums(nextSwitch())),
@@ -229,6 +231,10 @@ async function expand() {
   paintFrame(true);
   setTimeout(() => panel.classList.remove("expanding"), 260);
   await call("open_surface", { which: "panel-full" });
+  // 常駐の帯は一日じゅう同じ窓:広げるたびに今日の分(呼吸・日课・英語・明天・曜日)を読み直す
+  state.panel = await call("panel_state");
+  renderWeekday();
+  renderStrip();
   renderTabs();
   await renderView();
   armFade();
@@ -308,11 +314,11 @@ function welcomeView() {
       { class: "body" },
       "到点屏幕上方的小窗会说",
       h("em", {}, "「站起来」"),
-      "，接着 3 次腹式呼吸、斜角肌拉伸、再轮 1 个肩颈动作，每一步到时间自动往下走，做完自己关。30 分钟后它说",
+      "，接着 3 次腹式呼吸、斜角肌拉伸、再轮 1 个动作，每一步到时间自动往下走，做完自己关。30 分钟后它说",
       h("em", {}, "「坐下」"),
       "。你什么都不用点；它说错了，就把「坐 | 站」的牌子翻过来。",
     ),
-    h("div", { class: "aside" }, "这条胶带是你的一天：黑是坐，青是站，灰是离开，橙色刻痕是现在。"),
+    h("div", { class: "aside" }, "这条胶带是你的一天：黑是坐，青是站，斜线是离开，橙色刻痕是现在。"),
     dayTape(sample),
     h("div", { class: "aside" }, "有声音：换姿势、换动作、做完各不一样。夜里 23 点到早上 8 点不叫；全屏游戏时不弹；AION2 运行时完全安静。英语和明天的会议要和 Mac 共用一个同步文件夹，以后在「设置」里选。"),
     button("知道了", {
@@ -861,7 +867,7 @@ async function settingsView() {
     const el = h("input", { type: "number", min: 0, max: 23, class: "hour" });
     el.value = s[key];
     el.addEventListener("change", () => {
-      const v = Math.max(0, Math.min(23, Number(el.value) || 0));
+      const v = Math.max(0, Math.min(23, Math.round(Number(el.value)) || 0));
       el.value = v;
       save({ [key]: v });
     });
@@ -879,15 +885,21 @@ async function settingsView() {
       { class: "plan" },
       h("div", { class: "plan-line" }, withNums(`坐 ${s.sitMinutes} 分钟 → 站 ${s.standMinutes} 分钟，一直循环`)),
       h("div", { class: "row plan-row" }, "夜里 ", hour("quietFrom"), " 点到 ", hour("quietTo"), " 点不叫；日课做完当天也不叫"),
-      note("它不问你，默认你照做了。说错了就把「坐 | 站」翻过来：刚被叫的 90 秒内等于「我还坐着 / 我还站着」（10 分钟 / 5 分钟后再叫），之后等于现在就换。离开座位 3 分钟以上，切换等你回来再说；坐着离开则重新计时。全屏游戏时不弹，连续玩 60 分钟以上，关掉游戏马上让你站起来；读图、切出去不到 5 分钟不算关掉。"),
-      check("pinned", "常驻细条（不点也一直在；10 秒没碰会变淡，碰一下就回来）", (on) => on && armFade()),
-      check("postureEnabled", "坐站提醒（关掉就完全不提醒）"),
+      note("它不问你，默认你照做了。说错了就把「坐 | 站」翻过来：刚被叫的 90 秒内等于「我还坐着 / 我还站着」（10 分钟 / 5 分钟后再叫），之后等于现在就换。离开座位 3 分钟以上，切换等你回来再说；坐着离开则重新计时。站着时走开的那几段不算站立。全屏游戏时不弹，连续玩 60 分钟以上，关掉游戏 2 分钟后让你站起来；读图、切出去又回到全屏不算关掉。"),
+      check("pinned", "常驻细条（不点也一直在；10 秒没碰会变淡，碰一下就回来）", (on) => {
+        state.panel.pinned = on;
+        armFade();
+      }),
+      check("postureEnabled", "坐站提醒（关掉就完全不提醒）", (on) => {
+        state.panel.enabled = on;
+        renderStrip();
+      }),
     ),
     h("h3", {}, "拉伸库"),
     note("每个拉伸一行一步，每步写上秒数或次数就能自动计时（「停 20 秒」「做 12 次」「停 5 秒 × 10 次」）。「试做」会在小窗里走一遍。"),
     ...LIBRARY.map(([key, label]) => libraryGroup(key, label, save)),
     h("h3", {}, "泡完澡后的日课"),
-    note("托盘「泡完澡了」：跟练视频 → 站着拉伸 → 隔天加肩袖力量 → 地上拉伸和 12 次腹式呼吸。写了时长的视频放完自动跳下一个（YouTube 的还能收到播放器放完的消息），没写的看完点「跟练完了，下一个」。泡完热水澡先喝点水，从地上站起来慢一点。夜里疼醒、抬手没力气、手发麻，或不舒服超过 6 周，请去看医生或理疗师。"),
+    note("托盘「泡完澡了」：跟练视频 → 站着拉伸 → 隔天加肩袖力量 → 地上拉伸和 12 次腹式呼吸。写了时长的视频放完自动跳下一个（YouTube 的还能收到播放器放完的消息），没写的第一次看完点「跟练完了，下一个」，会记住时长写回下面这一行（YouTube 用播放器报的时长），下次自动跳。泡完热水澡先喝点水，从地上站起来慢一点。夜里疼醒、抬手没力气、手发麻，或不舒服超过 6 周，请去看医生或理疗师。"),
     h("div", { class: "field" }, "跟练视频（每行：名字 + 链接，链接后面可以写时长，如 4:04 或 4 分 35 秒）", text("ritualVideos", { area: true, rows: 5 })),
     check("ritualStrengthOn", "隔天加肩袖力量"),
     h("h3", {}, "同步（和 Mac 共用）"),
@@ -925,7 +937,7 @@ async function settingsView() {
       h(
         "div",
         { class: "form", style: { marginTop: "14px" } },
-        check("autostart", "开机后自动启动（只待在托盘里，几乎不占资源）"),
+        check("autostart", "开机后自动启动（只待在托盘里，几乎不占资源；开了常驻细条时也出窄条）"),
         h("div", { class: "field" }, "打游戏时让 Yudh 完全安静的程序（每行一个）", text("quietApps", { area: true, rows: 3 })),
         note(
           "这些程序运行时，Yudh 关掉自己所有的窗口、不再弹出任何东西，也不再读键鼠空闲和全屏状态，只留托盘图标；游戏关掉后自动恢复（连续玩了 60 分钟以上，关掉游戏就马上让你站起来）。只看进程列表里的名字（和任务管理器的「详细信息」一样），不会打开或读取游戏进程。默认是 AION2。",
@@ -943,7 +955,8 @@ function libraryGroup(key, label, save) {
   let pending = null;
   // 手元の値はすぐ更新(作り直す一覧は state.settings から読むので、保存の 400 ms を待つと古い一覧が出る)。保存だけ少し待つ
   const commit = (rerender = true) => {
-    const textValue = renderStretches(list);
+    // 名前を消している途中でも拉伸ごと消さない(仮の名前で書く)
+    const textValue = renderStretches(list.map((st) => ({ ...st, name: st.name.trim() || "未命名拉伸" })));
     state.settings[key] = textValue;
     clearTimeout(pending);
     pending = setTimeout(() => call("settings_save", { patch: { [key]: textValue } }), 400);
@@ -958,7 +971,7 @@ function libraryGroup(key, label, save) {
       "div",
       { class: "lib-row row" },
       h("span", { class: "lib-pose" }, poseSmall(illustration(st), 40)),
-      h("span", { class: "lib-name grow" }, title(st.name), h("span", { class: "lib-meta" }, withNums(` ${mmss(totalSeconds(st))} · ${st.steps.length} 步`))),
+      h("span", { class: "lib-name grow" }, title(st.name), h("span", { class: "lib-meta" }, withNums(` ${mmss(totalSeconds(st, !key.startsWith("ritual")))} · ${st.steps.length} 步`))),
       h("button", { class: "bare", title: "在小窗里走一遍", onclick: () => call("posture_preview", { text: renderStretches([st]) }) }, "试做"),
       h(
         "button",
@@ -987,7 +1000,8 @@ function libraryGroup(key, label, save) {
         h("span", { class: "t-count" }, String(j + 1)),
         input,
         meta,
-        h("button", { class: "bare", title: "删除这一步", onclick: () => (st.steps.splice(j, 1), commit()) }, "×"),
+        // 最後の一歩は消せない(手順の無い拉伸は数えられない。拉伸ごと消すなら下の「删除这个拉伸」)
+        st.steps.length > 1 ? h("button", { class: "bare", title: "删除这一步", onclick: () => (st.steps.splice(j, 1), commit()) }, "×") : null,
       );
     };
     const name = h("input", { type: "text", value: st.name });
@@ -1014,7 +1028,7 @@ function libraryGroup(key, label, save) {
   };
   clear(
     holder,
-    h("div", { class: "lib-head row" }, h("span", { class: "t-section" }, label), h("span", { class: "grow" }), h("span", { class: "t-caption" }, withNums(`${list.length} 个 · 共 ${mmss(list.reduce((a, st) => a + totalSeconds(st), 0))}`))),
+    h("div", { class: "lib-head row" }, h("span", { class: "t-section" }, label), h("span", { class: "grow" }), h("span", { class: "t-caption" }, withNums(`${list.length} 个 · 共 ${mmss(list.reduce((a, st) => a + totalSeconds(st, !key.startsWith("ritual")), 0))}`))),
     list.map(row),
     h(
       "div",
@@ -1059,7 +1073,7 @@ function bindKeys() {
     // Ctrl+R / F5 で画面を読み直さない(WebView2 の既定の動き)。听写では Ctrl+R が「播放」
     if (e.key === "F5" || (e.ctrlKey && e.key.toLowerCase() === "r")) {
       e.preventDefault();
-      if (e.key !== "F5" && state.tab === "english" && state.card?.kind === "spell") playSpell();
+      if (e.key !== "F5" && state.expanded && state.tab === "english" && state.card?.kind === "spell") playSpell();
       return;
     }
     const typing = e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement;
