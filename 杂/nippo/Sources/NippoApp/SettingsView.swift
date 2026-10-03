@@ -50,7 +50,16 @@ struct SettingsView: View {
                     .foregroundStyle(.secondary)
                 VStack(alignment: .leading) {
                     HStack {
-                        Text("每次站起来时按顺序出一个拉伸动作")
+                        Text("每次站起来都先做（斜角肌）")
+                        Spacer()
+                        Button("恢复默认") { settings.fixedStretches = BreakReminder.defaultFixed }
+                            .disabled(settings.fixedStretches == BreakReminder.defaultFixed)
+                    }
+                    TextEditor(text: binding(\.fixedStretches))
+                        .font(.body)
+                        .frame(height: 110)
+                    HStack {
+                        Text("然后按顺序轮一个")
                         Spacer()
                         Button("恢复默认") {
                             settings.stretches = BreakReminder.defaultStretches
@@ -61,16 +70,15 @@ struct SettingsView: View {
                     TextEditor(text: binding(\.stretches))
                         .font(.body)
                         .frame(height: 220)
-                    Text("用空行分隔，每段一个动作。第 1 行是名字（大约时长），后面每行是一个步骤，小窗里一次显示一步")
+                    Text("用空行分隔，每段一个动作。第 1 行是名字（大约时长），后面每行是一个步骤。小窗里一次显示一步，按步骤里写的秒数和次数自动进入下一步（没写秒数的步骤给 10 秒准备）")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
                 .disabled(!settings.postureEnabled)
-                Text("默认动作针对斜角肌（脖子侧面）发紧，手臂不举过头顶。有拉伸感可以，发麻或刺痛传到手上就停；医生或理疗师给过方案的话换成那个。打字时手肘有支撑、键盘鼠标靠近身体，比拉伸更能让斜角肌放松；站着工作时桌子调到手肘 90° 的高度")
+                Text("斜角肌（脖子侧面）每次都拉，左右各两个角度、每个停 20 秒；轮换的动作纠正让它发紧的习惯（用胸口呼吸、头往前探、耸肩），手臂不举过头顶。有拉伸感可以，发麻或刺痛传到手上就停；医生或理疗师给过方案的话换成那个。打字时手肘有支撑、键盘鼠标靠近身体，比拉伸更能让斜角肌放松；站着工作时桌子调到手肘 90° 的高度")
                     .font(.caption)
                     .foregroundStyle(.secondary)
-                Toggle("站起来时先做 3 次腹式呼吸（吸 4 秒、呼 6 秒）", isOn: binding(\.breathHabit))
-                Text("用碎片时间养成腹式呼吸：每次站起来、每次开会前（会议提醒里会提示）、泡完澡的日课最后各做几次。"
+                Text("每次站起来先做 3 次腹式呼吸（吸 4 秒、呼 6 秒），再开始拉伸。用碎片时间养成腹式呼吸：每次站起来、每次开会前（会议提醒里会提示）、泡完澡的日课最后各做几次。"
                      + "今天 \(coordinator.breathToday) 次，连续 \(BreathLog.streak(coordinator.habits.breath, today: Date())) 天（和 Windows 加在一起算）")
                     .font(.caption)
                     .foregroundStyle(.secondary)
@@ -98,9 +106,8 @@ struct SettingsView: View {
                 TextEditor(text: binding(\.ritualStretches))
                     .font(.body)
                     .frame(height: 180)
-                Toggle("隔天加肩袖力量（约 6 分钟，徒手 + 一瓶水）", isOn: binding(\.ritualStrengthOn))
                 HStack {
-                    Text("肩袖力量（在地上做）")
+                    Text("肩袖力量（隔天做，约 6 分钟，徒手 + 一瓶水，在地上做）")
                     Spacer()
                     Button("恢复默认") { settings.ritualStrength = Ritual.defaultStrength }
                         .disabled(settings.ritualStrength == Ritual.defaultStrength)
@@ -108,7 +115,6 @@ struct SettingsView: View {
                 TextEditor(text: binding(\.ritualStrength))
                     .font(.body)
                     .frame(height: 110)
-                    .disabled(!settings.ritualStrengthOn)
                 HStack {
                     Text("最后在地上做的拉伸（默认以躺着的腹式呼吸收尾）")
                     Spacer()

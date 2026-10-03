@@ -8,13 +8,14 @@ import NippoCore
 final class PosturePanelController {
     private var panel: NSPanel?
     private unowned let coordinator: AppCoordinator
-    /// 自分で動かした位置(左上)。nil なら画面上部の中央
+    /// 自分で動かした位置(左上)。nil なら画面上部の中央。設定に覚えて、再起動しても同じ所に出す
     private var movedTopLeft: CGPoint?
     private var programmaticMove = false
     private var moveObserver: NSObjectProtocol?
 
     init(coordinator: AppCoordinator) {
         self.coordinator = coordinator
+        movedTopLeft = coordinator.settings.postureTopLeft
     }
 
     /// posturePrompt に合わせて出し入れ。内容が変わったら高さを合わせる(上端は固定)
@@ -26,9 +27,7 @@ final class PosturePanelController {
         let panel = self.panel ?? makePanel()
         self.panel = panel
         // 牛皮纸の接地影は素材の bleed に焼いてある(窓はその分広げてある)。いま敷く台紙の素材が無いときだけシステムの影
-        panel.hasShadow = !Self.shadowIsBaked(
-            tall: PosturePromptView.usesTallSheet(prompt, stretch: coordinator.promptStretch,
-                                                  breathing: coordinator.breathStartedAt != nil))
+        panel.hasShadow = !Self.shadowIsBaked(tall: PosturePromptView.usesTallSheet(prompt, coordinator: coordinator))
         // SwiftUI の再レイアウト後に測る
         DispatchQueue.main.async { [weak self] in
             // 出すと決めたあとに閉じられていたら、空の窓を出し直さない
@@ -36,9 +35,11 @@ final class PosturePanelController {
             guard let host = panel.contentView else { return }
             let size = host.fittingSize
             let frame: NSRect
+            // 動かした所が載っている画面(メニューバーにぴったり付けた所 = 見える範囲の上の縁も、その画面とみなす)
             if let topLeft = self.movedTopLeft,
-               let screen = NSScreen.screens.first(where: { $0.visibleFrame.contains(topLeft) })?.visibleFrame {
-                // 動かした所に。画面からはみ出さないように寄せる
+               let screen = NSScreen.screens.first(where: { $0.frame.insetBy(dx: -1, dy: -1).contains(topLeft) })?
+                   .visibleFrame {
+                // 動かした所に。画面からはみ出さないように寄せる(メニューバーの下まで)
                 let x = max(screen.minX, min(topLeft.x, screen.maxX - size.width))
                 let y = max(screen.minY, min(topLeft.y - size.height, screen.maxY - size.height))
                 frame = NSRect(x: x, y: y, width: size.width, height: size.height)
@@ -78,7 +79,9 @@ final class PosturePanelController {
                                                               object: panel, queue: .main) { [weak self] _ in
             MainActor.assumeIsolated {
                 guard let self, !self.programmaticMove, let frame = self.panel?.frame else { return }
-                self.movedTopLeft = CGPoint(x: frame.minX, y: frame.maxY)
+                let topLeft = CGPoint(x: frame.minX, y: frame.maxY)
+                self.movedTopLeft = topLeft
+                self.coordinator.settings.postureTopLeft = topLeft
             }
         }
         panel.contentView = NSHostingView(rootView: PosturePromptView(coordinator: coordinator))
@@ -153,8 +156,7 @@ struct PosturePromptView: View {
     /// 壁画带まで並ぶ站立中だけ縦長の台紙(360×500。ふつうの 400pt の台紙を縦に伸ばさない)。
     /// 神兽の残影は紙の上・文字の下。素材の指定どおり(台紙の (0, 84)、台紙で切る)にここで置く(09 / 11 のふつうの台紙だけ)
     private func sheet(_ prompt: BreakReminder.Prompt) -> some View {
-        let tall = Self.usesTallSheet(prompt, stretch: coordinator.promptStretch,
-                                      breathing: coordinator.breathStartedAt != nil)
+        let tall = Self.usesTallSheet(prompt, coordinator: coordinator)
         return ZStack(alignment: .top) {
             content(prompt)
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -172,12 +174,11 @@ struct PosturePromptView: View {
         .padding(Self.outerInsets(tall: tall))
     }
 
-    /// 縦長の台紙にするか:站立中で、手順が壁画带になるとき(PostureStandingGuide と同じ判定)。
-    /// 立ってすぐの腹式呼吸のあいだは壁画带を出さないので、ふつうの台紙
+    /// 縦長の台紙にするか:站立中で、いまの拉伸の手順が壁画带になるとき(PostureStandingGuide と同じ判定。
+    /// 斜角肌のあいだはふつうの台紙で、肩颈三步に入ったら縦長に)。立ってすぐの腹式呼吸のあいだもふつうの台紙
     @MainActor
-    static func usesTallSheet(_ prompt: BreakReminder.Prompt, stretch: BreakReminder.Stretch,
-                              breathing: Bool = false) -> Bool {
-        prompt == .standing && !breathing && PostureStandingGuide.showsFrieze(StretchGuide.steps(of: stretch))
+    static func usesTallSheet(_ prompt: BreakReminder.Prompt, coordinator: AppCoordinator) -> Bool {
+        prompt == .standing && coordinator.breathStartedAt == nil && PostureStandingGuide.friezeNow(coordinator) != nil
     }
 
     @ViewBuilder
@@ -216,10 +217,11 @@ struct PosturePromptView: View {
     // MARK: 09 站起来了吗？
 
     /// 上:立つ人の剪影 + 問い + 座った分(ここ全体が持ち手)。折り目の下:今回の拉伸(小さな剪影・名前・90° と分の札・
-    /// 顺便喝杯水)。指令 2 つ
+    /// 先に毎回の斜角肌、顺便喝杯水)。指令 2 つ
     @ViewBuilder
     private var askStand: some View {
         let stretch = coordinator.promptStretch
+        let first = coordinator.fixedStretches.map { StretchGuide.split($0.name).title }
         // 分の数字は 30 秒ごとに読み直す
         TimelineView(.periodic(from: .now, by: 30)) { context in
             let sitting = Self.minutes(since: coordinator.postureSince, now: context.date)
@@ -252,9 +254,10 @@ struct PosturePromptView: View {
                             }
                             .help("已经坐了 \(sitting) 分钟")
                         }
-                        Text("顺便喝杯水")
+                        Text(first.isEmpty ? "顺便喝杯水" : "先做\(first.joined(separator: "、"))，顺便喝杯水")
                             .font(Typeface.cjk(13, weight: .semibold))
                             .foregroundStyle(Palette.kraftTextSecondary)
+                            .fixedSize(horizontal: false, vertical: true)
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
                 }
@@ -405,8 +408,10 @@ struct PosturePromptView: View {
 
 // MARK: - 10 站立中(拉伸の手順)
 
-/// 站立中:上に「站立中」+ 模板字の残り時間 +(2 歩目から)‹ 上一步 + 手順の点、姿勢の大きな剪影と今の手順(数字の札つき)。
-/// 上の 2 段は持ち手。手順がどれも壁画带の素材のある姿勢(夹肩胛骨・转肩・收下巴 = 既定の「肩颈三步」)なら、
+/// 站立中:毎回の斜角肌 → 順番の 1 つ、を通しで 1 歩ずつ。上に「这一步」+ 模板字の残り秒 +(2 歩目から)‹ 上一步 + 手順の点
+/// (点と「第 N 步 / 共 M 步」は拉伸ごと)、姿勢の大きな剪影と今の手順(数字の札つき)。秒が 0 になったら自分で次の手順へ
+/// (手を使わなくていい。下一步 で先へ、‹ 上一步 で戻ると数え直す)。全部終えたら「站立中」+ 残り時間、15 秒で自分で閉じる。
+/// 上の 2 段は持ち手。いまの拉伸の手順がどれも壁画带の素材のある姿勢(夹肩胛骨・转肩・收下巴 = 既定の「肩颈三步」)なら、
 /// 折り目の下に古埃及の壁画带(同じ地平線に 2〜3 人。台紙は縦長)。それ以外は大きな剪影だけ。
 /// 指令はいつも 2 つ:下一步 / 做完了(青)・结束拉伸(白漆枠)
 private struct PostureStandingGuide: View {
@@ -419,25 +424,35 @@ private struct PostureStandingGuide: View {
         StretchGuide.showsFrieze(steps) && steps.allSatisfy { Baked.has("frieze-\($0.pose)-current") }
     }
 
+    /// いま壁画带を出すなら、いまの拉伸の手順と、その中の何歩目か(斜角肌のあいだ・終えたあとは nil)
+    @MainActor
+    static func friezeNow(_ coordinator: AppCoordinator) -> (steps: [StretchGuide.Step], current: Int)? {
+        let parts = coordinator.promptParts
+        let position = StretchGuide.position(in: parts, at: coordinator.stretchStep)
+        guard parts.indices.contains(position.part), position.step < position.count else { return nil }
+        let own = StretchGuide.steps(of: parts[position.part])
+        return showsFrieze(own) ? (own, position.step) : nil
+    }
+
     var body: some View {
-        let stretch = coordinator.promptStretch
-        let steps = StretchGuide.steps(of: stretch)
+        let steps = coordinator.promptSteps
         let count = steps.count
         let step = min(max(0, coordinator.stretchStep), count)
-        let done = step >= count
-        let showsFrieze = Self.showsFrieze(steps)
         if let start = coordinator.breathStartedAt {
             // 立ってすぐ:拉伸の前に腹式呼吸を 3 回
             PostureBreath(coordinator: coordinator, start: start)
         } else {
-            guide(stretch: stretch, steps: steps, count: count, step: step, done: done, showsFrieze: showsFrieze)
+            guide(steps: steps, step: step, done: step >= count,
+                  position: StretchGuide.position(in: coordinator.promptParts, at: step),
+                  frieze: Self.friezeNow(coordinator))
         }
     }
 
-    private func guide(stretch: BreakReminder.Stretch, steps: [StretchGuide.Step], count: Int, step: Int,
-                       done: Bool, showsFrieze: Bool) -> some View {
+    private func guide(steps: [StretchGuide.Step], step: Int, done: Bool,
+                       position: (part: Int, step: Int, count: Int),
+                       frieze: (steps: [StretchGuide.Step], current: Int)?) -> some View {
         VStack(alignment: .leading, spacing: 0) {
-            header(count: count, step: step, done: done)
+            header(steps: steps, step: step, done: done, position: position)
             HStack(alignment: .center, spacing: 14) {
                 PosturePose(name: done ? "walk" : steps[step].pose,
                             height: PostureMetrics.questionPose, symbol: "figure.cooldown")
@@ -445,39 +460,58 @@ private struct PostureStandingGuide: View {
                     if done {
                         finished
                     } else {
-                        instruction(title: StretchGuide.heading(of: stretch, steps: steps, at: step),
-                                    step: steps[step], index: step, count: count)
+                        instruction(title: StretchGuide.routineHeading(steps, at: step),
+                                    step: steps[step], index: position.step, count: position.count)
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
             .background(WindowDragArea())   // 剪影と手順の段も持ち手
             .padding(.top, 6)
-            if showsFrieze {
+            if let frieze {
                 PostureRule()
                     .padding(.top, PostureMetrics.ruleGap)
                     .padding(.bottom, 8)
-                PostureFrieze(steps: steps, current: step)
+                PostureFrieze(steps: frieze.steps, current: frieze.current)
             }
-            buttons(step: step, count: count, done: done)
+            buttons(step: step, count: steps.count, done: done)
                 .padding(.top, PostureMetrics.buttonGap)
         }
     }
 
-    /// 站立中 + 残り時間(timer-black の模板字。秒を刻むのはここだけ)+(2 歩目から、終えるまで)‹ 上一步 + 手順の点。
+    /// 手順の最中は「这一步」+ この手順の残り秒(timer-black の模板字)、終えたら「站立中」+ 立ち作業の残り時間。
+    /// 秒が 0 になったら自分で次の手順へ。+(2 歩目から、終えるまで)‹ 上一步 + 手順の点(いまの拉伸の分だけ)。
     /// ボタン以外は持ち手(ボタンの下には持ち手を敷かない)。点は 16 / 10pt で数だけ伸びるので幅は決め打ちしない:
     /// 左の塊はつぶさず、残りを点と ‹ 上一步 が先に取る(入らなければ ‹ だけ)。あまりは左の塊の右の空き
-    private func header(count: Int, step: Int, done: Bool) -> some View {
+    private func header(steps: [StretchGuide.Step], step: Int, done: Bool,
+                        position: (part: Int, step: Int, count: Int)) -> some View {
         let due = coordinator.postureDueAt
+        let seconds = done ? 0 : steps[step].seconds
         return HStack(alignment: .center, spacing: 0) {
-            TimelineView(.periodic(from: .now, by: 1)) { context in
+            TimelineView(.periodic(from: .now, by: 0.5)) { context in
+                let left = max(0, Int((seconds - context.date.timeIntervalSince(coordinator.stretchStepStartedAt))
+                    .rounded(.up)))
                 HStack(alignment: .firstTextBaseline, spacing: 8) {
-                    Text("站立中")
-                        .font(Typeface.cjk(15, weight: .black))
-                        .foregroundStyle(Palette.kraftText)
-                    PostureTimer(text: StretchGuide.clock(until: due, now: context.date))
+                    if done {
+                        Text("站立中")
+                            .font(Typeface.cjk(15, weight: .black))
+                            .foregroundStyle(Palette.kraftText)
+                        PostureTimer(text: StretchGuide.clock(until: due, now: context.date))
+                    } else {
+                        Text("这一步")
+                            .font(Typeface.cjk(15, weight: .black))
+                            .foregroundStyle(Palette.kraftText)
+                        PostureTimer(text: String(format: "%02ld", left))
+                        Text("秒")
+                            .font(Typeface.cjk(15, weight: .black))
+                            .foregroundStyle(Palette.kraftText)
+                    }
                 }
                 .accessibilityElement(children: .combine)
+                .onChange(of: !done && left == 0, initial: true) { _, over in
+                    // 時間が来た:次の手順へ(最後の手順なら完了)
+                    if over { coordinator.advanceStretchStep(from: step) }
+                }
             }
             .fixedSize()
             .padding(.trailing, 8)
@@ -487,7 +521,7 @@ private struct PostureStandingGuide: View {
                 backButton
                     .layoutPriority(1)
             }
-            PostureStepDots(count: count, index: step)
+            PostureStepDots(count: position.count, index: position.step)
                 .background(WindowDragArea())
                 .layoutPriority(1)
         }
@@ -557,7 +591,7 @@ private struct PostureStandingGuide: View {
         }
     }
 
-    /// 手順を全部終えた(剪影は走一走)
+    /// 手順を全部終えた(剪影は走一走)。しばらく見せてから自分で閉じる(「关闭」を押さなくていい。立ち作業の計時は続く)
     private var finished: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text("完成！接下来站着工作吧")
@@ -568,7 +602,17 @@ private struct PostureStandingGuide: View {
                 .font(Typeface.cjk(13, weight: .semibold))
                 .foregroundStyle(Palette.kraftTextSecondary)
         }
+        .task {
+            try? await Task.sleep(for: .seconds(Self.doneLinger))
+            guard !Task.isCancelled, coordinator.posturePrompt == .standing,
+                  coordinator.breathStartedAt == nil,
+                  coordinator.stretchStep >= coordinator.promptSteps.count else { return }
+            coordinator.closePosturePrompt()
+        }
     }
+
+    /// 全部終えてから自分で閉じるまで(Windows と同じ 15 秒)
+    static let doneLinger: Double = 15
 
     /// 指令は 2 つ:左 = 青(下一步、最後の手順は 做完了)169 × 50、右 = 白漆枠(结束拉伸)135 × 50。
     /// 終えたら右の「关闭」だけ。上一步 は見出しの行

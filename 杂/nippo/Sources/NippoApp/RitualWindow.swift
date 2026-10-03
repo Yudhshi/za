@@ -17,7 +17,10 @@ final class RitualWindowController: NSObject, NSWindowDelegate {
     }
 
     func show() {
-        if let window = self.window, window.isVisible {
+        // 開いている窓があれば(Dock にしまってあっても)それを前へ。2 つ目の日课を始めない(動画の音が重なる・二重に数える)
+        if let window = self.window {
+            if window.isMiniaturized { window.deminiaturize(nil) }
+            NSApp.setActivationPolicy(.regular)
             NSApp.activate()
             window.makeKeyAndOrderFront(nil)
             return
@@ -51,9 +54,11 @@ final class RitualWindowController: NSObject, NSWindowDelegate {
     func windowWillClose(_ notification: Notification) {
         session?.stop()
         session = nil
+        let closing = window
         window?.contentViewController = nil
         window = nil
-        NSApp.setActivationPolicy(.accessory)
+        // 設定の窓がまだ開いていれば Dock と ⌘-Tab に残す
+        DockPresence.update(closing: closing)
     }
 }
 
@@ -103,6 +108,8 @@ final class RitualSession: ObservableObject {
     /// 止めたときの残り秒
     @Published private(set) var pausedLeft: TimeInterval?
     @Published private(set) var finished = false
+    /// この回の日课をもう記録した(終えたあと前の歩に戻ってもう一度終えても、二重に数えない)
+    private var recorded = false
     private var timer: Task<Void, Never>?
     private var lead: Task<Void, Never>?
     /// いまの歩の番号札(遅れて届いた「読み終わり」を前の歩に効かせない)
@@ -269,6 +276,8 @@ final class RitualSession: ObservableObject {
         finished = true
         index = items.count
         if voice { Speaker.shared.guide("今天的日课做完了") }
+        guard !recorded else { return }
+        recorded = true
         onFinish(hasStrength)
     }
 

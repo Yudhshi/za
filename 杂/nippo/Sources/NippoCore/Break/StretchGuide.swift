@@ -14,13 +14,31 @@ public enum StretchGuide {
         public var text: String
         /// 手順の中の数(5 秒 · 10 次 / 10 次 / 20 秒 / 1 分钟)。無ければ nil
         public var meta: String?
+        /// 所属する拉伸の題(括弧の前。毎回の斜角肌 → 順番の分、と通しで並べたときの見出し)
+        public var section: String
+        /// 姿勢の名前が札になっている(转肩 など。見出しも姿勢の名前にする)
+        public var titled: Bool
+        /// この手順の長さ(秒・回数から。読めなければ 10 秒の構え、どれも 10 秒より短くしない)。小窓はこれで自動で次へ進む
+        public var seconds: TimeInterval
 
-        public init(pose: String, name: String, text: String, meta: String?) {
+        public init(pose: String, name: String, text: String, meta: String?, section: String = "",
+                    titled: Bool = false, seconds: TimeInterval = StretchGuide.setupSeconds) {
             self.pose = pose
             self.name = name
             self.text = text
             self.meta = meta
+            self.section = section
+            self.titled = titled
+            self.seconds = seconds
         }
+    }
+
+    /// 秒の書いていない構えの行の長さ。手順はどれもこれより短くしない(読んで構える時間)
+    public static let setupSeconds: TimeInterval = 10
+
+    /// 手順 1 行の長さ(Ritual.duration と同じ数え方。読めなければ 10 秒、10 秒未満は 10 秒)
+    public static func seconds(of line: String) -> TimeInterval {
+        max(setupSeconds, Ritual.duration(of: line) ?? setupSeconds)
     }
 
     /// 壁画带の絵がある姿勢と、その短い名前(scripts/material の frieze と同じ 3 人)
@@ -72,7 +90,9 @@ public enum StretchGuide {
             let pose = poses[i]
             let named: String? = distinct ? friezeNames[pose] : nil
             let text = named.map { dropping(prefix: $0, from: line) } ?? line
-            result.append(Step(pose: pose, name: named ?? "第 \(i + 1) 步", text: text, meta: metaText(line)))
+            result.append(Step(pose: pose, name: named ?? "第 \(i + 1) 步", text: text, meta: metaText(line),
+                               section: split(stretch.name).title, titled: named != nil,
+                               seconds: seconds(of: line)))
         }
         return result
     }
@@ -91,6 +111,33 @@ public enum StretchGuide {
             return name
         }
         return split(stretch.name).title
+    }
+
+    /// 何本かの拉伸を通した手順(毎回の斜角肌 → 順番の分)。小窓はこれを 1 歩ずつ見せる
+    public static func routineSteps(_ parts: [BreakReminder.Stretch]) -> [Step] {
+        parts.flatMap { steps(of: $0) }
+    }
+
+    /// 通しの手順の index が、何本目の拉伸の何歩目か(手順の点と「第 N 步 / 共 M 步」は拉伸ごとに数える。
+    /// 9 つの点を並べると小窓の幅に入らない)。全部終えたら最後の拉伸の終わり(step == count)。手順の無い拉伸は飛ばす
+    public static func position(in parts: [BreakReminder.Stretch],
+                                at index: Int) -> (part: Int, step: Int, count: Int) {
+        var start = 0
+        var last: (part: Int, step: Int, count: Int) = (0, 0, 0)
+        for (i, part) in parts.enumerated() where !part.steps.isEmpty {
+            let count = part.steps.count
+            if index < start + count { return (i, max(0, index - start), count) }
+            last = (i, count, count)
+            start += count
+        }
+        return last
+    }
+
+    /// 通した手順の、今の見出し:姿勢の名前が札なら その名前、そうでなければ所属の拉伸の題。全部終えたら最後の題
+    public static func routineHeading(_ steps: [Step], at index: Int) -> String {
+        let current: Step? = steps.indices.contains(index) ? steps[index] : steps.last
+        guard let step = current else { return "" }
+        return step.titled ? step.name : step.section
     }
 
     /// 手順の文の中の数を札の一行に(5 秒 · 10 次 / 10 次 / 1 分钟)

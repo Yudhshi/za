@@ -38,6 +38,20 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
     }
 
     func windowWillClose(_ notification: Notification) {
-        NSApp.setActivationPolicy(.accessory)
+        // 日课の窓がまだ開いていれば Dock と ⌘-Tab に残す
+        DockPresence.update(closing: window)
+    }
+}
+
+/// 設定・日课の窓(タイトルのある普通の窓)が 1 つでも開いていれば(Dock にしまってあっても)通常のアプリ、
+/// 無くなったら常駐アプリ(Dock に出ない)に戻す。片方を閉じても、もう片方が開いていれば Dock と ⌘-Tab から消さない
+@MainActor
+enum DockPresence {
+    static func update(closing: NSWindow?) {
+        let open = NSApp.windows.contains { window in
+            window !== closing && !(window is NSPanel) && window.styleMask.contains(.titled)
+                && (window.isVisible || window.isMiniaturized)
+        }
+        NSApp.setActivationPolicy(open ? .regular : .accessory)
     }
 }

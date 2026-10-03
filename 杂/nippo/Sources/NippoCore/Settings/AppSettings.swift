@@ -6,6 +6,28 @@ public final class AppSettings: ObservableObject {
 
     public init(defaults: UserDefaults = .standard) {
         self.d = defaults
+        migrate()
+    }
+
+    /// 設定の版(保存が無い = 0:前の版)。移し替えを一度だけにするため
+    static let settingsVersion = 1
+
+    /// 前の版の設定を今の形に移す(一度だけ)。斜角肌は立つたびに毎回やる分(fixedStretches)になったので、
+    /// 保存した輪番の先頭の斜角肌を外す(既定のままなら保存を消して今の既定に)。
+    /// 腹式呼吸と隔天の肩袖力量は決まりにして設定から外したので、前に切ってあっても戻す
+    private func migrate() {
+        guard d.integer(forKey: "settingsVersion") < Self.settingsVersion else { return }
+        if let saved = d.string(forKey: "stretches") {
+            if let moved = BreakReminder.migratedStretches(saved) {
+                if moved != saved { d.set(moved, forKey: "stretches") }
+            } else {
+                d.removeObject(forKey: "stretches")
+            }
+            d.set(0, forKey: "lastStretchIndex")
+        }
+        d.removeObject(forKey: "breathHabit")
+        d.removeObject(forKey: "ritualStrengthOn")
+        d.set(Self.settingsVersion, forKey: "settingsVersion")
     }
 
     public var reminderLeadMinutes: Int {
@@ -100,7 +122,13 @@ public final class AppSettings: ObservableObject {
 
     public var standMinutes: Int { BreakReminder.planStandMinutes }
 
-    /// 切り替え時に 1 つずつ出すストレッチ(1 行 1 つ)
+    /// 立つたびに必ずやる拉伸(斜角肌。空行区切りで複数も可)。そのあとに stretches から 1 つずつ
+    public var fixedStretches: String {
+        get { d.string(forKey: "fixedStretches") ?? BreakReminder.defaultFixed }
+        set { d.set(newValue, forKey: "fixedStretches"); objectWillChange.send() }
+    }
+
+    /// 斜角肌のあとに 1 つずつ順に出す拉伸(空行区切り。1 行目が名前)
     public var stretches: String {
         get { d.string(forKey: "stretches") ?? BreakReminder.defaultStretches }
         set { d.set(newValue, forKey: "stretches"); objectWillChange.send() }
@@ -109,6 +137,21 @@ public final class AppSettings: ObservableObject {
     public var lastStretchIndex: Int {
         get { d.integer(forKey: "lastStretchIndex") }
         set { d.set(newValue, forKey: "lastStretchIndex") }
+    }
+
+    /// 自分で動かした坐站の小窓の左上(画面の座標)。nil = マウスのある画面の上部中央。再起動しても同じ所に出す
+    public var postureTopLeft: CGPoint? {
+        get {
+            guard let xy = d.array(forKey: "postureTopLeft") as? [Double], xy.count == 2 else { return nil }
+            return CGPoint(x: xy[0], y: xy[1])
+        }
+        set {
+            if let point = newValue {
+                d.set([Double(point.x), Double(point.y)], forKey: "postureTopLeft")
+            } else {
+                d.removeObject(forKey: "postureTopLeft")
+            }
+        }
     }
 
     /// 泡澡のあとの日课:動画(1 行 1 本「名前 URL」)と、そのあとの拉伸(空行区切り)
@@ -133,7 +176,7 @@ public final class AppSettings: ObservableObject {
         set { d.set(newValue, forKey: "ritualFloor"); objectWillChange.send() }
     }
 
-    /// 日课に隔天で肩袖の力を入れる
+    /// 日课に隔天で肩袖の力を入れる(決まり:設定には出さない。前の版で切ったものは migrate で戻す)
     public var ritualStrengthOn: Bool {
         get { d.object(forKey: "ritualStrengthOn") as? Bool ?? true }
         set { d.set(newValue, forKey: "ritualStrengthOn"); objectWillChange.send() }
@@ -151,7 +194,7 @@ public final class AppSettings: ObservableObject {
         set { d.set(newValue, forKey: "ritualLog"); objectWillChange.send() }
     }
 
-    /// 立つたびに、拉伸の前に腹式呼吸を 3 回(习惯にする)
+    /// 立つたびに、拉伸の前に腹式呼吸を 3 回(习惯にする。決まり:設定には出さない。前の版で切ったものは migrate で戻す)
     public var breathHabit: Bool {
         get { d.object(forKey: "breathHabit") as? Bool ?? true }
         set { d.set(newValue, forKey: "breathHabit"); objectWillChange.send() }

@@ -47,11 +47,13 @@ func runBreakReminderTests() {
     T.run("stretch illustration picked by keyword, with a fallback") {
         let list = BreakReminder.stretches(from: BreakReminder.defaultStretches)
         T.expectEqual(list.map { BreakReminder.illustration(for: $0) },
-                      ["neck-side", "shoulder-blades", "belly-breathing", "chest-doorway",
+                      ["shoulder-blades", "belly-breathing", "chest-doorway",
                        "shoulder-blades", "shoulder-rolls", "walk"],
-                      "斜角肌 → 颈 / W 字 → 肩胛 / 呼吸 / 胸 / 肩颈三步 starts with 肩胛 / 耸肩 → 转肩 / 走")
+                      "W 字 → 肩胛 / 呼吸 / 胸 / 肩颈三步 starts with 肩胛 / 耸肩 → 转肩 / 走")
+        T.expectEqual(BreakReminder.stretches(from: BreakReminder.defaultFixed).map { BreakReminder.illustration(for: $0) },
+                      ["neck-side"], "斜角肌 → 颈")
         // 肩颈三步:手順ごとに別の姿勢(站立中の壁画带になる)
-        T.expectEqual(list[4].steps.map { BreakReminder.illustration(for: BreakReminder.Stretch(name: $0, steps: [])) },
+        T.expectEqual(list[3].steps.map { BreakReminder.illustration(for: BreakReminder.Stretch(name: $0, steps: [])) },
                       ["shoulder-blades", "shoulder-rolls", "chin-tuck"], "one pose per step")
         T.expectEqual(BreakReminder.illustration(for: BreakReminder.Stretch(name: "自定义", steps: ["随便动一动"])),
                       "stretch", "fallback")
@@ -75,13 +77,74 @@ func runBreakReminderTests() {
         T.expect(!BreakReminder.stretch(at: 0, in: []).name.isEmpty, "fallback when empty")
     }
 
-    T.run("defaults: 7 stretches for tight scalenes, each with concrete steps, nothing overhead") {
+    T.run("defaults: the scalene stretch every time (20 s holds), then 6 in turn, nothing overhead") {
+        let fixed = BreakReminder.stretches(from: BreakReminder.defaultFixed)
+        T.expectEqual(fixed.map(\.name), ["斜角肌拉伸（约 1 分半）"])
+        T.expectEqual(fixed[0].steps.map { StretchGuide.seconds(of: $0) }, [20, 20, 20, 20],
+                      "both sides, two angles, 20 s each (10 s was too short)")
         let defaults = BreakReminder.stretches(from: BreakReminder.defaultStretches)
-        T.expectEqual(defaults.count, 7)
-        T.expectEqual(defaults.first?.name, "斜角肌拉伸（约 2 分钟）", "the scalene stretch comes first")
+        T.expectEqual(defaults.count, 6)
+        T.expect(!defaults.contains { $0.name.hasPrefix("斜角肌") }, "the scalene stretch is not in the rotation")
         T.expect(defaults.allSatisfy { $0.steps.count >= 2 }, "every default has steps")
-        T.expect(!BreakReminder.defaultStretches.contains("举过头")
-                 && !BreakReminder.defaultStretches.contains("举起双手"), "no overhead moves")
+        let all = BreakReminder.defaultFixed + BreakReminder.defaultStretches
+        T.expect(!all.contains("举过头") && !all.contains("举起双手"), "no overhead moves")
+        T.expect(!all.contains("门框"), "no doorway needed")
+    }
+
+    T.run("routine: 斜角肌 first, then this turn's stretch; steps time themselves") {
+        let fixed = BreakReminder.stretches(from: BreakReminder.defaultFixed)
+        let list = BreakReminder.stretches(from: BreakReminder.defaultStretches)
+        let parts = fixed + [list[3]]
+        let steps = StretchGuide.routineSteps(parts)
+        T.expectEqual(steps.count, 7, "4 scalene steps + 肩颈三步")
+        T.expectEqual(steps.map(\.seconds), [20, 20, 20, 20, 68, 40, 68],
+                      "5 s × 10 = 50 + 9 gaps × 2; 10 turns × 4 s")
+        T.expectEqual(StretchGuide.routineHeading(steps, at: 1), "斜角肌拉伸", "the stretch title while it is untitled")
+        T.expectEqual(StretchGuide.routineHeading(steps, at: 5), "转肩", "a frieze figure names its own step")
+        T.expectEqual(StretchGuide.routineHeading(steps, at: 7), "收下巴", "done → the last heading")
+        T.expectEqual(StretchGuide.routineHeading([], at: 0), "")
+        T.expect(StretchGuide.position(in: parts, at: 2) == (0, 2, 4), "third scalene step of four")
+        T.expect(StretchGuide.position(in: parts, at: 4) == (1, 0, 3), "the dots restart with 肩颈三步")
+        T.expect(StretchGuide.position(in: parts, at: 7) == (1, 3, 3), "done → the end of the last stretch")
+        T.expect(StretchGuide.position(in: parts, at: -1) == (0, 0, 4), "never before the start")
+        T.expect(StretchGuide.position(in: [], at: 0) == (0, 0, 0), "nothing to do")
+        let empty = BreakReminder.Stretch(name: "空", steps: [])
+        T.expect(StretchGuide.position(in: [empty] + parts, at: 0) == (1, 0, 4), "a stretch without steps is skipped")
+        T.expectEqual(StretchGuide.seconds(of: "手肘贴着身体弯成 90°，手心朝前"), 10, "a setup line gets 10 s")
+        T.expectEqual(StretchGuide.seconds(of: "肩膀用力耸向耳朵停 3 秒"), 10, "never shorter than 10 s")
+        T.expectEqual(StretchGuide.seconds(of: "走 2 分钟"), 120)
+    }
+
+    T.run("migration: the old rotation drops its leading scalene stretch once") {
+        let old = """
+        斜角肌拉伸（约 2 分钟）
+        右手按住右侧锁骨下方
+        头向左倒
+
+        W 字收肩（约 1 分钟）
+        手肘贴着身体弯成 90°
+
+        腹式呼吸（约 1 分钟）
+        吸气 4 秒
+
+        扩胸拉伸（约 1 分钟）
+        前臂竖着贴在门框上
+
+        肩颈三步（约 2 分钟）
+        夹肩胛骨：保持 5 秒 × 10 次
+
+        耸肩放松（约 1 分钟）
+        做 8 次
+
+        走一走（1〜2 分钟）
+        走 1 分钟
+        """
+        T.expectEqual(BreakReminder.migratedStretches(old), nil, "the old default → today's default")
+        let mine = "斜角肌（我的）\n按住锁骨\n\n转肩\n向后转 10 次\n\n走一走\n走 1 分钟"
+        T.expectEqual(BreakReminder.migratedStretches(mine), "转肩\n向后转 10 次\n\n走一走\n走 1 分钟",
+                      "my own list keeps everything but the scalene stretch")
+        T.expectEqual(BreakReminder.migratedStretches("转肩\n向后转 10 次"), "转肩\n向后转 10 次",
+                      "a list without the scalene stretch is left alone")
     }
 
     T.run("desiredPrompt: ask when due, keep the standing guide, hide in Meet") {
@@ -241,7 +304,7 @@ func runBreakReminderTests() {
 
     T.run("stretch guide: 肩颈三步 = one pose per step, a frieze, names and numbers") {
         let list = BreakReminder.stretches(from: BreakReminder.defaultStretches)
-        let combo = list[4]
+        let combo = list[3]
         let steps = StretchGuide.steps(of: combo)
         T.expectEqual(steps.map(\.pose), ["shoulder-blades", "shoulder-rolls", "chin-tuck"])
         T.expectEqual(steps.map(\.name), ["夹肩胛骨", "转肩", "收下巴"], "frieze labels")
@@ -255,20 +318,21 @@ func runBreakReminderTests() {
 
     T.run("stretch guide: single-pose stretches keep 第 N 步 and no frieze") {
         let list = BreakReminder.stretches(from: BreakReminder.defaultStretches)
-        let scalene = StretchGuide.steps(of: list[0])
+        let fixed = BreakReminder.stretches(from: BreakReminder.defaultFixed)[0]
+        let scalene = StretchGuide.steps(of: fixed)
         T.expectEqual(Set(scalene.map(\.pose)), ["neck-side"], "same pose all through")
-        T.expectEqual(scalene.map(\.name), ["第 1 步", "第 2 步", "第 3 步", "第 4 步", "第 5 步"])
-        T.expectEqual(scalene.map(\.text), list[0].steps, "lines unchanged")
-        T.expectEqual(scalene.map(\.meta), [nil, "10 秒", "10 秒", "10 秒", "10 秒"], "both sides carry their times")
+        T.expectEqual(scalene.map(\.name), ["第 1 步", "第 2 步", "第 3 步", "第 4 步"])
+        T.expectEqual(scalene.map(\.text), fixed.steps, "lines unchanged")
+        T.expectEqual(scalene.map(\.meta), ["20 秒", "20 秒", "20 秒", "20 秒"], "both sides carry their times")
         T.expect(!StretchGuide.showsFrieze(scalene), "one figure repeated is not a frieze")
-        T.expectEqual(StretchGuide.heading(of: list[0], steps: scalene, at: 0), "斜角肌拉伸", "stretch title")
-        let blades = StretchGuide.steps(of: list[1])
+        T.expectEqual(StretchGuide.heading(of: fixed, steps: scalene, at: 0), "斜角肌拉伸", "stretch title")
+        let blades = StretchGuide.steps(of: list[0])
         T.expectEqual(Set(blades.map(\.pose)), ["shoulder-blades"], "W 字收肩 is one figure")
         T.expectEqual(blades[2].meta, "5 秒 · 12 次")
-        let shrug = StretchGuide.steps(of: list[5])
+        let shrug = StretchGuide.steps(of: list[4])
         T.expectEqual(Set(shrug.map(\.pose)), ["shoulder-rolls"], "耸肩放松 keeps one figure")
         T.expectEqual(list.filter { StretchGuide.showsFrieze(StretchGuide.steps(of: $0)) }.map(\.name),
-                      ["肩颈三步（约 2 分钟）"], "only the combo is a frieze among the defaults")
+                      ["肩颈三步（约 3 分钟）"], "only the combo is a frieze among the defaults")
     }
 
     T.run("stretch guide: a frieze needs 2–3 different poses that all have frieze art") {

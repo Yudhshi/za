@@ -15,10 +15,25 @@ extension AppCoordinator {
         return postureRemindAt ?? postureSince.addingTimeInterval(TimeInterval(limit * 60))
     }
 
-    /// 次に出すストレッチ(メニューにも予告する)
+    /// 次に出すストレッチ(メニューにも予告する。毎回の斜角肌のあとにやる、順番の 1 つ)
     var nextStretch: BreakReminder.Stretch {
         BreakReminder.stretch(at: settings.lastStretchIndex,
                               in: BreakReminder.stretches(from: settings.stretches))
+    }
+
+    /// 立つたびに必ずやる拉伸(斜角肌)
+    var fixedStretches: [BreakReminder.Stretch] {
+        BreakReminder.stretches(from: settings.fixedStretches)
+    }
+
+    /// 今回の拉伸:毎回の斜角肌 → 順番の 1 つ(Windows と同じ並び)
+    var promptParts: [BreakReminder.Stretch] {
+        fixedStretches + (promptStretch.name.isEmpty ? [] : [promptStretch])
+    }
+
+    /// 今回の手順(通し)。小窓はこれを 1 歩ずつ、時間が来たら自分で次へ進めて見せる
+    var promptSteps: [StretchGuide.Step] {
+        StretchGuide.routineSteps(promptParts)
     }
 
     /// 最後のキーボード・マウス操作からの秒数(権限不要)
@@ -178,6 +193,8 @@ extension AppCoordinator {
         case .standing:
             standingGuideDismissed = false
             posturePromptPinned = true
+            // 開き直したら今の手順を最初の秒から(閉じていたあいだに時間切れで飛ばさない)
+            stretchStepStartedAt = Date()
             posturePrompt = .standing
         case .sitting:
             // 切り替え時刻は変えない(見るだけ)。次の判定で閉じられないように pin する
@@ -196,7 +213,13 @@ extension AppCoordinator {
     }
 
     func moveStretchStep(by delta: Int) {
-        stretchStep = min(max(0, stretchStep + delta), promptStretch.steps.count)
+        stretchStep = min(max(0, stretchStep + delta), promptSteps.count)
+    }
+
+    /// 時間が来た手順から自動で次へ(まだ index の手順にいるときだけ。同じ手順で二度進めない)
+    func advanceStretchStep(from index: Int) {
+        guard stretchStep == index else { return }
+        moveStretchStep(by: 1)
     }
 
     func resetPostureTimer(now: Date) {

@@ -80,13 +80,21 @@ final class AppCoordinator: ObservableObject {
         }
     }
     @Published var promptStretch = BreakReminder.Stretch(name: "", steps: [])
-    /// 手順の何番目か(steps.count = 完了)
+    /// 手順の何番目か(毎回の斜角肌 → 順番の分、の通し。promptSteps.count = 完了)
     @Published var stretchStep = 0 {
-        didSet { posturePanel.update() }
+        didSet {
+            stretchStepStartedAt = Date()
+            posturePanel.update()
+        }
     }
+    /// 今の手順を数え始めた時刻(手順が変わる・呼吸が終わる・小窓を開き直すと今から)。時間が来たら小窓が自分で次の手順へ
+    var stretchStepStartedAt = Date()
     /// 立ってすぐの腹式呼吸 3 回を始めた時刻(終わる・飛ばすと nil。そのあとが拉伸の手順)
     @Published var breathStartedAt: Date? {
-        didSet { posturePanel.update() }
+        didSet {
+            if breathStartedAt == nil { stretchStepStartedAt = Date() }
+            posturePanel.update()
+        }
     }
     lazy var posturePanel = PosturePanelController(coordinator: self)
     private lazy var settingsWindow = SettingsWindowController(coordinator: self)

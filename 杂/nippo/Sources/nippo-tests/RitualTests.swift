@@ -67,7 +67,9 @@ func runRitualTests() {
                        "肩袖力量", "猫牛式和穿针式", "仰躺腹式呼吸"])
         let rest = Ritual.plan(standing: Ritual.defaultStretches, strength: nil, floor: Ritual.defaultFloor, short: false)
         T.expectEqual(rest.count, 8, "no strength on the off day")
-        T.expect(seconds(rest) <= 13 * 60, "the off-day stretches stay under 13 min: \(seconds(rest))")
+        T.expect(seconds(rest) <= 14 * 60, "the off-day stretches stay under 14 min: \(seconds(rest))")
+        T.expectEqual(BreakReminder.stretches(from: Ritual.defaultFloor).last?.steps.last, "用鼻子吸气 4 秒只让肚子鼓起来，用嘴呼气 6 秒，做 12 次",
+                      "12 breaths lying down (about 2 min), same as Windows")
         T.expect(seconds(full) - seconds(rest) <= 6 * 60, "strength adds about 5 min")
         let short = Ritual.plan(standing: Ritual.defaultStretches, strength: Ritual.defaultStrength,
                                 floor: Ritual.defaultFloor, short: true)
