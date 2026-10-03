@@ -7,6 +7,7 @@ import { loadMaterial, slice, h, button, has } from "./baked.js";
 import { call, listen, fitWindow, enableDragging } from "./api.js";
 import { loadIcons, loadSounds, clock, clear, sound } from "./common.js";
 import { pose, dots, figure, stretchBody, countRow, postureChip, title } from "./stretchcard.js";
+import { dayTape } from "./daytape.js";
 
 const $ = (id) => document.getElementById(id);
 let view = null;
@@ -277,8 +278,10 @@ function sit() {
       "div",
       { class: "body row" },
       pose("sit-down"),
-      h("div", { class: "col" }, h("div", { class: "announce" }, "坐下"), h("div", { class: "text" }, view.lastStandMinutes >= 1 ? `站了 ${view.lastStandMinutes} 分钟，坐下歇一歇` : "坐下歇一歇"), h("div", { class: "muted" }, view.today)),
+      h("div", { class: "col" }, h("div", { class: "announce" }, "坐下"), h("div", { class: "text" }, view.lastStandMinutes >= 1 ? `站了 ${view.lastStandMinutes} 分钟，坐下歇一歇` : "坐下歇一歇")),
     ),
+    // 今日の胶带(今天のページと同じもの)と、その数字
+    h("div", { class: "sit-tape" }, dayTape({ ...view, dueAt: null }, 316, { onKraft: true }), h("div", { class: "muted" }, view.today)),
     h("div", { class: "buttons row" }, h("span", { class: "muted" }, "30 分钟后再叫你"), h("span", { class: "grow" }), h("button", { class: "bare on-kraft", onclick: () => leave("close") }, "关闭")),
   ];
 }

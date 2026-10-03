@@ -1,5 +1,7 @@
 // 泡澡のあとの日课:跟练の動画(公式の埋め込み)→ 立ってやる拉伸 →(隔天)肩袖の力 → 床の拉伸 → 仰向けの腹式呼吸。
 // 動画は長さが分かっていれば放し終わる時刻に自動で次へ(YouTube は播放器の「終わった」の知らせでも)。
+// 長さが分からない動画は覚える:YouTube は播放器が知らせる長さ、bilibili は「跟练完了，下一个」を押すまでの時間(撤销できる)。
+// 覚えた長さは設定の動画の行(链接の後ろ)に書くので、次からは自動で次へ進む。
 // 拉伸は 1 歩ずつ:読んで構える 4〜9 秒のあと数え、終われば鳴らして次へ
 import { loadMaterial, slice, sprite, stencil, tile, h, button } from "./baked.js";
 import { call, openUrl, closeWindow } from "./api.js";
@@ -24,7 +26,15 @@ const s = {
   lead: null,
   /// 動画が放し終わる予定の時刻(長さが分かっているとき)
   videoEndsAt: null,
+  /// いまの動画を映し始めた時刻(長さを覚えるため)
+  videoStartedAt: null,
+  /// いま覚えた長さ(次の画面に「记住了 · 撤销」を出す):{ title, seconds, before }
+  learned: null,
 };
+
+/** 押すまでの時間で覚えるのは、この範囲だけ(途中で飛ばしたものを覚えない) */
+const LEARN_MIN = 60;
+const LEARN_MAX = 40 * 60;
 
 /** 読み込みと広告の分の余白(秒)。長さどおりに切ると最後が欠ける */
 const VIDEO_SLACK = 8;
@@ -47,8 +57,15 @@ function cancel() {
 
 function enter(i) {
   // 映している最中の動画をもう一度選んだ(一覧の同じ行・最初の動画で ←):動画は続いているので数え直さない
-  const same = Math.max(0, i) === s.index && !s.finished && s.items[s.index]?.type === "video";
+  const current = s.items[s.index];
+  const same = Math.max(0, i) === s.index && !s.finished && current?.type === "video";
   if (same && s.videoEndsAt) return render();
+  // 長さの分からない動画から次へ進んだ:見ていた時間を長さとして覚える(撤销できる)
+  s.learned = null;
+  if (!s.finished && current?.type === "video" && !current.seconds && i === s.index + 1 && s.videoStartedAt) {
+    const watched = Math.round((Date.now() - s.videoStartedAt) / 1000) - VIDEO_SLACK;
+    if (watched >= LEARN_MIN && watched <= LEARN_MAX) learnLength(current, watched, true);
+  }
   cancel();
   s.token += 1;
   s.endsAt = s.pausedLeft = s.videoEndsAt = null;
@@ -57,9 +74,64 @@ function enter(i) {
   s.index = Math.max(0, i);
   s.finished = false;
   const item = s.items[s.index];
+  s.videoStartedAt = item.type === "video" ? Date.now() : null;
   if (item.type === "stretch") prepare(item);
   else if (item.seconds) runVideo(item.seconds + VIDEO_SLACK);
   render();
+}
+
+/** 動画の id(設定の行を探すため):bilibili の BV…、YouTube の v= / youtu.be / shorts */
+function videoId(page) {
+  return page.match(/\/video\/(BV[0-9A-Za-z]+)/)?.[1] ?? page.match(/[?&]v=([\w-]{6,})/)?.[1] ?? page.match(/youtu\.be\/([\w-]{6,})/)?.[1] ?? page.match(/\/(?:shorts|embed|live)\/([\w-]{6,})/)?.[1] ?? null;
+}
+
+function mmss(seconds) {
+  return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
+}
+
+/** 覚えた長さを、設定の動画の行の链接の後ろに書く(もう長さがあれば触らない)。showNote なら次の画面に「记住了 · 撤销」 */
+async function learnLength(item, seconds, showNote) {
+  const id = videoId(item.page);
+  if (!id) return;
+  item.seconds = seconds;
+  const plan = s.plan.videos[item.number];
+  if (plan) plan.seconds = seconds;
+  try {
+    const settings = await call("settings_get");
+    const before = settings.ritualVideos ?? "";
+    let changed = false;
+    const lines = before.split(/\r?\n/).map((line) => {
+      if (changed || !line.includes(id)) return line;
+      const start = line.indexOf("http");
+      if (start < 0) return line;
+      const url = line.slice(start).split(/\s+/)[0];
+      const rest = line.slice(start + url.length);
+      if (/\d/.test(rest)) return line;
+      changed = true;
+      return `${line.slice(0, start + url.length)} ${mmss(seconds)}${rest}`;
+    });
+    if (!changed) return;
+    await call("settings_save", { patch: { ritualVideos: lines.join("\n") } });
+    if (showNote) {
+      s.learned = { title: item.title, seconds, before, item };
+      renderControls(s.items[s.index]);
+    }
+  } catch {
+    /* 覚えられなくても進む */
+  }
+}
+
+/** 「记住了」を取り消す(途中で飛ばしたのに覚えてしまった) */
+async function undoLearned() {
+  const l = s.learned;
+  if (!l) return;
+  s.learned = null;
+  l.item.seconds = null;
+  const plan = s.plan.videos[l.item.number];
+  if (plan) plan.seconds = null;
+  await call("settings_save", { patch: { ritualVideos: l.before } });
+  renderControls(s.items[s.index]);
+  renderList();
 }
 
 /** 長さの分かっている動画:放し終わる頃に自動で次へ */
@@ -87,6 +159,11 @@ function onPlayerMessage(e) {
     } catch {
       return;
     }
+  }
+  // 播放器が長さを知らせてきた:長さの分からない動画なら覚える(正確なので撤销は出さない)
+  const duration = data?.event === "infoDelivery" ? Number(data.info?.duration) : NaN;
+  if (!item.seconds && Number.isFinite(duration) && duration >= 30 && duration <= LEARN_MAX) {
+    learnLength(item, Math.round(duration), false);
   }
   const ended = (data?.event === "onStateChange" && data.info === 0) || (data?.event === "infoDelivery" && data.info?.playerState === 0);
   if (ended) {
@@ -238,7 +315,7 @@ function videoStage(item) {
 function videoNote(item) {
   if (s.videoEndsAt) return h("span", { class: "t-caption video-left" }, `${clock(s.videoEndsAt - Date.now())} 后自动下一个`);
   if (item.embed?.includes("youtube")) return h("span", { class: "t-caption" }, "放完自动下一个");
-  return h("span", { class: "t-caption" }, "没写时长：看完点「跟练完了，下一个」。设置里在链接后面写上时长（如 4:35）就会自动跳");
+  return h("span", { class: "t-caption" }, "第一次：看完点「跟练完了，下一个」，记住时长后下次自动跳");
 }
 
 function doneStage() {
@@ -284,6 +361,10 @@ function render() {
 
 function renderControls(item) {
   const bare = (label, onclick, disabled) => h("button", { class: "bare", onclick, disabled, style: { fontSize: "14px" } }, label);
+  // さっきの動画の長さを覚えた:一言と撤销(途中で飛ばしたなら取り消す)
+  const learnedNote = s.learned
+    ? h("span", { class: "t-caption row", style: { gap: "8px" } }, `记住了：${s.learned.title} ${mmss(s.learned.seconds)}，下次自动跳`, bare("撤销", undoLearned))
+    : null;
   let row;
   if (!item) {
     row = [bare("‹ 回到上一步", () => enter(s.items.length - 1)), h("span", { class: "grow" }), button("关闭", { kind: "teal", width: 150, onClick: () => closeWindow() })];
@@ -291,13 +372,14 @@ function renderControls(item) {
     row = [
       bare("‹ 上一个", () => enter(s.index - 1), s.index === 0),
       bare("在浏览器里打开", () => openUrl(item.page)),
-      videoNote(item),
+      learnedNote ?? videoNote(item),
       h("span", { class: "grow" }),
       button("跟练完了，下一个", { kind: "teal", onClick: () => enter(s.index + 1) }),
     ];
   } else {
     row = [
       bare("‹ 上一步", () => enter(s.index - 1)),
+      learnedNote,
       h("span", { class: "grow" }),
       button(s.preparing ? "开始" : s.pausedLeft != null ? "继续" : "暂停", { kind: "frame", width: 110, onClick: togglePause, title: s.preparing ? "不用等，马上开始计时" : "暂停 / 继续" }),
       button("下一步", { kind: "teal", width: 150, onClick: () => enter(s.index + 1) }),

@@ -256,3 +256,122 @@ button:disabled {
 .drag {
   -webkit-app-region: drag;
 }
+
+/* 一日の胶带:黒 = 座った、青 = 立った、灰 = 離席 / ゲーム / 休み、点線 = 予定、橙の刻み = いま */
+.daytape-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.daytape {
+  position: relative;
+  height: 22px;
+  background: rgba(15, 16, 17, 0.5);
+}
+
+.daytape .seg {
+  position: absolute;
+  top: 3px;
+  height: 16px;
+  display: block;
+}
+
+.daytape .seg.sit {
+  background: var(--black);
+}
+
+.daytape .seg.stand {
+  background: var(--teal);
+}
+
+.daytape .seg.away {
+  background: repeating-linear-gradient(135deg, rgba(196, 156, 105, 0.45) 0 3px, transparent 3px 6px);
+}
+
+.daytape .seg.game {
+  background: repeating-linear-gradient(135deg, rgba(171, 175, 178, 0.45) 0 3px, transparent 3px 6px);
+}
+
+.daytape .seg.rest {
+  background: rgba(171, 175, 178, 0.18);
+}
+
+.daytape .seg.plan {
+  background: none;
+  border: 1.5px dashed rgba(244, 243, 238, 0.55);
+  top: 4px;
+  height: 13px;
+}
+
+.daytape .seg.plan.stand {
+  border-color: var(--teal);
+}
+
+.daytape .now {
+  position: absolute;
+  top: -2px;
+  width: 0;
+  display: flex;
+  justify-content: center;
+}
+
+.daytape .now .notch-fallback {
+  width: 2px;
+  height: 26px;
+  background: var(--orange);
+}
+
+.daytape-wrap .hours {
+  position: relative;
+  height: 14px;
+}
+
+.daytape-wrap .hours span {
+  position: absolute;
+  transform: translateX(-50%);
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--text-2);
+}
+
+.daytape-wrap .hours span:first-child {
+  transform: none;
+}
+
+.daytape-wrap .hours span:last-child {
+  transform: translateX(-100%);
+}
+
+/* 牛皮纸の上の胶带(「坐下」の小窓) */
+.daytape.on-kraft {
+  background: rgba(22, 22, 21, 0.1);
+  height: 18px;
+}
+
+.daytape.on-kraft .seg {
+  top: 2px;
+  height: 14px;
+}
+
+.daytape.on-kraft .seg.away {
+  background: repeating-linear-gradient(135deg, rgba(62, 47, 28, 0.55) 0 3px, transparent 3px 6px);
+}
+
+.daytape.on-kraft .seg.game {
+  background: repeating-linear-gradient(135deg, rgba(22, 22, 21, 0.35) 0 3px, transparent 3px 6px);
+}
+
+.daytape.on-kraft .seg.rest {
+  background: rgba(62, 47, 28, 0.18);
+}
+
+.daytape.on-kraft .seg.plan {
+  border-color: rgba(22, 22, 21, 0.55);
+  top: 3px;
+  height: 11px;
+}
+
+.daytape-wrap.on-kraft .hours span {
+  color: var(--kraft-text-2);
+}

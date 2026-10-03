@@ -5,6 +5,7 @@ import { loadMaterial, slice, sprite, tile, h, button, first, asset, has } from 
 import { call, closeWindow, openUrl, enableDragging, listen } from "./api.js";
 import { loadIcons, icon, weekdays, weekdaysZh, hhmm, speak, stopSpeaking, clear, voiceFor, voicesReady, withNums } from "./common.js";
 import { postureChip, poseSmall, parseStretches, renderStretches, stepSeconds, metaText, illustration, title, totalSeconds, mmss } from "./stretchcard.js";
+import { dayTape } from "./daytape.js";
 
 const $ = (id) => document.getElementById(id);
 
@@ -166,54 +167,6 @@ function renderStrip() {
     h("button", { class: "bare open", onclick: expand }, "打开 ›"),
   );
   slice(strip, "strip-black-night") || strip.classList.add("fallback");
-}
-
-// MARK: 一日の胶带(時間軸):黒 = 座った、青 = 立った、灰 = 離席 / ゲーム / 休み、橙の刻み = いま、点線 = この姿勢の予定
-
-const TAPE_FROM = 8;
-const TAPE_TO = 24;
-
-function tapeX(ms, width) {
-  const d = new Date(ms);
-  const hour = d.getHours() + d.getMinutes() / 60 + d.getSeconds() / 3600;
-  return Math.max(0, Math.min(1, (hour - TAPE_FROM) / (TAPE_TO - TAPE_FROM))) * width;
-}
-
-/** 印 → 区間([from, to, kind]) */
-function tapeSegments(p) {
-  const now = Date.now();
-  const marks = [...(p.marks ?? [])].sort((a, b) => a.at - b.at);
-  const segs = [];
-  for (let i = 0; i < marks.length; i++) {
-    const to = i + 1 < marks.length ? marks[i + 1].at : now;
-    if (to > marks[i].at) segs.push([marks[i].at, Math.min(to, now), marks[i].kind]);
-  }
-  if (!marks.length) segs.push([p.since, now, p.posture === "sitting" ? "sit" : "stand"]);
-  const planned = p.resting ? null : [now, p.dueAt, p.posture === "sitting" ? "sit" : "stand"];
-  return { segs, planned, now };
-}
-
-function dayTape(p, width = 472) {
-  const { segs, planned, now } = tapeSegments(p);
-  const track = h("div", { class: "daytape", style: { width: `${width}px` } });
-  const seg = (from, to, kind, plan = false) => {
-    const x = tapeX(from, width);
-    const w = Math.max(plan ? 2 : 1.5, tapeX(to, width) - x);
-    const el = h("span", { class: `seg ${kind}${plan ? " plan" : ""}`, style: { left: `${x}px`, width: `${w}px` }, title: `${hhmm(new Date(from))}–${hhmm(new Date(to))}` });
-    if (!plan) {
-      if (kind === "sit") slice(el, "band-black-night");
-      if (kind === "stand") slice(el, "block-teal-night");
-    }
-    return el;
-  };
-  for (const [from, to, kind] of segs) track.append(seg(from, to, kind));
-  if (planned && planned[1] > planned[0]) track.append(seg(planned[0], planned[1], planned[2], true));
-  const notch = sprite("now-notch-night", { height: 20 }) ?? h("span", { class: "notch-fallback" });
-  const nowMark = h("span", { class: "now", style: { left: `${tapeX(now, width)}px` } }, notch);
-  track.append(nowMark);
-  const hours = h("div", { class: "hours row", style: { width: `${width}px` } });
-  for (const hr of [8, 12, 16, 20, 24]) hours.append(h("span", { style: { left: `${((hr - TAPE_FROM) / (TAPE_TO - TAPE_FROM)) * width}px` } }, String(hr)));
-  return h("div", { class: "daytape-wrap" }, track, hours);
 }
 
 // MARK: 今天(家)

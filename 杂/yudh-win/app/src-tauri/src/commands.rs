@@ -437,6 +437,9 @@ pub struct PostureView {
     today: String,
     /// 直前に終えた立ち作業の長さ(分。「坐下」の知らせの「站了 N 分钟」)
     last_stand_minutes: i64,
+    /// 今日の胶带の印(「坐下」の小窓に今天と同じ胶带を出す)と、胶带の始まり(朝に戻る時刻)
+    marks: Vec<DayMark>,
+    quiet_to: u32,
     caution: &'static str,
 }
 
@@ -515,6 +518,8 @@ fn posture_view(inner: &Inner) -> PostureView {
             next_stretch: String::new(),
             today: String::new(),
             last_stand_minutes: 0,
+            marks: Vec::new(),
+            quiet_to: inner.settings.posture.quiet_to,
             caution: posture::CAUTION,
         };
     }
@@ -544,6 +549,8 @@ fn posture_view(inner: &Inner) -> PostureView {
         next_stretch: posture::display_name(&clock.next_stretch(&inner.settings.posture).name),
         today: standing::summary(day_stand(inner, now)),
         last_stand_minutes: (clock.last_stand_seconds + 30) / 60,
+        marks: day_stand(inner, now).marks,
+        quiet_to: inner.settings.posture.quiet_to,
         caution: posture::CAUTION,
     }
 }

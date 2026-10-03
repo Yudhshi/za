@@ -152,6 +152,8 @@ const handlers = {
       nextStretch: "斜角肌拉伸 · 2 分钟",
       today: "今天站了 1 小时 30 分，换了 3 次姿势",
       lastStandMinutes: 30,
+      marks: handlers.panel_state().marks,
+      quietTo: 8,
       caution: "※ 拉伸感可以，发麻或刺痛传到手上就停",
     };
   },
@@ -190,14 +192,17 @@ const handlers = {
     fixed: "斜角肌拉伸（约 1 分半）\n右手按住右侧锁骨下方固定第一根肋骨，头向左倒拉伸右侧颈部，右肩放松下沉，停 20 秒\n再微微抬头看斜上方，停 20 秒\n换左边：左手按住左侧锁骨下方，头向右倒拉伸左侧颈部，左肩放松下沉，停 20 秒\n再微微抬头看斜上方，停 20 秒",
     stretches: "W 字收肩（约 1 分钟）\n手肘贴着身体弯成 90°，手心朝前\n前臂向外打开，同时把肩胛骨往后、往中间收，不要耸肩\n停 5 秒后放松。做 12 次\n\n肩颈三步（约 2 分钟）\n夹肩胛骨：保持 5 秒 × 10 次\n转肩：向后转 10 次\n收下巴：保持 5 秒 × 10 次\n\n走一走（1〜2 分钟）\n离开座位去接杯水，手臂自然摆动地走 1 分钟\n看窗外等远处 20 秒",
     breathHabit: true,
-    ritualVideos: "跟练 1 https://www.bilibili.com/video/BV1JW4y1k7F7/",
+    ritualVideos: "跟练 1 https://www.bilibili.com/video/BV1JW4y1k7F7/ 4:04\n跟练 2 https://www.bilibili.com/video/BV1UL411F7Hk/\n跟练 3 https://www.youtube.com/watch?v=SGPBSqxKGAc\n跟练 4 https://www.youtube.com/watch?v=aHlNoTpXf_8",
     ritualStretches: "斜角肌拉伸（约 2 分钟）\n右手按住右侧锁骨下方，头向左倒，拉伸右侧颈部，停 20 秒\n微微抬头停 15 秒，再微微低头停 15 秒\n\n横臂拉肩后侧（约 1 分钟）\n右臂伸直横过身体前方，和肩同高\n左手扣住右肘往左肩方向拉，肩膀不要耸，停 30 秒\n换另一侧，停 30 秒",
     ritualStrength: "肩袖力量（隔天做，约 6 分钟）\n坐在地上，右手肘贴腰弯 90°，左手握住右手腕；右手往外推、左手顶住不让动，用 5 成力，停 10 秒 × 5 次\n换左手往外推，停 10 秒 × 5 次",
     ritualFloor: "仰躺腹式呼吸（约 3 分钟）\n仰躺，膝盖弯曲，一只手放肚子上，一只手放胸口\n用鼻子吸气 4 秒只让肚子鼓起来，用嘴呼气 6 秒，做 12 次",
     ritualStrengthOn: true,
     defaults: { quietApps: "Aion2.exe\nAion2-Win64-Shipping.exe" },
   }),
-  settings_save: () => null,
+  settings_save: ({ patch }) => {
+    window.__saved = patch;
+    return null;
+  },
   pick_folder: () => "D:\\OneDrive\\Yudh",
   open_surface: () => null,
   posture_preview: () => null,
