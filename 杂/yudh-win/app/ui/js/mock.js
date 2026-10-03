@@ -64,7 +64,9 @@ const handlers = {
     since: now - 23 * 60 * 1000,
     dueAt: now + 7 * 60 * 1000,
     announced: true,
-    resting: false,
+    resting: q.get("resting") === "1",
+    restReason: q.get("resting") === "1" ? "night" : null,
+    quietTo: 8,
     marks: (() => {
       const t = new Date();
       t.setHours(9, 0, 0, 0);
@@ -199,6 +201,10 @@ const handlers = {
   pick_folder: () => "D:\\OneDrive\\Yudh",
   open_surface: () => null,
   posture_preview: () => null,
+  posture_summary: () => {
+    const p = handlers.panel_state();
+    return { posture: p.posture, minutesInPosture: p.minutesInPosture, prompt: p.prompt, since: p.since, dueAt: p.dueAt, announced: p.announced, resting: p.resting, restReason: p.restReason, quietTo: p.quietTo, marks: p.marks, today: p.today, todayShort: p.todayShort };
+  },
 };
 
 export async function call(cmd, args) {

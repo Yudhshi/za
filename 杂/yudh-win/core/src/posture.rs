@@ -503,6 +503,8 @@ pub struct PostureClock {
     pub game_since: Option<DateTime<Utc>>,
     /// 全画面から抜けた時刻(5 分以内に戻ればゲームは続いていたことにする:読み込み画面や Alt-Tab で数え直さない)
     game_left_at: Option<DateTime<Utc>>,
+    /// 最後にゲームの区間を閉じた時刻(離席の印をこれより前に戻さない:パッドの操作は無操作に数えられる)
+    game_ended_at: Option<DateTime<Utc>>,
     /// 席を外した時刻(3 分無操作になった最初の判定で、最後の操作の時刻)。立っていた長さはここまでしか数えない
     away_since: Option<DateTime<Utc>>,
     /// 夜・日课のあと:钟を止めている
@@ -534,6 +536,8 @@ pub const STILL_SITTING_MINUTES: i64 = 10;
 pub const STILL_STANDING_MINUTES: i64 = 5;
 /// 「坐 | 站」の札を返す:钟が切り替えてからこのあいだなら取り消し(我还坐着 / 我还站着)、それより後なら今の切り替え(坐下了 / 现在站起来)(秒)
 pub const FLIP_REVERT_SECONDS: i64 = 90;
+/// 手順の前に小窓が流す分(「站起来」の一言 7 秒 + 腹式呼吸 3 回 30 秒)
+pub const GUIDE_LEAD_SECONDS: i64 = 37;
 
 impl PostureClock {
     pub fn new(now: DateTime<Utc>, stretch_index: usize) -> PostureClock {
@@ -555,12 +559,33 @@ impl PostureClock {
             step_count: 0,
             game_since: None,
             game_left_at: None,
+            game_ended_at: None,
             away_since: None,
             resting: false,
             last_stand_seconds: 0,
             pending: Vec::new(),
             pending_marks: Vec::new(),
         }
+    }
+
+    /// 起動した:胶带はここから座り(前に動いていたときの最後の印を、いまの姿勢で閉じる)
+    pub fn start(&mut self, now: DateTime<Utc>) {
+        self.mark(MarkKind::Sit, now);
+    }
+
+    /// 立ってすぐ小窓が流す長さ(一言 7 秒 + 呼吸 30 秒 + 手順)。このあいだは手を触れなくても席にいる
+    fn guide_seconds(&self) -> i64 {
+        let steps: u32 = self
+            .parts()
+            .iter()
+            .flat_map(|s| s.steps.iter())
+            .map(|line| {
+                crate::ritual::duration(line)
+                    .unwrap_or(crate::ritual::SETUP_SECONDS)
+                    .max(crate::ritual::SETUP_SECONDS)
+            })
+            .sum();
+        GUIDE_LEAD_SECONDS + i64::from(steps)
     }
 
     pub fn due_at(&self, settings: &PostureSettings) -> DateTime<Utc> {
@@ -687,6 +712,10 @@ impl PostureClock {
                 self.announced = false;
                 self.guide_dismissed = false;
                 self.away_since = None;
+                // 夜をまたいだゲームを、朝に「長いゲームから抜けた」と数えない
+                self.game_since = None;
+                self.game_left_at = None;
+                self.game_ended_at = None;
                 self.mark(MarkKind::Rest, now);
             }
             self.prompt = None;
@@ -695,6 +724,11 @@ impl PostureClock {
         if self.resting {
             // 朝(または止めたあと):座り直しで 30 分から
             self.resting = false;
+            if self.posture == Posture::Standing {
+                self.switch(Posture::Sitting, now, settings, false);
+            }
+            self.posture = Posture::Sitting;
+            self.announced = false;
             self.reset(now);
             self.mark(MarkKind::Sit, now);
         }
@@ -709,23 +743,44 @@ impl PostureClock {
             self.game_left_at = None;
         } else if let Some(start) = self.game_since {
             let left = *self.game_left_at.get_or_insert(now);
-            if now - start >= Duration::minutes(GAME_BREAK_MINUTES) {
-                self.game_since = None;
-                self.game_left_at = None;
+            let ended = if now - start >= Duration::minutes(GAME_BREAK_MINUTES) {
                 long_game = true;
-                self.mark(self.posture_mark(), left);
-            } else if now - left >= Duration::minutes(GAME_GRACE_MINUTES) {
+                true
+            } else {
+                now - left >= Duration::minutes(GAME_GRACE_MINUTES)
+            };
+            if ended {
                 self.game_since = None;
                 self.game_left_at = None;
-                self.mark(self.posture_mark(), left);
+                self.game_ended_at = Some(left);
+                // 抜けたあと席を外していたなら、そこからは離席
+                let kind = if self.away_since.is_some() {
+                    MarkKind::Away
+                } else {
+                    self.posture_mark()
+                };
+                self.mark(kind, left);
             }
         }
         // 抜けて 5 分たつまではゲーム中のまま:読み込み画面で「站起来」と言わない(切り替えだけ待つ。出ている手順は戻す)
         let in_game = suppressed || self.game_since.is_some();
-        // 離席:3 分無操作で席を外したとみなす。外した時刻(最後の操作)を覚える(戻ったら、下の切り替えのあとで忘れる)
-        let away = idle_seconds >= IDLE_RESET_SECONDS && !suppressed;
+        // 離席:3 分無操作で席を外したとみなす。外した時刻(最後の操作)を覚える(戻ったら、下の切り替えのあとで忘れる)。
+        // 立ってすぐ小窓が手順を流しているあいだは、手を触れなくても席にいる(手順の終わりから数える)
+        let last_input = now - Duration::seconds(idle_seconds as i64);
+        let last_active = if self.posture == Posture::Standing && !self.guide_dismissed {
+            last_input.max((self.since + Duration::seconds(self.guide_seconds())).min(now))
+        } else {
+            last_input
+        };
+        let away = !suppressed && now - last_active >= Duration::seconds(IDLE_RESET_SECONDS as i64);
         if away && self.away_since.is_none() {
-            let left = (now - Duration::seconds(idle_seconds as i64)).max(self.since);
+            // 離席の印は、いまの姿勢の始まり・ゲームの終わりより前に戻さない
+            let floor = [Some(self.since), self.game_left_at, self.game_ended_at]
+                .into_iter()
+                .flatten()
+                .max()
+                .unwrap_or(self.since);
+            let left = last_active.max(floor).min(now);
             self.away_since = Some(left);
             self.mark(MarkKind::Away, left);
         }
@@ -791,13 +846,25 @@ impl PostureClock {
         self.prompt = None;
         self.game_since = None;
         self.game_left_at = None;
+        self.game_ended_at = None;
         self.away_since = None;
-        self.mark(MarkKind::Sit, now);
+        self.mark(
+            if self.resting {
+                MarkKind::Rest
+            } else {
+                MarkKind::Sit
+            },
+            now,
+        );
         had_prompt
     }
 
     /// トレイの「现在站起来」:すぐ立ち作業にする(立っていれば手順を開き直すだけ)
     pub fn confirm_stood(&mut self, now: DateTime<Utc>, settings: &PostureSettings) {
+        // 夜・日课のあとは钟を止めている:姿勢も動かさない(朝の始まりがずれないように)
+        if self.resting {
+            return;
+        }
         if self.posture == Posture::Standing {
             self.guide_dismissed = false;
             self.prompt = Some(Prompt::Standing);
@@ -808,6 +875,9 @@ impl PostureClock {
 
     /// トレイの「坐下了」:すぐ座り作業にする(知らせは出さない)
     pub fn confirm_sat(&mut self, now: DateTime<Utc>, settings: &PostureSettings) {
+        if self.resting {
+            return;
+        }
         if self.posture == Posture::Sitting {
             self.announced = false;
             self.prompt = None;
@@ -869,6 +939,9 @@ impl PostureClock {
     /// 「坐 | 站」の札を返した:钟が切り替えた直後(90 秒以内)なら「言ったのは間違い」で取り消し、
     /// それより後なら今ここで切り替える。帯・トレイ・小窓のどこから返しても同じ
     pub fn flip(&mut self, now: DateTime<Utc>, settings: &PostureSettings) {
+        if self.resting {
+            return;
+        }
         let fresh = self.announced && now - self.since < Duration::seconds(FLIP_REVERT_SECONDS);
         match self.posture {
             Posture::Standing => {
@@ -1556,6 +1629,99 @@ mod tests {
         c.wake(tokyo(2026, 10, 2, 9, 0, 0), last_seen);
         let kinds: Vec<MarkKind> = c.take_marks().iter().map(|m| m.kind).collect();
         assert_eq!(kinds, vec![MarkKind::Away, MarkKind::Sit]);
+    }
+
+    #[test]
+    fn rest_forgets_the_game_and_ignores_flips() {
+        let settings = PostureSettings::default();
+        let t0 = tokyo(2026, 10, 1, 22, 30, 0);
+        let mut c = PostureClock::new(t0, 0);
+        // 22:30 全画面のゲーム、23:00 夜の安静、23:40 ゲームを閉じる(PC はつけたまま)
+        assert!(!c.check(t0, &settings, 0, true, false));
+        assert!(!c.check(t0 + Duration::minutes(30), &settings, 0, true, true));
+        assert_eq!(c.game_since, None, "the night forgets the game");
+        assert!(!c.check(t0 + Duration::minutes(70), &settings, 0, false, true));
+        // 夜のあいだに札を返しても、トレイで站起来を押しても何も起きない
+        c.flip(t0 + Duration::minutes(80), &settings);
+        c.confirm_stood(t0 + Duration::minutes(81), &settings);
+        assert_eq!((c.posture, c.prompt), (Posture::Sitting, None));
+        // 朝 8 時:長いゲームの規則で立たせない。座り直しで 30 分から
+        let morning = tokyo(2026, 10, 2, 8, 0, 0);
+        assert!(!c.check(morning, &settings, 0, false, false));
+        assert_eq!(
+            (c.posture, c.prompt, c.since),
+            (Posture::Sitting, None, morning)
+        );
+        assert!(!c.check(morning + Duration::minutes(29), &settings, 0, false, false));
+        assert!(c.check(morning + Duration::minutes(30), &settings, 0, false, false));
+    }
+
+    #[test]
+    fn the_hands_free_guide_is_not_an_absence() {
+        let settings = PostureSettings::default();
+        let t0 = tokyo(2026, 10, 1, 10, 0, 0);
+        let mut c = PostureClock::new(t0, 0);
+        let up = t0 + Duration::minutes(30);
+        assert!(c.check(up, &settings, 1, false, false));
+        c.take_marks();
+        // 手を触れずに小窓の手順(一言 + 呼吸 + 斜角肌 80 秒 + W 字 102 秒 ≈ 3 分半)を流す:3 分たっても離席にしない
+        let guide = c.guide_seconds();
+        assert!(guide > IDLE_RESET_SECONDS as i64, "{guide}");
+        assert!(!c.check(up + Duration::seconds(181), &settings, 182, false, false));
+        assert!(c.take_marks().is_empty(), "no away mark during the guide");
+        // 手順が終わってから 3 分触らなければ離席(印は手順の終わり)
+        let gone = up + Duration::seconds(guide + 200);
+        assert!(!c.check(gone, &settings, (guide + 201) as u64, false, false));
+        let marks = c.take_marks();
+        assert_eq!(marks.len(), 1);
+        assert_eq!(
+            (marks[0].kind, marks[0].at),
+            (MarkKind::Away, up + Duration::seconds(guide))
+        );
+        // 手順を自分で閉じていたら、ふつうの 3 分
+        let mut d = PostureClock::new(t0, 0);
+        assert!(d.check(up, &settings, 1, false, false));
+        d.close_prompt();
+        d.take_marks();
+        assert!(!d.check(up + Duration::seconds(185), &settings, 185, false, false));
+        assert_eq!(d.take_marks()[0].kind, MarkKind::Away);
+    }
+
+    #[test]
+    fn leaving_a_game_and_walking_away_keeps_the_away_on_the_tape() {
+        let settings = PostureSettings::default();
+        let t0 = tokyo(2026, 10, 1, 20, 0, 0);
+        let mut c = PostureClock::new(t0, 0);
+        assert!(!c.check(t0, &settings, 0, true, false));
+        // 20 分パッドで遊んで抜け、そのまま席を外した(無操作は遊んでいた時間ぶん大きい)
+        let left = t0 + Duration::minutes(20);
+        assert!(!c.check(left, &settings, 1200, false, false));
+        assert!(!c.check(left + Duration::minutes(6), &settings, 1560, false, false));
+        let marks = c.take_marks();
+        let kinds: Vec<MarkKind> = marks.iter().map(|m| m.kind).collect();
+        assert_eq!(kinds.first(), Some(&MarkKind::Game));
+        let away = marks
+            .iter()
+            .find(|m| m.kind == MarkKind::Away)
+            .expect("away");
+        assert!(away.at >= left, "not back-dated into the game");
+        assert_eq!(
+            kinds.last(),
+            Some(&MarkKind::Away),
+            "the absence stays an absence"
+        );
+    }
+
+    #[test]
+    fn start_closes_the_tape_after_a_restart() {
+        let t0 = tokyo(2026, 10, 1, 16, 0, 0);
+        let mut c = PostureClock::new(t0, 0);
+        c.start(t0);
+        let marks = c.take_marks();
+        assert_eq!(
+            (marks.len(), marks[0].kind, marks[0].at),
+            (1, MarkKind::Sit, t0)
+        );
     }
 
     #[test]

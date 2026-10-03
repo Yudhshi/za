@@ -177,7 +177,7 @@ function stretchCard(step) {
   const card = h(
     "div",
     { class: "sheet" },
-    h("div", { class: "head row" }, h("span", { class: "label" }, step.name), h("span", { class: "grow" }), dots(step.stepCount, step.stepNumber)),
+    h("div", { class: "head row" }, h("span", { class: "label" }, `第 ${step.stepNumber + 1}/${step.stepCount} 步`), h("span", { class: "grow" }), dots(step.stepCount, step.stepNumber)),
     stretchBody({ pose: step.pose, heading: step.heading, meta: step.meta, text: step.text }),
     h("div", { class: "row time-row" }, s.preparing ? h("span", { class: "prep" }, "准备") : null, h("span", { class: "time" }, timerText(time))),
     h("div", { class: "muted" }, s.plan.caution),

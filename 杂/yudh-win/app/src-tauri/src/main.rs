@@ -39,6 +39,21 @@ pub struct Inner {
     pub quiet: Option<String>,
     /// 設定の拉伸库の「试做」:この拉伸を小窓で流している(钟は触らない)
     pub preview: Option<Preview>,
+    /// 今日の日课を終えたか(Mac の分も足して。日付・値・読んだ時刻)。钟を止める判定に使う
+    pub ritual_today: Option<(String, bool, Instant)>,
+}
+
+/// トレイに出している状態:状態の一行・立っているか・ゲーム中(名前)・休み中か
+pub type TrayState = (String, bool, Option<String>, bool);
+
+/// トレイのメニューの項目(作るのは 1 度だけ。文字と押せるかどうかをその場で変える:
+/// メニューを作り直すと、開いているメニューが消える)
+pub struct TrayItems {
+    pub status: MenuItem<tauri::Wry>,
+    pub flip: MenuItem<tauri::Wry>,
+    pub guide: MenuItem<tauri::Wry>,
+    pub ritual: MenuItem<tauri::Wry>,
+    pub panel: MenuItem<tauri::Wry>,
 }
 
 pub struct Preview {
@@ -52,8 +67,9 @@ pub struct AppState {
     pub settings_path: PathBuf,
     /// 面板がフォーカスを失って閉じた時刻:トレイのアイコンを押して閉じたときに、ボタンを離した知らせでまた開かないように
     pub blur_closed: Mutex<Option<Instant>>,
-    /// いまトレイのメニューに出している状態(状態の一行・立っているか・ゲーム中か)。変わったときだけ作り直す
-    pub tray_state: Mutex<Option<(String, bool, Option<String>)>>,
+    /// いまトレイのメニューに出している状態(状態の一行・立っているか・ゲーム中か・休み中か)。変わったときだけ書き換える
+    pub tray_state: Mutex<Option<TrayState>>,
+    pub tray_items: Mutex<Option<TrayItems>>,
     /// 面板が帯から全体に広がっている
     pub panel_expanded: Mutex<bool>,
     /// こちらで面板を動かした時刻(帯を広げたとき):その移動はユーザーの位置として覚えない
@@ -70,7 +86,7 @@ fn main() {
     tauri::Builder::default()
         // 2 回目に起動されたら、新しく立ち上げずに面板を開く(トレイが 2 つにならないように)
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
-            surfaces::open_panel(app);
+            surfaces::open_panel(app, true);
         }))
         .plugin(tauri_plugin_autostart::init(
             tauri_plugin_autostart::MacosLauncher::LaunchAgent,
@@ -84,7 +100,9 @@ fn main() {
                 .unwrap_or_else(|_| std::env::temp_dir().join("Yudh"));
             let settings_path = dir.join("settings.json");
             let settings = Settings::load(&settings_path);
-            let posture = PostureClock::new(Utc::now(), settings.stretch_index);
+            let mut posture = PostureClock::new(Utc::now(), settings.stretch_index);
+            // 胶带:前に動いていたときの最後の印(立ち・離席・ゲーム)を、起動した時刻の座りで閉じる
+            posture.start(Utc::now());
             let inner = Inner {
                 settings,
                 english: None,
@@ -95,6 +113,7 @@ fn main() {
                 picking: false,
                 quiet: None,
                 preview: None,
+                ritual_today: None,
             };
             // 手元の記録を同期フォルダへ(Mac から日课や呼吸の続きが見えるように)
             commands::publish_habits(&inner);
@@ -103,6 +122,7 @@ fn main() {
                 settings_path,
                 blur_closed: Mutex::new(None),
                 tray_state: Mutex::new(None),
+                tray_items: Mutex::new(None),
                 panel_expanded: Mutex::new(false),
                 programmatic_move: Mutex::new(None),
             });
@@ -120,7 +140,7 @@ fn main() {
             if pinned {
                 let handle = app.handle().clone();
                 tauri::async_runtime::spawn(async move {
-                    surfaces::open_panel(&handle);
+                    surfaces::open_panel(&handle, false);
                 });
             }
             Ok(())
@@ -134,6 +154,7 @@ fn main() {
             commands::english_undo,
             commands::english_more,
             commands::posture_state,
+            commands::posture_summary,
             commands::posture_action,
             commands::posture_preview,
             commands::ritual_plan,
@@ -176,64 +197,54 @@ pub fn apply_autostart(app: &AppHandle) {
 }
 
 /// トレイのメニュー。1 行目は姿勢という「もの」そのもの(帯・小窓と同じ一行)、その下にそれへの操作:
-/// 「站起来」/「坐下」(札を返す)と、立っていれば「看拉伸」。ゲーム中はどれも押せない
-pub fn tray_menu(
-    app: &AppHandle,
-    status: &str,
-    standing: bool,
-    game: Option<&str>,
-) -> tauri::Result<tauri::menu::Menu<tauri::Wry>> {
-    let on = game.is_none();
-    let status_label = match game {
-        Some(name) => format!("游戏中，已暂停（{name}）"),
-        None => status.to_string(),
+/// 「站起来」/「坐下」(札を返す)と「看拉伸」(立っているときだけ押せる)。項目は作るのは 1 度だけで、
+/// あとは `update_tray_items` が文字と押せるかどうかを書き換える
+pub fn tray_menu(app: &AppHandle) -> tauri::Result<(tauri::menu::Menu<tauri::Wry>, TrayItems)> {
+    let items = TrayItems {
+        status: MenuItem::with_id(app, "status", "Yudh", false, None::<&str>)?,
+        flip: MenuItem::with_id(app, "flip", "站起来", true, None::<&str>)?,
+        guide: MenuItem::with_id(app, "posture", "看拉伸", false, None::<&str>)?,
+        ritual: MenuItem::with_id(app, "ritual", "泡完澡了", true, None::<&str>)?,
+        panel: MenuItem::with_id(app, "panel", "打开面板", true, None::<&str>)?,
     };
     let menu = Menu::with_items(
         app,
         &[
-            &MenuItem::with_id(app, "status", status_label, false, None::<&str>)?,
-            &MenuItem::with_id(
-                app,
-                "flip",
-                if standing { "坐下" } else { "站起来" },
-                on,
-                None::<&str>,
-            )?,
+            &items.status,
+            &items.flip,
+            &items.guide,
+            &PredefinedMenuItem::separator(app)?,
+            &items.ritual,
+            &items.panel,
+            &PredefinedMenuItem::separator(app)?,
+            &MenuItem::with_id(app, "quit", "退出 Yudh", true, None::<&str>)?,
         ],
     )?;
-    if standing {
-        menu.append(&MenuItem::with_id(
-            app,
-            "posture",
-            "看拉伸",
-            on,
-            None::<&str>,
-        )?)?;
-    }
-    menu.append(&PredefinedMenuItem::separator(app)?)?;
-    menu.append(&MenuItem::with_id(
-        app,
-        "ritual",
-        "泡完澡了",
-        on,
-        None::<&str>,
-    )?)?;
-    menu.append(&MenuItem::with_id(
-        app,
-        "panel",
-        "打开面板",
-        on,
-        None::<&str>,
-    )?)?;
-    menu.append(&PredefinedMenuItem::separator(app)?)?;
-    menu.append(&MenuItem::with_id(
-        app,
-        "quit",
-        "退出 Yudh",
-        true,
-        None::<&str>,
-    )?)?;
-    Ok(menu)
+    Ok((menu, items))
+}
+
+/// トレイの項目を今の状態に(一行・站起来 / 坐下・看拉伸・ゲーム中・休み中)
+pub fn update_tray_items(
+    items: &TrayItems,
+    status: &str,
+    standing: bool,
+    game: Option<&str>,
+    resting: bool,
+) {
+    let on = game.is_none();
+    let status = match game {
+        Some(_) if status.starts_with("游戏中") => status.to_string(),
+        Some(name) => format!("游戏中，已暂停（{name}）"),
+        None => status.to_string(),
+    };
+    let _ = items.status.set_text(status);
+    let _ = items
+        .flip
+        .set_text(if standing { "坐下" } else { "站起来" });
+    let _ = items.flip.set_enabled(on && !resting);
+    let _ = items.guide.set_enabled(on && standing && !resting);
+    let _ = items.ritual.set_enabled(on);
+    let _ = items.panel.set_enabled(on);
 }
 
 fn build_tray(app: &AppHandle) -> tauri::Result<()> {
@@ -243,9 +254,13 @@ fn build_tray(app: &AppHandle) -> tauri::Result<()> {
         .lock()
         .map(|inner| commands::status_line(&inner, Utc::now()))
         .unwrap_or_default();
-    let menu = tray_menu(app, &status, false, None)?;
+    let (menu, items) = tray_menu(app)?;
+    update_tray_items(&items, &status, false, None, false);
     if let Ok(mut state) = app.state::<AppState>().tray_state.lock() {
-        *state = Some((status, false, None));
+        *state = Some((status, false, None, false));
+    }
+    if let Ok(mut slot) = app.state::<AppState>().tray_items.lock() {
+        *slot = Some(items);
     }
     let mut tray = TrayIconBuilder::with_id("yudh")
         .tooltip("Yudh")
@@ -330,12 +345,8 @@ fn ticker(app: AppHandle) {
             }
             // 夜(設定の時間)と、今日の日课を終えたあとは钟を止める
             let hour = now.with_timezone(&chrono::Local).hour();
-            let today = yudh_core::Zone::Local.key(now);
-            let ritual_done = inner
-                .settings
-                .ritual_log
-                .get(&today)
-                .is_some_and(|n| *n > 0);
+            // 今日の日课(Mac でやった分も)を終えていれば、今日はもう止める
+            let ritual_done = commands::ritual_done_today(&mut inner);
             let resting = settings.is_quiet_hour(hour) || ritual_done;
             let changed = if game.is_some() {
                 inner.posture.check(now, &settings, 0, true, resting)

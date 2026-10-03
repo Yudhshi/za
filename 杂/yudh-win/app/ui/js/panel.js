@@ -104,11 +104,24 @@ function switchTab(key) {
 
 async function flip() {
   await call("posture_action", { action: "flip" });
-  await refreshQuiet();
+  await refreshAfterFlip();
 }
 
-/** 姿勢と今日の数字だけ読み直す(見ている卡や書きかけの設定は作り直さない) */
+/** 姿勢と今日の数字だけ読み直す(軽い命令:英語・会議・習慣のファイルは読まない。見ている卡や書きかけの設定は作り直さない) */
 async function refreshQuiet() {
+  if (!state.panel) return;
+  Object.assign(state.panel, await call("posture_summary"));
+  renderStrip();
+  if (state.expanded && state.tab === "today" && state.panel.welcomed) {
+    const view = $("view");
+    const scroll = view.scrollTop;
+    clear(view, todayView());
+    view.scrollTop = scroll;
+  }
+}
+
+/** 札を返した:姿勢が変わり、日课も変わりうるので今日の分は全部読み直す */
+async function refreshAfterFlip() {
   state.panel = await call("panel_state");
   renderStrip();
   if (state.expanded && state.tab === "today" && state.panel.welcomed) clear($("view"), todayView());
@@ -121,10 +134,13 @@ function postureWord() {
   return `${p.posture === "sitting" ? "已坐" : "已站"} ${Math.max(0, p.minutesInPosture)} 分钟`;
 }
 
-/** 次の切り替え:「12:30 坐下」 */
+/** 次の切り替え:「12:30 坐下」。休み中は理由と朝の時刻 */
 function nextSwitch() {
   const p = state.panel;
-  if (p.resting) return "夜里不叫，早上 8 点重新开始";
+  if (p.resting) {
+    const morning = `早上 ${p.quietTo ?? 8} 点重新开始`;
+    return p.restReason === "ritual" ? `日课做完了，今天不叫了 · ${morning}` : `夜里不叫 · ${morning}`;
+  }
   const at = new Date(p.dueAt);
   return `${hhmm(at)} ${p.posture === "sitting" ? "站起来" : "坐下"}`;
 }
@@ -144,7 +160,7 @@ function renderStrip() {
   // 帯に入るのは姿勢という「もの」とその一行だけ(泡完澡了は「今天」とトレイに)
   clear(
     strip,
-    postureChip(p.posture, flip),
+    postureChip(p.posture, flip, { disabled: p.resting }),
     h("span", { class: "status" }, h("b", {}, withNums(postureWord())), " · ", withNums(p.todayShort)),
     h("span", { class: "grow" }),
     h("button", { class: "bare open", onclick: expand }, "打开 ›"),
@@ -224,7 +240,7 @@ function todayView() {
     h(
       "div",
       { class: "posture-line row" },
-      postureChip(p.posture, flip),
+      postureChip(p.posture, flip, { disabled: p.resting }),
       h("span", { class: "big" }, withNums(postureWord())),
       h("span", { class: "grow" }),
       h("span", { class: "next t-caption" }, withNums(nextSwitch())),
@@ -972,10 +988,12 @@ function libraryGroup(key, label, save) {
   const s = state.settings;
   const list = parseStretches(s[key]);
   let pending = null;
+  // 手元の値はすぐ更新(作り直す一覧は state.settings から読むので、保存の 400 ms を待つと古い一覧が出る)。保存だけ少し待つ
   const commit = (rerender = true) => {
     const textValue = renderStretches(list);
+    state.settings[key] = textValue;
     clearTimeout(pending);
-    pending = setTimeout(() => save({ [key]: textValue }), 400);
+    pending = setTimeout(() => call("settings_save", { patch: { [key]: textValue } }), 400);
     if (rerender) rerenderGroup();
   };
   const holder = h("div", { class: "library-group" });
@@ -1095,9 +1113,12 @@ function bindKeys() {
     // 設定の入力中は Esc で閉じない(書きかけを失わない)。听写の入力欄からは閉じてよい。
     // 常駐の帯なら、広げた面板は帯に戻すだけ
     if (e.key === "Escape" && (!typing || e.target.id === "spell-input")) {
-      if (state.panel?.pinned && state.expanded) {
-        call("open_surface", { which: "panel-strip" });
-        collapse();
+      // 常駐の帯:広げていれば帯に戻すだけ、帯なら何もしない(ゲームから戻って押す Esc で消えないように)
+      if (state.panel?.pinned) {
+        if (state.expanded) {
+          call("open_surface", { which: "panel-strip" });
+          collapse();
+        }
       } else closeWindow();
       return;
     }
@@ -1144,6 +1165,8 @@ async function init() {
   // 30 秒ごとの钟の知らせ:帯と「今天」の数字を更新。Rust が帯に縮めたら中身も帯に
   listen("panel-tick", refreshQuiet);
   listen("panel-collapsed", collapse);
+  // トレイの「打开面板」/アイコン(常駐の帯のとき):帯を広げる
+  listen("panel-expand", expand);
 }
 
 init();

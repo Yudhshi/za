@@ -99,8 +99,10 @@ pub struct PanelState {
     due_at: i64,
     /// いまの姿勢は钟が自分で切り替えた(札を返せば取り消し)
     announced: bool,
-    /// 夜・日课のあと:钟を止めている
+    /// 夜・日课のあと:钟を止めている。理由("night" / "ritual")と、朝に戻る時刻
     resting: bool,
+    rest_reason: Option<&'static str>,
+    quiet_to: u32,
     /// 今日の胶带の印(時間軸)
     marks: Vec<DayMark>,
     /// 「今天站了 1 小时 30 分，换了 3 次姿势」(いま立っている分も入れて)と、帯に入る短い形「站了 1 小时 30 分 · 换了 3 次」
@@ -131,6 +133,8 @@ pub fn panel_state(state: State<'_, AppState>) -> PanelState {
         None => (None, false),
     };
     let all = habits(&inner);
+    let ritual_today = all.ritual.get(&today()).is_some_and(|n| *n > 0);
+    inner.ritual_today = Some((today(), ritual_today, std::time::Instant::now()));
     PanelState {
         configured: root.is_some(),
         sync_root: root,
@@ -147,14 +151,90 @@ pub fn panel_state(state: State<'_, AppState>) -> PanelState {
             .timestamp_millis(),
         announced: inner.posture.announced,
         resting: inner.posture.resting,
+        rest_reason: rest_reason(&inner, now),
+        quiet_to: inner.settings.posture.quiet_to,
         marks: day_stand(&inner, now).marks,
         today: standing::summary(day_stand(&inner, now)),
         today_short: standing::short_summary(day_stand(&inner, now)),
         breath_today: today_breaths(&all),
         ritual_streak: ritual::streak(&all.ritual, now, Zone::Local),
-        ritual_today: all.ritual.get(&today()).is_some_and(|n| *n > 0),
+        ritual_today,
         welcomed: inner.settings.welcomed,
         pinned: inner.settings.pinned,
+    }
+}
+
+/// 钟を止めている理由:夜の時間なら "night"、そうでなければ今日の日课のあと "ritual"
+fn rest_reason(inner: &Inner, now: chrono::DateTime<Utc>) -> Option<&'static str> {
+    use chrono::Timelike;
+    if !inner.posture.resting {
+        return None;
+    }
+    let hour = now.with_timezone(&chrono::Local).hour();
+    Some(if inner.settings.posture.is_quiet_hour(hour) {
+        "night"
+    } else {
+        "ritual"
+    })
+}
+
+/// 今日の日课を(Mac の分も足して)終えたか。同期フォルダを読むので 5 分に 1 回まで
+/// (面板を開いたとき・ここで日课を終えたときは、そのとき読んだ値を使う)
+pub fn ritual_done_today(inner: &mut Inner) -> bool {
+    let day = today();
+    let fresh = inner
+        .ritual_today
+        .as_ref()
+        .is_some_and(|(d, _, at)| *d == day && at.elapsed() < std::time::Duration::from_secs(300));
+    if !fresh {
+        let done = habits(inner).ritual.get(&day).is_some_and(|n| *n > 0);
+        inner.ritual_today = Some((day, done, std::time::Instant::now()));
+    }
+    inner
+        .ritual_today
+        .as_ref()
+        .is_some_and(|(_, done, _)| *done)
+}
+
+/// 30 秒ごとに帯と「今天」を描き直す分だけ(英語・会議・習慣のファイルは読まない)
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PostureSummary {
+    posture: Posture,
+    minutes_in_posture: i64,
+    prompt: Option<Prompt>,
+    since: i64,
+    due_at: i64,
+    announced: bool,
+    resting: bool,
+    rest_reason: Option<&'static str>,
+    quiet_to: u32,
+    marks: Vec<DayMark>,
+    today: String,
+    today_short: String,
+}
+
+#[tauri::command]
+pub fn posture_summary(state: State<'_, AppState>) -> PostureSummary {
+    let inner = state.inner.lock().expect("state");
+    let now = Utc::now();
+    let day = day_stand(&inner, now);
+    PostureSummary {
+        posture: inner.posture.posture,
+        minutes_in_posture: (now - inner.posture.since).num_minutes(),
+        prompt: inner.posture.prompt,
+        since: inner.posture.since.timestamp_millis(),
+        due_at: inner
+            .posture
+            .due_at(&inner.settings.posture)
+            .timestamp_millis(),
+        announced: inner.posture.announced,
+        resting: inner.posture.resting,
+        rest_reason: rest_reason(&inner, now),
+        quiet_to: inner.settings.posture.quiet_to,
+        today: standing::summary(day.clone()),
+        today_short: standing::short_summary(day.clone()),
+        marks: day.marks,
     }
 }
 
@@ -481,18 +561,32 @@ pub fn apply_posture(app: &AppHandle, action: &str) -> PostureView {
         let mut inner = state.inner.lock().expect("state");
         let now = Utc::now();
         let settings = inner.settings.posture.clone();
-        // 「试做」の最中:手順の送りと閉じるだけ。钟は触らない
+        // 「试做」の最中:手順の送りと閉じるは试做に。ほかの操作(札・トレイ)は试做をやめて钟へ
         if let Some(p) = inner.preview.as_mut() {
-            match action {
-                "next" => p.step += 1,
-                "prev" => p.step = p.step.saturating_sub(1),
-                "close" => inner.preview = None,
-                _ => {}
+            let handled = match action {
+                "next" => {
+                    p.step += 1;
+                    true
+                }
+                "prev" => {
+                    p.step = p.step.saturating_sub(1);
+                    true
+                }
+                "close" => {
+                    inner.preview = None;
+                    true
+                }
+                _ => {
+                    inner.preview = None;
+                    false
+                }
+            };
+            if handled {
+                let view = posture_view(&inner);
+                drop(inner);
+                surfaces::sync_posture(app);
+                return view;
             }
-            let view = posture_view(&inner);
-            drop(inner);
-            surfaces::sync_posture(app);
-            return view;
         }
         match action {
             // トレイ:座っていればすぐ立ち作業に、立っていれば手順を開き直す
@@ -658,6 +752,8 @@ pub fn ritual_done(state: State<'_, AppState>, strength: bool) -> usize {
     }
     state.save(&inner);
     publish_habits(&inner);
+    // 今日はもう钟を止める(次の判定から)
+    inner.ritual_today = Some((day, true, std::time::Instant::now()));
     ritual::streak(&habits(&inner).ritual, Utc::now(), Zone::Local)
 }
 

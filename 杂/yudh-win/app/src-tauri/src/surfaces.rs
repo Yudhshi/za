@@ -140,6 +140,9 @@ fn quiet(app: &AppHandle) -> bool {
 /// ゲームが始まった / 終わった:始まったら開いている窓を全部閉じる。トレイの説明とメニューを変える
 pub fn quiet_changed(app: &AppHandle, game: Option<&str>) {
     if game.is_some() {
+        if let Ok(mut inner) = app.state::<AppState>().inner.lock() {
+            inner.preview = None;
+        }
         for label in ["panel", "posture", "ritual"] {
             if let Some(window) = app.get_webview_window(label) {
                 let _ = window.close();
@@ -156,12 +159,13 @@ pub fn quiet_changed(app: &AppHandle, game: Option<&str>) {
             .map(|inner| inner.settings.pinned)
             .unwrap_or(false);
         if pinned {
-            open_panel(app);
+            open_panel(app, false);
         }
     }
 }
 
-/// トレイのメニュー(姿勢の一行・站起来 / 坐下・看拉伸・ゲーム中)と説明を今の状態に合わせる。変わったときだけ作り直す
+/// トレイのメニュー(姿勢の一行・站起来 / 坐下・看拉伸・ゲーム中)と説明を今の状態に合わせる。
+/// 変わったときだけ、作ってある項目の文字と押せるかどうかを書き換える(メニューは作り直さない)
 pub fn refresh_tray_menu(app: &AppHandle) {
     let state = app.state::<AppState>();
     let wanted = match state.inner.lock() {
@@ -181,6 +185,7 @@ pub fn refresh_tray_menu(app: &AppHandle) {
                 status,
                 inner.posture.posture == yudh_core::posture::Posture::Standing,
                 inner.quiet.clone(),
+                inner.posture.resting,
             )
         }
         Err(_) => return,
@@ -201,43 +206,66 @@ pub fn refresh_tray_menu(app: &AppHandle) {
         None => format!("Yudh · {}", wanted.0),
     };
     let _ = tray.set_tooltip(Some(tip));
-    if let Ok(menu) = crate::tray_menu(app, &wanted.0, wanted.1, wanted.2.as_deref()) {
-        if tray.set_menu(Some(menu)).is_ok() {
-            if let Ok(mut current) = state.tray_state.lock() {
-                *current = Some(wanted);
-            }
+    let items = state.tray_items.lock();
+    if let Ok(items) = &items {
+        if let Some(items) = items.as_ref() {
+            crate::update_tray_items(items, &wanted.0, wanted.1, wanted.2.as_deref(), wanted.3);
         }
+    }
+    drop(items);
+    let current = state.tray_state.lock();
+    if let Ok(mut current) = current {
+        *current = Some(wanted);
     }
 }
 
 /// トレイから:開いていれば閉じる、閉じていれば開く。
 /// アイコンを押した瞬間(ボタンを離す前)に面板はフォーカスを失って閉じるので、閉じた直後のクリックでは開き直さない
 pub fn toggle_panel(app: &AppHandle) {
-    if let Some(window) = app.get_webview_window("panel") {
-        let _ = window.close();
-        return;
-    }
-    let just_closed = app
-        .state::<AppState>()
+    let state = app.state::<AppState>();
+    let just_closed = state
         .blur_closed
         .lock()
         .ok()
         .and_then(|t| *t)
         .is_some_and(|t| t.elapsed() < Duration::from_millis(500));
+    if let Some(window) = app.get_webview_window("panel") {
+        let pinned = state
+            .inner
+            .lock()
+            .map(|inner| inner.settings.pinned)
+            .unwrap_or(false);
+        if !pinned {
+            let _ = window.close();
+            return;
+        }
+        // 常駐の帯は閉じない:広げていれば帯に戻し、帯なら広げる(押した瞬間に帯に戻ったばかりなら、そのまま)
+        let expanded = state.panel_expanded.lock().map(|e| *e).unwrap_or(false);
+        if expanded {
+            collapse_panel(app);
+        } else if !just_closed {
+            let _ = window.set_focus();
+            let _ = app.emit_to("panel", "panel-expand", ());
+        }
+        return;
+    }
     if just_closed {
         return;
     }
-    open_panel(app);
+    open_panel(app, true);
 }
 
 /// 面板を開く(開いていれば前に出す)。まず細い帯で、タスクバーを除いた範囲の右下(タスクバーが横や上にあっても重ならない)。
 /// 覚えている位置は左下の角(帯でも全体でも下の辺が同じ所に来る)
-pub fn open_panel(app: &AppHandle) {
+/// focus = false:自動で出すとき(起動時・ゲームのあとの常駐の帯)。ゲームのランチャーなどからフォーカスを取らない
+pub fn open_panel(app: &AppHandle, focus: bool) {
     if quiet(app) {
         return;
     }
     if let Some(window) = app.get_webview_window("panel") {
-        let _ = window.set_focus();
+        if focus {
+            let _ = window.set_focus();
+        }
         return;
     }
     let saved = app
@@ -263,7 +291,7 @@ pub fn open_panel(app: &AppHandle) {
         .resizable(false)
         .skip_taskbar(true)
         .always_on_top(true)
-        .focused(true)
+        .focused(focus)
         .build();
     let Ok(window) = built else {
         return;
@@ -288,6 +316,9 @@ pub fn open_panel(app: &AppHandle) {
             if pinned {
                 let expanded = state.panel_expanded.lock().map(|e| *e).unwrap_or(false);
                 if expanded {
+                    if let Ok(mut t) = state.blur_closed.lock() {
+                        *t = Some(Instant::now());
+                    }
                     collapse_panel(&handle);
                 }
                 return;
@@ -361,6 +392,9 @@ pub fn collapse_panel(app: &AppHandle) {
 /// 坐站の小窓を、いまの状態に合わせて出す / 閉じる / 中身を更新する
 pub fn sync_posture(app: &AppHandle) {
     if quiet(app) {
+        if let Ok(mut inner) = app.state::<AppState>().inner.lock() {
+            inner.preview = None;
+        }
         if let Some(window) = app.get_webview_window("posture") {
             let _ = window.close();
         }
@@ -403,6 +437,15 @@ pub fn sync_posture(app: &AppHandle) {
                 .build();
             if let Ok(window) = built {
                 remember_position(&window, app, |s| &mut s.posture_pos, false);
+                // 小窓がどう閉じても(Alt+F4 など)试做は終わり。残ると次の切り替えで试做が出てしまう
+                let handle = app.clone();
+                window.on_window_event(move |event| {
+                    if let WindowEvent::Destroyed = event {
+                        if let Ok(mut inner) = handle.state::<AppState>().inner.lock() {
+                            inner.preview = None;
+                        }
+                    }
+                });
             }
         }
         (false, Some(window)) => {

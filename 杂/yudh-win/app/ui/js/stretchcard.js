@@ -64,8 +64,13 @@ export function countRow({ seconds, unit, note, set = "count-black", fallbackPx 
 }
 
 /** 「坐 | 站」の札:姿勢という「もの」。いまの側が黒、押すと返る(帯・トレイ・小窓・今天で同じ) */
-export function postureChip(posture, onFlip, { onKraft = false } = {}) {
-  const el = h("button", { class: `posture-chip row${onKraft ? " on-kraft" : ""}`, title: "点一下换姿势：刚被叫的话等于「说错了」", "data-no-drag": "" });
+export function postureChip(posture, onFlip, { onKraft = false, disabled = false } = {}) {
+  const el = h("button", {
+    class: `posture-chip row${onKraft ? " on-kraft" : ""}`,
+    title: disabled ? "休息中，不用换" : "点一下换姿势：刚被叫的话等于「说错了」",
+    "data-no-drag": "",
+    disabled,
+  });
   for (const [key, label] of [
     ["sitting", "坐"],
     ["standing", "站"],
@@ -76,7 +81,7 @@ export function postureChip(posture, onFlip, { onKraft = false } = {}) {
   }
   el.addEventListener("click", (e) => {
     e.stopPropagation();
-    onFlip?.();
+    if (!disabled) onFlip?.();
   });
   return el;
 }
