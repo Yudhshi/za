@@ -13,7 +13,7 @@
 坐站小窗是贴在混凝土上的牛皮纸：顶端一条皱纹纸胶带当把手（STAND UP / STRETCH / SIT DOWN），主按钮是青色喷漆块；站立中的拉伸用一条古埃及壁画式的三格带（做完的淡、当前的满、之后的只剩模板空框），「转肩」的箭头换成了哪吒的混天绫。
 面板浮在屏幕中央（不再挂在菜单栏图标下面）：点菜单栏图标打开，拖动「TUESDAY」可以移动，位置会记住；点外面、按 Esc 或再点图标关闭。小窗拖顶上的胶带可以移动。
 现在只有夜间版；日间版（浅色混凝土）以后按同一套 tokens 另做一组素材。
-页面里不放 app 图标。图标是紫底 + 荧光绿墨迹（2026-09-30 去掉了中间的「Y」；源文件 `Resources/AppIcon/AppIcon.svg`）。
+页面里不放 app 图标。图标是「30/30」：混凝土墙上用模板喷的钟，坐的一半是灰漆、站的一半喷青，橙色的针指着站的那边（2026-10-04；Mac 和 Windows 同一张图，源文件由 `scripts/make-icon-svg.py` 生成到 `Resources/AppIcon/`）。
 界面按 OOUI（面向对象的 UI）组织：从会议、任务、单词这些「对象」的列表里选一个，再对它做操作。
 不向任何外部服务发送数据（只用日历、通知和 macOS 自带的朗读）。
 
@@ -125,7 +125,8 @@ swift run nippo-tests   # 测试（CLT 没有 XCTest，所以用自带的简易�
 swift build             # 检查能否编译
 ```
 
-重画图标后，用 `node scripts/make-icon.mjs` 重新生成 `Resources/AppIcon/AppIcon.icns`
+改图标：`python3 scripts/make-icon-svg.py` 生成 `Resources/AppIcon/` 里的 6 张 SVG（Mac 大 / 小 / 16px，Windows 大 / 小 / 托盘），
+再用 `node scripts/make-icon.mjs` 一次生成 `AppIcon.icns` 和 `../yudh-win/app/src-tauri/icons/` 的 png 与 `icon.ico`
 （需要 `npm i -g playwright && npx playwright install chromium`）。旧的计划文档在 `docs/archive/`。
 用 `swift run NippoApp` 运行时，英语素材、材质和字体都从仓库的 `Resources/` 读取。
 

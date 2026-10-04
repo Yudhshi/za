@@ -1,36 +1,18 @@
-"""Yudh icon v12 (Stencil Turf): a 2x2 turf board sprayed on black lacquer.
-gen(inset, radius, detail) -> SVG text, 1024 viewBox."""
-import random, sys, math
+"""Yudh icon 「30/30」: a clock sprayed on a concrete wall, the sit half grey and the stand half teal.
+gen(tier) -> SVG text, 1024 viewBox. Tiers: mac / mac-small / mac-tiny (macOS grid) and win / win-small / win-tiny (Windows)."""
+import math, pathlib, random, sys
 
 TEAL, ORANGE, BLACK = "#12e9d3", "#ff6412", "#161615"
+CONCRETE, GREY_M, GREY_L = "#3a3d40", "#53585c", "#abafb2"
+C = 512
 
-def star_path(cx, cy, r_out, r_in):
-    pts = []
-    for i in range(10):
-        a = -math.pi / 2 + i * math.pi / 5
-        r = r_out if i % 2 == 0 else r_in
-        pts.append(f"{cx + r*math.cos(a):.1f},{cy + r*math.sin(a):.1f}")
-    return "M" + " L".join(pts) + " Z"
+# 板(角丸の地)の位置と半径。mac は macOS のアイコン格子(1024 の中に 824 角)
+PLATES = {
+    "mac": (100, 185), "mac-small": (100, 185), "mac-tiny": (100, 185),
+    "win": (28, 210), "win-small": (16, 170), "win-tiny": (0, 150),
+}
 
-def gen(inset=100, radius=185, detail=True, seed=7, tiny=False, shadow=False):
-    rnd = random.Random(seed)
-    size = 1024 - 2 * inset
-    pad = size * 0.17
-    gap = size * 0.075
-    cell = (size - 2 * pad - gap) / 2
-    x0 = y0 = inset + pad
-    cells = [(x0, y0), (x0 + cell + gap, y0), (x0, y0 + cell + gap), (x0 + cell + gap, y0 + cell + gap)]
-    rough = 'filter="url(#spray)"' if detail else ""
-    out = [f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">']
-    out.append("""  <!--
-    Yudh のアプリアイコン v12「Stencil Turf」:黒漆の地に、地盘格(英語の盘面)の 2×2 を喷漆で。
-    青 3 マス(うち 1 つは模板の星 = 太简单)、右下は今のマス(橙の点線)。色は界面と同じ(青 #12e9d3・橙 #ff6412・黒 #161615)。
-    macOS のアイコン格子(1024 の中に 824 角の角丸)。Windows 用は余白を詰めて同じ図を書き出す(scripts/make-icon.mjs)
-  -->""")
-    out.append("  <defs>")
-    out.append(f'    <clipPath id="sq"><rect x="{inset}" y="{inset}" width="{size}" height="{size}" rx="{radius}" ry="{radius}"/></clipPath>')
-    if detail:
-        out.append("""    <filter id="spray" x="-6%" y="-6%" width="112%" height="112%">
+DEFS = """    <filter id="spray" x="-6%" y="-6%" width="112%" height="112%">
       <feTurbulence type="fractalNoise" baseFrequency="0.035" numOctaves="2" seed="3" result="n"/>
       <feDisplacementMap in="SourceGraphic" in2="n" scale="9" xChannelSelector="R" yChannelSelector="G" result="d"/>
       <feTurbulence type="fractalNoise" baseFrequency="0.012" numOctaves="3" seed="11" result="m"/>
@@ -41,77 +23,115 @@ def gen(inset=100, radius=185, detail=True, seed=7, tiny=False, shadow=False):
     <filter id="grain" x="0" y="0" width="100%" height="100%">
       <feTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves="2" seed="5"/>
       <feColorMatrix type="matrix" values="0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  0 0 0 0.07 0"/>
-    </filter>""")
-        out.append(f'    <radialGradient id="lacquer" cx="38%" cy="28%" r="85%"><stop offset="0" stop-color="#2b2d2f"/><stop offset="1" stop-color="{BLACK}"/></radialGradient>')
+    </filter>
+    <filter id="concrete" x="0" y="0" width="100%" height="100%">
+      <feTurbulence type="fractalNoise" baseFrequency="0.016" numOctaves="3" seed="21" result="m"/>
+      <feColorMatrix in="m" type="matrix" values="0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  0 0 0 0.16 -0.05" result="mottle"/>
+      <feTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves="1" seed="4" result="s"/>
+      <feColorMatrix in="s" type="matrix" values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 2.2 -1.5" result="pits"/>
+      <feMerge><feMergeNode in="mottle"/><feMergeNode in="pits"/></feMerge>
+    </filter>"""
+
+
+def half(r, gap, side):
+    """Half disc at the centre, pulled gap/2 away from the stencil bridge. side = -1 (sit, left) / 1 (stand, right)."""
+    x = C + side * gap / 2
+    sweep = 0 if side < 0 else 1
+    return f"M{x},{C - r} A{r},{r} 0 0 {sweep} {x},{C + r} Z"
+
+
+def hand(ang_deg, L, w, edge):
+    a = math.radians(ang_deg - 90)
+    hx, hy = C + math.cos(a) * L, C + math.sin(a) * L
+    line = f'x1="{C}" y1="{C}" x2="{hx:.1f}" y2="{hy:.1f}" stroke-linecap="round"'
+    return [f'<line {line} stroke="{BLACK}" stroke-width="{w + 2 * edge}"/>',
+            f'<line {line} stroke="{ORANGE}" stroke-width="{w}"/>']
+
+
+def detailed():
+    """大きいサイズ:坐の半分は水泥灰の漆(細かい粒)、站の半分は青を喷漆で。刻度は模板の切り欠き(下の墙が見える)、
+    真ん中の縦の隙間は模板の桥。周りに青の飞沫。針は 4 時(120°)= 站の側。"""
+    r, gap = 318, 18
+    o = [f'<clipPath id="sit"><path d="{half(r, gap, -1)}"/></clipPath>',
+         f'<path d="{half(r, gap, -1)}" fill="{GREY_M}"/>',
+         '<rect width="1024" height="1024" filter="url(#grain)" clip-path="url(#sit)"/>',
+         f'<path d="{half(r, gap, 1)}" fill="{TEAL}" filter="url(#spray)"/>']
+    rnd = random.Random(2)
+    for _ in range(30):
+        a = rnd.uniform(0, 2 * math.pi)
+        d = rnd.uniform(300, 380)
+        o.append(f'<circle cx="{C + 160 + math.cos(a) * d:.1f}" cy="{C + math.sin(a) * d:.1f}" r="{rnd.uniform(2, 7):.1f}" '
+                 f'fill="{TEAL}" opacity="{rnd.uniform(0.35, 0.9):.2f}"/>')
+    for i in range(12):
+        if i in (0, 6):  # 12 時と 6 時は桥の上
+            continue
+        a = math.radians(i * 30 - 90)
+        L, w = (70, 22) if i % 3 == 0 else (44, 16)
+        o.append(f'<line x1="{C + math.cos(a) * (r + 4):.1f}" y1="{C + math.sin(a) * (r + 4):.1f}" '
+                 f'x2="{C + math.cos(a) * (r - L):.1f}" y2="{C + math.sin(a) * (r - L):.1f}" stroke="{CONCRETE}" stroke-width="{w}"/>')
+    o += hand(120, r * 0.78, 46, 13)
+    o.append(f'<circle cx="{C}" cy="{C}" r="40" fill="{BLACK}"/>')
+    o.append(f'<circle cx="{C}" cy="{C}" r="14" fill="{GREY_L}"/>')
+    return o
+
+
+def simple(hub=True):
+    """小さいサイズ:質感・刻度・飞沫なし。円を大きく、針を太く。"""
+    r, gap = 440, 30
+    o = [f'<path d="{half(r, gap, -1)}" fill="{GREY_M}"/>', f'<path d="{half(r, gap, 1)}" fill="{TEAL}"/>']
+    o += hand(120, r * 0.76, 110, 34)
+    if hub:
+        o.append(f'<circle cx="{C}" cy="{C}" r="84" fill="{BLACK}"/>')
+    return o
+
+
+def gen(tier):
+    inset, radius = PLATES[tier]
+    size = 1024 - 2 * inset
+    detail = tier in ("mac", "win")
+    shadow = tier == "mac"
+    # 中身は mac の板(824)/ 小さい板(992)を基準に描いて、板の大きさに合わせて拡大縮小する
+    k = size / (824 if detail else 992)
+    body = detailed() if detail else simple(hub=not tier.endswith("tiny"))  # 16px では軸が黒い塊になる
+    out = ['<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">']
+    out.append("""  <!--
+    Yudh のアプリアイコン「30/30」:水泥の墙に模板で喷いた時計。左(坐)の半分は灰の漆、右(站)の半分は青(#12e9d3)。
+    針は橙(#ff6412)で站の側を指す。刻度は模板の切り欠き、真ん中の縦の隙間は模板の桥。scripts/make-icon-svg.py が作る
+  -->""")
+    out.append("  <defs>")
+    if detail:
+        out.append(DEFS)
     if shadow:
         out.append('    <filter id="drop" x="-10%" y="-10%" width="120%" height="125%"><feDropShadow dx="0" dy="12" stdDeviation="14" flood-color="#000" flood-opacity="0.3"/></filter>')
+    out.append(f'    <clipPath id="plate"><rect x="{inset}" y="{inset}" width="{size}" height="{size}" rx="{radius}" ry="{radius}"/></clipPath>')
     out.append("  </defs>")
     if shadow:
         out.append('  <g filter="url(#drop)">')
-    out.append('  <g clip-path="url(#sq)">')
-    out.append(f'    <rect width="1024" height="1024" fill="{"url(#lacquer)" if detail else BLACK}"/>')
+    out.append('  <g clip-path="url(#plate)">')
+    out.append(f'    <rect width="1024" height="1024" fill="{CONCRETE}"/>')
     if detail:
+        out.append('    <rect width="1024" height="1024" filter="url(#concrete)"/>')
         out.append('    <rect width="1024" height="1024" filter="url(#grain)"/>')
-        # overspray around the teal cells
-        for (cx, cy), color in zip(cells[:3], [TEAL] * 3):
-            for _ in range(26):
-                ang = rnd.uniform(0, 2 * math.pi)
-                dist = rnd.uniform(0.52, 0.78) * cell
-                px = cx + cell / 2 + math.cos(ang) * dist
-                py = cy + cell / 2 + math.sin(ang) * dist
-                rr = rnd.uniform(1.6, 5.5)
-                out.append(f'    <circle cx="{px:.1f}" cy="{py:.1f}" r="{rr:.1f}" fill="{color}" opacity="{rnd.uniform(0.35, 0.85):.2f}"/>')
-    # three teal cells
-    for i, (cx, cy) in enumerate(cells[:3]):
-        out.append(f'    <rect x="{cx:.1f}" y="{cy:.1f}" width="{cell:.1f}" height="{cell:.1f}" fill="{TEAL}" {rough}/>')
-    # stencil star on the top-right cell, with a vertical bridge
-    cx, cy = cells[1]
-    scx, scy = cx + cell / 2, cy + cell / 2 + cell * 0.03
-    bridge = cell * 0.055
-    out.append(f'    <mask id="bridge"><rect width="1024" height="1024" fill="#fff"/>'
-               f'<rect x="{scx - bridge/2:.1f}" y="{cy:.1f}" width="{bridge:.1f}" height="{cell:.1f}" fill="#000"/></mask>')
-    if not tiny:
-        out.append(f'    <path d="{star_path(scx, scy, cell*0.30, cell*0.13)}" fill="{BLACK}" fill-opacity="0.92" mask="url(#bridge)"/>')
-    # orange dashed current cell: corners + middle dashes
-    cx, cy = cells[3]
-    w = cell * (0.115 if detail else 0.15)
-    a = w / 2
-    L = cell * 0.24           # corner arm
-    m = cell * 0.14           # middle dash
-    x1, y1, x2, y2 = cx + a, cy + a, cx + cell - a, cy + cell - a
-    mid = cell / 2
-    segs = [
-        f"M{x1:.1f},{y1+L:.1f} L{x1:.1f},{y1:.1f} L{x1+L:.1f},{y1:.1f}",
-        f"M{x2-L:.1f},{y1:.1f} L{x2:.1f},{y1:.1f} L{x2:.1f},{y1+L:.1f}",
-        f"M{x2:.1f},{y2-L:.1f} L{x2:.1f},{y2:.1f} L{x2-L:.1f},{y2:.1f}",
-        f"M{x1+L:.1f},{y2:.1f} L{x1:.1f},{y2:.1f} L{x1:.1f},{y2-L:.1f}",
-    ]
-    if detail:
-        segs += [
-            f"M{cx+mid-m/2:.1f},{y1:.1f} L{cx+mid+m/2:.1f},{y1:.1f}",
-            f"M{cx+mid-m/2:.1f},{y2:.1f} L{cx+mid+m/2:.1f},{y2:.1f}",
-            f"M{x1:.1f},{cy+mid-m/2:.1f} L{x1:.1f},{cy+mid+m/2:.1f}",
-            f"M{x2:.1f},{cy+mid-m/2:.1f} L{x2:.1f},{cy+mid+m/2:.1f}",
-        ]
-    if tiny:
-        segs = [f"M{x1:.1f},{y1:.1f} L{x2:.1f},{y1:.1f} L{x2:.1f},{y2:.1f} L{x1:.1f},{y2:.1f} Z"]
-    out.append(f'    <path d="{" ".join(segs)}" fill="none" stroke="{ORANGE}" stroke-width="{w:.1f}" stroke-linejoin="miter" {rough}/>')
+    out.append(f'    <g transform="translate({C} {C}) scale({k:.4f}) translate(-{C} -{C})">')
+    out += ["      " + x for x in body]
+    out.append("    </g>")
     out.append("  </g>")
     if detail:
-        # a thin lacquer rim so the edge reads on dark docks
-        out.append(f'  <rect x="{inset+1.5}" y="{inset+1.5}" width="{size-3}" height="{size-3}" rx="{radius}" ry="{radius}" fill="none" stroke="#ffffff" stroke-opacity="0.08" stroke-width="3"/>')
+        # 暗い Dock でも縁が見えるように、ごく薄い明るい縁
+        out.append(f'  <rect x="{inset + 1.5}" y="{inset + 1.5}" width="{size - 3}" height="{size - 3}" rx="{radius}" ry="{radius}" fill="none" stroke="#ffffff" stroke-opacity="0.08" stroke-width="3"/>')
     if shadow:
         out.append("  </g>")
     out.append("</svg>")
     return "\n".join(out) + "\n"
 
+
 if __name__ == "__main__":
-    # python3 scripts/make-icon-svg.py <出力先>  → mac.svg(= Resources/AppIcon/AppIcon.svg)と Windows 用 3 種
-    # mac.svg は scripts/make-icon.mjs で AppIcon.icns に、Windows 用は 16–24px = win-tiny、32–48px = win-small、
-    # それ以上 = win で PNG に書き出して ../yudh-win/app/src-tauri/icons/ の png と icon.ico にまとめる
-    import pathlib
-    d = pathlib.Path(sys.argv[1])
-    (d / "mac.svg").write_text(gen(100, 185, True, shadow=True))
-    (d / "win.svg").write_text(gen(28, 210, True))
-    (d / "win-small.svg").write_text(gen(16, 170, False))
-    (d / "win-tiny.svg").write_text(gen(0, 150, False, tiny=True))
+    # python3 scripts/make-icon-svg.py [出力先]  → 既定は Resources/AppIcon/ に 6 枚:
+    #   AppIcon.svg(mac。64px 以上)、AppIcon-small.svg(mac の 32px と 16・32pt の @2x)、AppIcon-tiny.svg(mac の 16px)、
+    #   win.svg(64px 以上)、win-small.svg(32–48px)、win-tiny.svg(16–24px = 通知領域)
+    # そのあと node scripts/make-icon.mjs で AppIcon.icns と ../yudh-win/app/src-tauri/icons/ の png・icon.ico を作る
+    d = pathlib.Path(sys.argv[1]) if len(sys.argv) > 1 else pathlib.Path(__file__).resolve().parent.parent / "Resources/AppIcon"
+    names = {"mac": "AppIcon.svg", "mac-small": "AppIcon-small.svg", "mac-tiny": "AppIcon-tiny.svg", "win": "win.svg", "win-small": "win-small.svg", "win-tiny": "win-tiny.svg"}
+    for tier, name in names.items():
+        (d / name).write_text(gen(tier))
+    print("wrote", ", ".join(names.values()), "to", d)

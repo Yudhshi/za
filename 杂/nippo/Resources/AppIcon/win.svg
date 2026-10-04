@@ -23,15 +23,13 @@
       <feColorMatrix in="s" type="matrix" values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 2.2 -1.5" result="pits"/>
       <feMerge><feMergeNode in="mottle"/><feMergeNode in="pits"/></feMerge>
     </filter>
-    <filter id="drop" x="-10%" y="-10%" width="120%" height="125%"><feDropShadow dx="0" dy="12" stdDeviation="14" flood-color="#000" flood-opacity="0.3"/></filter>
-    <clipPath id="plate"><rect x="100" y="100" width="824" height="824" rx="185" ry="185"/></clipPath>
+    <clipPath id="plate"><rect x="28" y="28" width="968" height="968" rx="210" ry="210"/></clipPath>
   </defs>
-  <g filter="url(#drop)">
   <g clip-path="url(#plate)">
     <rect width="1024" height="1024" fill="#3a3d40"/>
     <rect width="1024" height="1024" filter="url(#concrete)"/>
     <rect width="1024" height="1024" filter="url(#grain)"/>
-    <g transform="translate(512 512) scale(1.0000) translate(-512 -512)">
+    <g transform="translate(512 512) scale(1.1748) translate(-512 -512)">
       <clipPath id="sit"><path d="M503.0,194 A318,318 0 0 0 503.0,830 Z"/></clipPath>
       <path d="M503.0,194 A318,318 0 0 0 503.0,830 Z" fill="#53585c"/>
       <rect width="1024" height="1024" filter="url(#grain)" clip-path="url(#sit)"/>
@@ -82,6 +80,5 @@
       <circle cx="512" cy="512" r="14" fill="#abafb2"/>
     </g>
   </g>
-  <rect x="101.5" y="101.5" width="821" height="821" rx="185" ry="185" fill="none" stroke="#ffffff" stroke-opacity="0.08" stroke-width="3"/>
-  </g>
+  <rect x="29.5" y="29.5" width="965" height="965" rx="210" ry="210" fill="none" stroke="#ffffff" stroke-opacity="0.08" stroke-width="3"/>
 </svg>

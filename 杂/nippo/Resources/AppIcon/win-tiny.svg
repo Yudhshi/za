@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <!--
+    Yudh のアプリアイコン「30/30」:水泥の墙に模板で喷いた時計。左(坐)の半分は灰の漆、右(站)の半分は青(#12e9d3)。
+    針は橙(#ff6412)で站の側を指す。刻度は模板の切り欠き、真ん中の縦の隙間は模板の桥。scripts/make-icon-svg.py が作る
+  -->
+  <defs>
+    <clipPath id="plate"><rect x="0" y="0" width="1024" height="1024" rx="150" ry="150"/></clipPath>
+  </defs>
+  <g clip-path="url(#plate)">
+    <rect width="1024" height="1024" fill="#3a3d40"/>
+    <g transform="translate(512 512) scale(1.0323) translate(-512 -512)">
+      <path d="M497.0,72 A440,440 0 0 0 497.0,952 Z" fill="#53585c"/>
+      <path d="M527.0,72 A440,440 0 0 1 527.0,952 Z" fill="#12e9d3"/>
+      <line x1="512" y1="512" x2="801.6" y2="679.2" stroke-linecap="round" stroke="#161615" stroke-width="178"/>
+      <line x1="512" y1="512" x2="801.6" y2="679.2" stroke-linecap="round" stroke="#ff6412" stroke-width="110"/>
+    </g>
+  </g>
+</svg>
