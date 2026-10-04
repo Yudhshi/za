@@ -477,9 +477,12 @@ pub fn settle(inner: &mut Inner, now: chrono::DateTime<Utc>) -> bool {
     for t in &transitions {
         standing::record(&mut inner.settings.stand_log, &Zone::Local.key(t.at), t);
         match t.to {
-            // 立ったらまず腹式呼吸を 3 回(习惯にする。拉伸はそのあと)。「我还站着」で戻ったときはもう済んでいる
+            // 立ったらまず腹式呼吸を 3 回(习惯にする。拉伸はそのあと)。「我还站着」で戻ったときはもう済んでいる。
+            // ゲーム中に一言で立たせた回は呼吸も拉伸も出さない
             Posture::Standing => {
-                inner.breath_started = (inner.settings.breath_habit && !t.revert).then_some(now);
+                inner.breath_started =
+                    (inner.settings.breath_habit && !t.revert && !inner.posture.brief)
+                        .then_some(now);
             }
             Posture::Sitting => inner.breath_started = None,
         }

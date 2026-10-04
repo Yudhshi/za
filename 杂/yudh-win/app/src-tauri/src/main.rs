@@ -36,7 +36,7 @@ pub struct Inner {
     pub rng: Rng,
     /// フォルダを選ぶダイアログのあいだは、面板がフォーカスを失っても閉じない
     pub picking: bool,
-    /// 名単のゲーム(AION2 など)が動いている:Yudh は窓を一切作らず、OS への問い合わせも止める
+    /// 名単のゲーム(AION2 など)が動いている:Yudh は一言の帯のほかは窓を作らず、OS への問い合わせも止める
     pub quiet: Option<String>,
     /// 設定の拉伸库の「试做」:この拉伸を小窓で流している(钟は触らない)
     pub preview: Option<Preview>,
@@ -224,7 +224,8 @@ pub fn tray_menu(app: &AppHandle) -> tauri::Result<(tauri::menu::Menu<tauri::Wry
     Ok((menu, items))
 }
 
-/// トレイの項目を今の状態に(一行・站起来 / 坐下・看拉伸・ゲーム中・休み中)
+/// トレイの項目を今の状態に(一行・站起来 / 坐下・看拉伸・ゲーム中・休み中)。
+/// 名単のゲーム中も钟は進むので、札(站起来 / 坐下)は返せる(窓は作らない)。窓を開く項目だけ止める
 pub fn update_tray_items(
     items: &TrayItems,
     status: &str,
@@ -234,15 +235,14 @@ pub fn update_tray_items(
 ) {
     let on = game.is_none();
     let status = match game {
-        Some(_) if status.starts_with("游戏中") => status.to_string(),
-        Some(name) => format!("游戏中，已暂停（{name}）"),
+        Some(_) => format!("游戏中 · {status}"),
         None => status.to_string(),
     };
     let _ = items.status.set_text(status);
     let _ = items
         .flip
         .set_text(if standing { "坐下" } else { "站起来" });
-    let _ = items.flip.set_enabled(on && !resting);
+    let _ = items.flip.set_enabled(!resting);
     let _ = items.guide.set_enabled(on && standing && !resting);
     let _ = items.ritual.set_enabled(on);
     let _ = items.panel.set_enabled(on);
@@ -315,9 +315,9 @@ fn tray_icon() -> Option<tauri::image::Image<'static>> {
     None
 }
 
-/// 30 秒ごと:坐站の钟を進める(全画面のゲーム中は出さない・長く遊んだら抜けたときにすぐ立たせる)。
-/// 名単のゲーム(AION2 など)が動いているあいだは「完全に安静」:開いている窓を閉じ、窓を作らず、
-/// 無操作・全画面も問い合わせない(ゲーム中として計時だけ続け、抜けたら長いゲームの規則ですぐ立たせる)
+/// 30 秒ごと:坐站の钟を進める。全画面のゲーム中も钟は進み、切り替えは一言の細い帯で言う(手順の小窓は出さない)。
+/// 名単のゲーム(AION2 など)が動いているあいだは開いている窓を閉じ、その帯のほかは窓を作らず、
+/// 無操作・全画面も問い合わせない(ゲーム中として钟を進める)
 fn ticker(app: AppHandle) {
     let mut last_tick = Utc::now();
     loop {
@@ -368,7 +368,7 @@ fn ticker(app: AppHandle) {
         if entered || left {
             surfaces::quiet_changed(&app, game.as_deref());
         }
-        if changed && game.is_none() {
+        if changed {
             surfaces::sync_posture(&app);
         }
         // トレイの一行(已坐 N 分钟 …)は毎分変わる。帯が出ていればそちらも

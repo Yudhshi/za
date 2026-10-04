@@ -1,6 +1,7 @@
 //! 窓の出し入れ:面板(タスクバーのそば、フォーカスを失ったら閉じる。常駐の帯なら帯に戻る)・坐站の小窓(画面上部の中央、フォーカスを奪わない)・
-//! 日课の窓(ふつうの窓)。どれも閉じたら捨てる。位置はマウスのある画面の、タスクバーを除いた範囲で決める。
-//! 名単のゲームが動いているあいだは、どの窓も作らない(反作弊に「ゲームの上に被さる窓」と見られないように)
+//! ゲーム中の一言の帯(坐站の小窓の所に細く。押してもフォーカスを取らない)・日课の窓(ふつうの窓)。どれも閉じたら捨てる。
+//! 位置はマウスのある画面の、タスクバーを除いた範囲で決める。
+//! 名単のゲームが動いているあいだは、一言の帯のほかは窓を作らない(ゲームの上に被さるのは 12 秒の細い帯だけ)
 
 use std::time::{Duration, Instant};
 
@@ -8,6 +9,8 @@ use tauri::{
     AppHandle, Emitter, LogicalPosition, LogicalSize, Manager, WebviewUrl, WebviewWindow,
     WebviewWindowBuilder, WindowEvent,
 };
+
+use yudh_core::posture::Prompt;
 
 use crate::settings::Settings;
 use crate::AppState;
@@ -35,6 +38,8 @@ fn builder<'a>(
 }
 /// 坐站の小窓(牛皮纸 360 + はみ出し。高さは中身に合わせて画面側が変える)
 const POSTURE_SIZE: (f64, f64) = (400.0, 520.0);
+/// ゲーム中の一言の帯(「站起来」/「坐下」と一行だけ。ゲームの邪魔にならない大きさ)
+const NOTE_SIZE: (f64, f64) = (320.0, 76.0);
 
 /// マウスのある画面の、タスクバーを除いた範囲(論理 px:x, y, 幅, 高さ)。
 /// 取れなければ主画面、それも無ければ 1920×1040
@@ -128,7 +133,7 @@ fn just_moved_by_us(app: &AppHandle) -> bool {
         .is_some_and(|t| t.elapsed() < Duration::from_millis(1000))
 }
 
-/// 名単のゲームが動いているか(動いていれば窓を作らない)
+/// 名単のゲームが動いているか(動いていれば一言の帯のほかは窓を作らない)
 fn quiet(app: &AppHandle) -> bool {
     app.state::<AppState>()
         .inner
@@ -171,18 +176,8 @@ pub fn refresh_tray_menu(app: &AppHandle) {
     let wanted = match state.inner.lock() {
         Ok(inner) => {
             let now = chrono::Utc::now();
-            let status = match (&inner.quiet, inner.posture.game_since) {
-                // 安静モードの説明は許される範囲(窓は作らない):長く遊んでいればその長さも
-                (Some(name), Some(start)) if now - start >= chrono::Duration::minutes(90) => {
-                    format!(
-                        "游戏中 · 已 {}（{name}）",
-                        yudh_core::standing::minutes_text((now - start).num_minutes())
-                    )
-                }
-                _ => crate::commands::status_line(&inner, now),
-            };
             (
-                status,
+                crate::commands::status_line(&inner, now),
                 inner.posture.posture == yudh_core::posture::Posture::Standing,
                 inner.quiet.clone(),
                 inner.posture.resting,
@@ -202,7 +197,7 @@ pub fn refresh_tray_menu(app: &AppHandle) {
         return;
     };
     let tip = match &wanted.2 {
-        Some(name) => format!("Yudh · 游戏中，已暂停（{name}）"),
+        Some(name) => format!("Yudh · 游戏中（{name}）· {}", wanted.0),
         None => format!("Yudh · {}", wanted.0),
     };
     let _ = tray.set_tooltip(Some(tip));
@@ -389,24 +384,23 @@ pub fn collapse_panel(app: &AppHandle) {
     let _ = app.emit_to("panel", "panel-collapsed", ());
 }
 
-/// 坐站の小窓を、いまの状態に合わせて出す / 閉じる / 中身を更新する
+/// 坐站の小窓を、いまの状態に合わせて出す / 閉じる / 中身を更新する。
+/// ゲーム中の切り替え(一言の帯)は別の細い窓。名単のゲーム中に出すのはその帯だけ(试做もやめる)
 pub fn sync_posture(app: &AppHandle) {
-    if quiet(app) {
-        if let Ok(mut inner) = app.state::<AppState>().inner.lock() {
-            inner.preview = None;
+    let quiet = quiet(app);
+    let (prompt, preview) = match app.state::<AppState>().inner.lock() {
+        Ok(mut inner) => {
+            if quiet {
+                inner.preview = None;
+            }
+            (inner.posture.prompt, inner.preview.is_some())
         }
-        if let Some(window) = app.get_webview_window("posture") {
-            let _ = window.close();
-        }
-        return;
-    }
-    let wanted = app
-        .state::<AppState>()
-        .inner
-        .lock()
-        .map(|inner| inner.posture.prompt.is_some() || inner.preview.is_some())
-        .unwrap_or(false);
+        Err(_) => return,
+    };
+    let brief = prompt == Some(Prompt::Brief);
+    let wanted = !quiet && !brief && (prompt.is_some() || preview);
     refresh_tray_menu(app);
+    sync_note(app, brief);
     let existing = app.get_webview_window("posture");
     match (wanted, existing) {
         (true, Some(_)) => {
@@ -447,6 +441,47 @@ pub fn sync_posture(app: &AppHandle) {
                     }
                 });
             }
+        }
+        (false, Some(window)) => {
+            let _ = window.close();
+        }
+        (false, None) => {}
+    }
+}
+
+/// ゲーム中の一言の帯を出す / 閉じる / 中身を更新する。坐站の小窓を置いた所(無ければ画面上部の中央)に細く。
+/// フォーカスを取らず、押しても取らない(ゲームから入力を奪わない)。画面側が 12 秒で閉じる。
+/// 透けない窓にする(縁のぼかしや透過で「ゲームに重ねる窓」の形にしない)
+fn sync_note(app: &AppHandle, wanted: bool) {
+    match (wanted, app.get_webview_window("note")) {
+        (true, Some(_)) => {
+            let _ = app.emit_to("note", "posture-changed", ());
+        }
+        (true, None) => {
+            let saved = app
+                .state::<AppState>()
+                .inner
+                .lock()
+                .ok()
+                .and_then(|inner| inner.settings.posture_pos);
+            let (x, y) = saved_position(app, saved, POSTURE_SIZE.0)
+                .map(|(x, y)| (x + (POSTURE_SIZE.0 - NOTE_SIZE.0) / 2.0, y + 12.0))
+                .unwrap_or_else(|| {
+                    let (ax, ay, aw, _) = area(app);
+                    (ax + ((aw - NOTE_SIZE.0) / 2.0).max(0.0), ay + 12.0)
+                });
+            let _ = builder(app, "note", "note.html")
+                .inner_size(NOTE_SIZE.0, NOTE_SIZE.1)
+                .position(x, y)
+                .decorations(false)
+                .shadow(false)
+                .resizable(false)
+                .skip_taskbar(true)
+                .always_on_top(true)
+                .focused(false)
+                .focusable(false)
+                .background_color(tauri::window::Color(0x29, 0x2c, 0x2f, 0xff))
+                .build();
         }
         (false, Some(window)) => {
             let _ = window.close();

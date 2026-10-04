@@ -318,7 +318,8 @@ function phase() {
 
 /** いまの画面の鍵:これが変わったときだけ作り直す(呼吸は吸う / 吐くの切り替わりごと、拉伸は手順ごと) */
 function stateKey() {
-  if (!view?.prompt) return "none";
+  // ゲーム中の一言の帯は別の窓(note.html)。この小窓では何も描かない
+  if (!view?.prompt || view.prompt === "brief") return "none";
   if (view.prompt === "sit") return `sit|${view.since}`;
   const p = phase();
   if (p === "announce") return `announce|${view.since}`;
@@ -339,7 +340,7 @@ function render() {
     if (drawnKey && key.startsWith("stretch|")) swap();
   }
   drawnKey = key;
-  if (!view?.prompt) return clear(sheet);
+  if (key === "none") return clear(sheet);
   // 閉じようとして剥がしたのに、まだ見せるものがある(试做を閉じたら钟の手順が残っていた):剥がしたままにしない
   $("wrap").classList.remove("leaving");
   // 切り替えの音は切り替えた直後に一度(钟が自分で切り替えたときだけ。あとで小窓を開き直したときや、トレイから開いたときは鳴らさない)
@@ -383,7 +384,7 @@ function render() {
 
 /** 4 分の 1 秒ごと:画面の鍵が変わっていれば作り直し、同じなら秒の数字だけ差し替える */
 function tick() {
-  if (!view?.prompt) return;
+  if (!view?.prompt || view.prompt === "brief") return;
   if (stateKey() !== drawnKey) {
     render();
     return;

@@ -1,5 +1,6 @@
 // ブラウザで画面を確かめるための見本(Tauri の中では読まない)。
 // posture.html?prompt=standing|sit、&phase=announce|breath|stretch|done、&step=N、&manual=1(トレイから開いた)、&preview=1(试做)
+// note.html?prompt=brief(ゲーム中の一言の帯。&posture=sitting で「坐下」)
 // index.html?welcome=0(初回の説明)、?configured=0、?pinned=1(常駐の帯)、?resting=1(夜)、?off=1(坐站提醒を切った)、?tomorrow=none、?new=1
 // ritual.html?embed=1(Rust と同じ埋め込みの地址。外のサイトを読む)
 
@@ -140,7 +141,7 @@ const handlers = {
     const current = steps[Math.min(step, steps.length - 1)];
     return {
       prompt,
-      posture: prompt === "sit" ? "sitting" : "standing",
+      posture: prompt === "sit" || q.get("posture") === "sitting" ? "sitting" : "standing",
       since,
       dueAt: since + 30 * 60 * 1000,
       announced: !preview && q.get("manual") !== "1",
