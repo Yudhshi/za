@@ -270,16 +270,16 @@ final class EnglishCoordinator: ObservableObject {
         // (同期フォルダから読んでいるときに自分へ写し直さない)
         let librarySource = loaded && libraryExport() ? Self.bundledDirectory() : nil
         Task.detached(priority: .utility) { [weak self] in
-            let imported: Int
-            let failure: String?
+            // 取り込んだ数と失敗(取り込んだあとの書き出しで失敗しても、取り込みは 0 とする)
+            let outcome: (imported: Int, failure: String?)
             do {
-                imported = try sync.pull()
+                let pulled = try sync.pull()
                 try sync.push()
-                failure = nil
+                outcome = (pulled, nil)
             } catch {
-                imported = 0
-                failure = "\(error)"
+                outcome = (0, "\(error)")
             }
+            let (imported, failure) = outcome
             // 語表の写しが失敗しても同期そのものは失敗にしない(ログだけ)
             let libraryFailure: String? = {
                 guard let librarySource else { return nil }
