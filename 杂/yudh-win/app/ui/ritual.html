@@ -1,0 +1,205 @@
+<!doctype html>
+<html lang="zh-Hans">
+  <head>
+    <meta charset="utf-8" />
+    <title>泡完澡后的日课</title>
+    <link rel="stylesheet" href="css/turf.css" />
+    <style>
+      html,
+      body {
+        height: 100%;
+      }
+      body {
+        background: var(--surface);
+      }
+      .page {
+        height: 100%;
+        display: flex;
+        gap: 28px;
+        padding: 22px 28px 24px;
+      }
+      .main {
+        flex: 1;
+        min-width: 0;
+        display: flex;
+        flex-direction: column;
+        gap: 18px;
+      }
+      .header {
+        gap: 14px;
+        align-items: baseline;
+      }
+      .subtitle {
+        color: var(--text-2);
+        font-size: 15px;
+        font-weight: 500;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .stage {
+        flex: 1;
+        min-height: 0;
+        display: flex;
+        gap: 32px;
+        align-items: flex-start;
+      }
+      .video {
+        flex: 1;
+        align-self: stretch;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: #000;
+      }
+      .video iframe {
+        width: 100%;
+        aspect-ratio: 16 / 9;
+        max-height: 100%;
+        border: 0;
+      }
+      .sheet {
+        position: relative;
+        isolation: isolate;
+        width: 400px;
+        flex: none;
+        padding: 30px 24px 22px;
+        color: var(--kraft-text);
+      }
+      .sheet.fallback {
+        background: var(--kraft);
+        border-radius: 10px;
+      }
+      .sheet .head {
+        gap: 8px;
+      }
+      .sheet .label {
+        font-size: 15px;
+        font-weight: 900;
+      }
+      .sheet .body {
+        gap: 14px;
+        margin-top: 8px;
+        align-items: center;
+      }
+      .sheet .col {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+      }
+      .sheet .heading {
+        font-size: 20px;
+        font-weight: 800;
+      }
+      .sheet .heading.far {
+        font-size: 24px;
+        font-weight: 900;
+        line-height: 1.15;
+      }
+      .sheet .text {
+        font-size: 15px;
+        font-weight: 700;
+        line-height: 1.45;
+      }
+      .sheet .time-row {
+        margin-top: 12px;
+        gap: 12px;
+        align-items: baseline;
+        min-height: 64px;
+      }
+      .sheet .muted,
+      .prep {
+        font-size: 12px;
+        font-weight: 600;
+        color: var(--kraft-text-2);
+        line-height: 1.45;
+      }
+      .sheet .muted {
+        margin-top: 10px;
+      }
+      .chip {
+        align-self: flex-start;
+        display: inline-flex;
+        align-items: center;
+        height: 24px;
+        padding: 0 10px;
+        color: var(--white);
+        font-family: var(--mono);
+        font-size: 12px;
+        font-weight: 700;
+      }
+      .dots {
+        gap: 6px;
+        align-items: center;
+      }
+      .upcoming {
+        max-width: 300px;
+        padding-top: 24px;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+      }
+      .controls {
+        gap: 14px;
+      }
+      .list {
+        width: 210px;
+        flex: none;
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+      }
+      .item {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        min-height: 26px;
+        color: var(--text-2);
+        font-size: 14px;
+        font-weight: 500;
+        text-align: left;
+      }
+      .item.is-current {
+        position: relative;
+        isolation: isolate;
+        color: var(--black);
+        font-weight: 900;
+        padding: 0 10px;
+        margin: 0 -10px;
+      }
+      .item-note {
+        font-family: var(--mono);
+        font-size: 11px;
+        font-weight: 600;
+        color: var(--text-2);
+      }
+      .item.is-current .item-note {
+        color: var(--card-text-2);
+      }
+      .item.is-later .icon {
+        opacity: 0.4;
+      }
+      .done {
+        display: flex;
+        flex-direction: column;
+        gap: 14px;
+        padding-top: 24px;
+        max-width: 520px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="page">
+      <div class="main">
+        <div class="header row">
+          <span class="t-title">泡完澡后的日课</span>
+          <span id="subtitle" class="subtitle"></span>
+        </div>
+        <div id="stage" class="stage"></div>
+        <div id="controls" class="controls row t-button"></div>
+      </div>
+      <aside id="list" class="list"></aside>
+    </div>
+    <script type="module" src="js/ritual.js"></script>
+  </body>
+</html>

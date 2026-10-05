@@ -1,7 +1,8 @@
 import Foundation
 
-/// 昇降デスクの座り/立ちの切り替えリマインド(判定だけ。通知・アイドル検出はアプリ側)。
-/// 会議中と会議の直前は出さない:予定が終わったあとの tick で出る。
+/// 昇降デスクの座り/立ちの切り替えリマインド(判定だけ。通知・アイドル検出・通話の検出はアプリ側)。
+/// 会議中と会議の直前・通話中(マイクかカメラが使われている)は出さない:終わって 1 分たってから出る。
+/// 座っていて会議が近づいたら「站着开会？」と聞く(立って会議に出るのが好き、というユーザーの希望)。
 public enum BreakReminder {
     /// 机の高さは測れないので、ユーザーの「立った/座った」で切り替える
     public enum Posture: String, Sendable {
@@ -19,48 +20,121 @@ public enum BreakReminder {
         }
     }
 
-    /// 胸郭出口症候群(TOS)でもよく勧められる、腕を頭より上げない穏やかな動きだけ。
-    /// 神経を引っぱる動き(腕を下に引きながら首を倒す等)や神経滑走は症状を誘発しうるので入れない。
-    /// 担当医・理学療法士の指示があれば設定で置き換える前提。
-    /// 形式:空行で区切った 1 ブロック = 1 つ。1 行目が名前、続く行が手順
-    public static let defaultStretches = """
-    肩甲骨寄せ(約 1 分)
-    腕を体の横に下ろし、背すじを伸ばす
-    肩をすくめずに、肩甲骨を背骨へ寄せる
-    5 秒キープして力を抜く。10 回
-
-    あご引き(約 30 秒)
-    正面を見たまま、あごを水平に後ろへ引く(二重あごを作る)
-    首を下に曲げずに 5 秒キープ
-    力を抜いて戻す。5 回
-
-    首の横伸ばし(約 1 分)
-    肩の力を抜き、背すじを伸ばす
-    頭をゆっくり左へ倒す(左耳を左肩へ)。肩は上げない
-    心地よく伸びる所で 20 秒。反対側も
-
-    胸のストレッチ(約 1 分)
-    ドア枠や壁の角に、肘を肩より低い位置で当てる
-    片足を一歩前へ出し、胸を前へ開く
-    20 秒 × 2 回。腕は肩より上げない
-
-    肩回し(約 30 秒)
-    腕の力を抜いて下ろす
-    肩を前→上→後ろ→下へ、ゆっくり大きく回す
-    後ろ回しに 10 回。痛む手前で止める
-
-    腹式呼吸(約 1 分)
-    片手をお腹に置く
-    鼻から 4 秒吸ってお腹をふくらませる(肩は上げない)
-    口から 6 秒かけて吐く。5 回
-
-    歩く(1〜2 分)
-    デスクを離れて水を飲みに行く
-    腕を自然に振って歩く
-    窓の外など遠くを 20 秒見る
+    /// 立つたびに必ずやる分:斜角肌(首の横〜鎖骨の上。狙いの筋肉は毎回。左右 × 2 つの角度 × 20 秒 ≈ 1 分半)。
+    /// 第一肋骨を手で押さえて頭を倒す。10 秒では短い(指南は 15〜30 秒)・7 つの輪番では 7 回に 1 回しか来ない、の両方を直したもの。
+    /// 空行区切りで複数も書ける。Windows の yudh-core(DEFAULT_FIXED)と同じ文
+    public static let defaultFixed = """
+    斜角肌拉伸（约 1 分半）
+    右手按住右侧锁骨下方固定第一根肋骨，头向左倒拉伸右侧颈部，右肩放松下沉，停 20 秒
+    再微微抬头看斜上方，停 20 秒
+    换左边：左手按住左侧锁骨下方，头向右倒拉伸左侧颈部，左肩放松下沉，停 20 秒
+    再微微抬头看斜上方，停 20 秒
     """
 
-    static let caution = "※しびれ・痛みが出たら中止"
+    /// 斜角肌のあとに 1 つずつ順に回す分(6 つ):張りを作る癖を直す(胸で吸う → 腹式呼吸、頭が前に出る → 收下巴、
+    /// 肩をすくめる → 耸肩放松)、肩甲骨を支える筋を使う(W 字收肩)。机の前で立ったままできるものだけで、腕は頭より上げない。
+    /// 小窓は 1 行ごとに時間が来たら自動で次へ進むので、どの行も自分の秒数・回数を持つ(秒の無い行は 10 秒の構え)。
+    /// 門枠が要る動作は入れない。担当医・理学療法士の指示があれば設定で置き換える。
+    /// 形式:空行で区切った 1 ブロック = 1 つ。1 行目が名前、続く行が手順。Windows(DEFAULT_STRETCHES)と同じ文
+    public static let defaultStretches = """
+    W 字收肩（约 2 分钟）
+    手肘贴着身体弯成 90°，手心朝前
+    前臂向外打开，同时把肩胛骨往后、往中间收，不要耸肩
+    停 5 秒后放松。做 12 次
+
+    腹式呼吸（约 1 分钟）
+    一只手放在肚子上，另一只手放在胸口
+    用鼻子吸气 4 秒只让肚子鼓起来，胸口和肩膀不动；用嘴慢慢呼气 6 秒。做 6 次
+
+    背后扣手开胸（约 1 分钟）
+    双手在背后十指相扣，手臂伸直，肩膀往后、往下
+    挺胸，手臂慢慢往后抬，不要耸肩，停 30 秒 × 2 次
+
+    肩颈三步（约 3 分钟）
+    夹肩胛骨：保持 5 秒 × 10 次
+    转肩：向后转 10 次
+    收下巴：保持 5 秒 × 10 次
+
+    耸肩放松（约 1 分钟）
+    肩膀用力耸向耳朵停 3 秒，一下子完全放下，感觉脖子两侧松开。做 8 次
+    最后向后转肩 10 次
+
+    走一走（1〜2 分钟）
+    离开座位去接杯水，手臂自然摆动地走 1 分钟
+    看窗外等远处 20 秒
+    """
+
+    /// 前の版の輪番の名前(斜角肌が先頭の 7 つ)。保存された輪番がこれと同じなら、自分で書き換えていないとみなす
+    static let legacyStretchNames = ["斜角肌拉伸（约 2 分钟）", "W 字收肩（约 1 分钟）", "腹式呼吸（约 1 分钟）",
+                                     "扩胸拉伸（约 1 分钟）", "肩颈三步（约 2 分钟）", "耸肩放松（约 1 分钟）",
+                                     "走一走（1〜2 分钟）"]
+
+    /// 前の版で保存した輪番を、斜角肌が毎回になった今の形に移す(一度だけ。AppSettings が呼ぶ)。
+    /// 既定のまま(名前が前の版の既定と同じ)なら nil = 保存を消して今の既定に。先頭が斜角肌なら、それを外した残り。
+    /// どちらでもなければ(自分で組んだ輪番)そのまま返す
+    public static func migratedStretches(_ text: String) -> String? {
+        let list = stretches(from: text)
+        if list.map(\.name) == legacyStretchNames { return nil }
+        guard let first = list.first, first.name.hasPrefix("斜角肌") else { return text }
+        return list.dropFirst()
+            .map { ([$0.name] + $0.steps).joined(separator: "\n") }
+            .joined(separator: "\n\n")
+    }
+
+    public static let caution = "※ 拉伸感可以，发麻或刺痛传到手上就停"
+
+    /// 坐站の計画(ユーザーが決めなくていいように固定。Windows の yudh-core と同じ):坐 30 → 站 30 の繰り返し。
+    /// 8 時間で約 4 時間立つ(Buckley 2015 の専門家声明:立つ・軽く動く時間を 1 日 2 時間から 4 時間へ)。
+    /// 立つのが好きな人なので上の目標から。同じ姿勢を 30 分より長く続けない(斜角肌には姿勢を変える回数が効く)
+    public static let planSitMinutes = 30
+    public static let planStandMinutes = 30
+
+    /// 手順の文の中の数(秒・回・分)。文字の代わりに図と数字で見せるために取り出す
+    public struct StepMeta: Equatable, Sendable {
+        public var seconds: Int?
+        public var reps: Int?
+        public var minutes: Int?
+
+        public init(seconds: Int? = nil, reps: Int? = nil, minutes: Int? = nil) {
+            self.seconds = seconds
+            self.reps = reps
+            self.minutes = minutes
+        }
+
+        /// 「保持 5 秒后放松。做 10 次」→ 5 秒・10 回。「20 秒 × 2 次」→ 20 秒・2 回。全角数字も読む
+        public static func parse(_ text: String) -> StepMeta {
+            let normalized = text.applyingTransform(.fullwidthToHalfwidth, reverse: false) ?? text
+            func first(_ pattern: String) -> Int? {
+                guard let regex = try? NSRegularExpression(pattern: pattern),
+                      let match = regex.firstMatch(in: normalized, range: NSRange(normalized.startIndex..., in: normalized)),
+                      let range = Range(match.range(at: 1), in: normalized) else { return nil }
+                return Int(normalized[range])
+            }
+            return StepMeta(seconds: first(#"(\d+)\s*秒"#),
+                            reps: first(#"(?:×|x|X)\s*(\d+)"#) ?? first(#"(\d+)\s*(?:次|回)"#),
+                            minutes: first(#"(\d+)\s*分"#))
+        }
+    }
+
+    /// ストレッチの絵(Resources/Material/pose-<name>@2x.png の name)。名前と手順のキーワードで選ぶので、設定で書き換えたものにも絵が付く。
+    /// 絵は scripts/material/(src/poses/*.svg)で焼いている
+    public static func illustration(for stretch: Stretch) -> String {
+        let text = ([stretch.name] + stretch.steps).joined()
+        let table: [(keys: [String], name: String)] = [
+            (["走", "歩", "walk"], "walk"),
+            (["呼吸", "息", "breath"], "belly-breathing"),
+            (["肩胛", "肩甲", "blade"], "shoulder-blades"),
+            (["转肩", "肩回", "转动肩", "roll"], "shoulder-rolls"),
+            // 下巴は首より先に(収下巴の手順に「脖子」が出てくる)
+            (["下巴", "顎", "あご", "chin"], "chin-tuck"),
+            (["颈", "首", "脖", "neck"], "neck-side"),
+            (["胸", "chest"], "chest-doorway"),
+        ]
+        for entry in table where entry.keys.contains(where: { text.localizedCaseInsensitiveContains($0) }) {
+            return entry.name
+        }
+        return "stretch"
+    }
 
     /// 会議とみなす予定:Google Meet のリンクがあるものだけ(ユーザー指定。
     /// Meet の無い予定は、参加者がいても Zoom 等でも会議扱いしない)
@@ -76,26 +150,93 @@ public enum BreakReminder {
         }
     }
 
+    /// 会前に「站着开会？」と聞く時間:開始の 10 分前から開始まで
+    public static let meetingAskWindow: TimeInterval = 10 * 60
+    /// 座ってからこれより短ければ会前に聞かない(立ち終えて座った直後に、また立つか聞かない)
+    public static let meetingAskMinimumSitting: TimeInterval = 10 * 60
+    /// 会議・通話が終わってから小窓を出すまで待つ時間(会議が延びた・すぐ次の通話に入る)
+    public static let afterMeetingGrace: TimeInterval = 60
+    /// 「开完会了」と添えるのは、5 分以上続いた会議・通話が終わって 10 分以内(音声入力や短い通話には添えない)
+    public static let afterMeetingMinimum: TimeInterval = 5 * 60
+    public static let afterMeetingWording: TimeInterval = 10 * 60
+    /// 水を持って入るほど長い会議
+    public static let longMeeting: TimeInterval = 45 * 60
+
+    /// 予定より早く終わった会議を除く:その会議の通話(開始の 5 分前より後に始まり、5 分以上続いた)が
+    /// 終わっていれば(いまは通話していない前提)、その会議は終わったとみなし、予定の終わりまで待たずに聞く。
+    /// 短いマイク(音声入力など)では終わらせない(電話で出ている会議の最中に音声入力しても、会議は続いている)。
+    /// 前の会議の通話が次の会議の開始に食い込んだだけなら、次の会議は終わらせない(連続した会議)。
+    /// 通話を見張っていないときは lastCall = nil
+    public static func excludingEndedEarly(_ events: [MeetingEvent], now: Date,
+                                           lastCall: DateInterval?) -> [MeetingEvent] {
+        guard let call = lastCall, call.end <= now, call.duration >= afterMeetingMinimum else { return events }
+        return events.filter { e in
+            !(call.start >= e.start.addingTimeInterval(-5 * 60) && e.start < call.end && now < e.end)
+        }
+    }
+
+    /// 問いに「开完会了」と添えるか:busySince〜lastBusyAt の会議・通話が 5 分以上続き、終わって 10 分以内
+    public static func saysAfterMeeting(now: Date, busySince: Date?, lastBusyAt: Date?) -> Bool {
+        guard let since = busySince, let last = lastBusyAt else { return false }
+        return last.timeIntervalSince(since) >= afterMeetingMinimum
+            && now.timeIntervalSince(last) < afterMeetingWording
+    }
+
+    public static func isLong(_ meeting: MeetingEvent) -> Bool {
+        meeting.end.timeIntervalSince(meeting.start) >= longMeeting
+    }
+
+    /// これから始まる会議のうち、いちばん近いもの(開始の window 秒前から開始まで。始まったものは含まない)
+    public static func upcomingMeeting(events: [MeetingEvent], now: Date,
+                                       window: TimeInterval = meetingAskWindow) -> MeetingEvent? {
+        events
+            .filter { isMeeting($0) && $0.start > now && $0.start.timeIntervalSince(now) <= window }
+            .min { $0.start < $1.start }
+    }
+
+    /// 「站着开会？」と聞く会議(nil = 聞かない):座っていて(10 分以上)、10 分以内に会議が始まり、
+    /// その会議にまだ答えていないとき。別の会議の最中は聞かない(連続した会議は前の会議が終わってから)
+    public static func meetingStandAsk(events: [MeetingEvent], now: Date, posture: Posture,
+                                       sittingSince: Date, answered: Set<String>) -> MeetingEvent? {
+        guard posture == .sitting,
+              now.timeIntervalSince(sittingSince) >= meetingAskMinimumSitting,
+              !isInMeeting(events: events, now: now, lead: 0),
+              let next = upcomingMeeting(events: events, now: now),
+              !answered.contains(next.id) else { return nil }
+        return next
+    }
+
+    /// 離席の判定に使う無操作の秒数:会議・通話のあいだの無操作は数えない
+    /// (聞いているだけで操作しない。終わった瞬間に「3 分以上操作なし = 離席」と数えて座った時間を消さないように)
+    public static func awayIdle(idle: TimeInterval, now: Date, lastBusyAt: Date?) -> TimeInterval {
+        guard let lastBusyAt else { return idle }
+        return min(idle, max(0, now.timeIntervalSince(lastBusyAt)))
+    }
+
     /// 画面上部に出す小窓の状態
     public enum Prompt: Equatable, Sendable {
         case askStand   // 「立ちましたか?」
         case standing   // 立ち作業の残り時間 + ストレッチの手順
         case askSit     // 「座りましたか?」
+        case standForMeeting   // 会前:「站着开会？」
     }
 
     /// 30 秒ごとの判定:いま出すべき小窓(nil = 出さない)。
-    /// Meet の会議中・直前は何も出さない。切り替え時刻を過ぎたら姿勢に応じて尋ね、
-    /// 「立った」後の手順表示は立ち作業の終わりまで続ける
+    /// 通話中は何も出さない。座っていて会議が近ければ「站着开会？」(開始前 5 分の中でも聞く:会議の話なので割り込みではない)。
+    /// Meet の会議中・直前と、会議・通話が終わって quietUntil までは出さない。
+    /// 切り替え時刻を過ぎたら姿勢に応じて尋ね、「立った」後の手順表示は立ち作業の終わりまで続ける
     public static func desiredPrompt(posture: Posture, current: Prompt?, now: Date,
-                                     dueAt: Date, inMeeting: Bool) -> Prompt? {
+                                     dueAt: Date, inMeeting: Bool, guideDismissed: Bool = false,
+                                     inCall: Bool = false, standForMeeting: Bool = false,
+                                     quietUntil: Date? = nil) -> Prompt? {
+        if inCall { return nil }
+        if standForMeeting, posture == .sitting { return .standForMeeting }
         if inMeeting { return nil }
+        if let quietUntil, now < quietUntil { return nil }
         if now >= dueAt { return posture == .sitting ? .askStand : .askSit }
-        return current == .standing ? .standing : nil
-    }
-
-    /// 今の姿勢になってから interval 分以上たったか
-    public static func isDue(now: Date, since: Date, intervalMinutes: Int) -> Bool {
-        now.timeIntervalSince(since) >= TimeInterval(intervalMinutes * 60)
+        // 立ち作業中は(自分で閉じていなければ)手順の小窓を出し続ける。会議で隠れても終われば戻る
+        if posture == .standing { return guideDismissed ? nil : .standing }
+        return nil
     }
 
     /// 空行区切りのブロックを 1 つずつ読む(1 行目が名前、続く行が手順)。前後の空白は捨てる
@@ -119,17 +260,9 @@ public enum BreakReminder {
     /// 順番に回す(リストが空なら「歩く」だけ)
     public static func stretch(at index: Int, in list: [Stretch]) -> Stretch {
         guard !list.isEmpty else {
-            return Stretch(name: "歩く(1〜2 分)", steps: ["デスクを離れて少し歩く"])
+            return Stretch(name: "走一走（1〜2 分钟）", steps: ["离开座位走一走"])
         }
         return list[((index % list.count) + list.count) % list.count]
     }
 
-    /// 手順に ①②… を付け、最後に(あれば一言と)中止の目安を添える(メニューのホバー表示用)
-    public static func body(for stretch: Stretch, extra: String? = nil) -> String {
-        let marks = ["①", "②", "③", "④", "⑤", "⑥", "⑦", "⑧", "⑨"]
-        let steps = stretch.steps.enumerated().map { i, step in
-            (i < marks.count ? marks[i] : "\(i + 1).") + " " + step
-        }
-        return (steps + [extra, caution].compactMap { $0 }).joined(separator: "\n")
-    }
 }

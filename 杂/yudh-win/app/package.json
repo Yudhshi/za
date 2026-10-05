@@ -1,0 +1,14 @@
+{
+  "name": "yudh-windows",
+  "private": true,
+  "version": "0.1.0",
+  "scripts": {
+    "assets": "node scripts/copy-assets.mjs",
+    "dev": "node scripts/copy-assets.mjs && tauri dev",
+    "build": "node scripts/copy-assets.mjs && tauri build",
+    "tauri": "tauri"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2.12.1"
+  }
+}

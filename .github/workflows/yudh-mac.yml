@@ -1,0 +1,60 @@
+# Yudh for Mac:コンパイル・テスト(nippo-tests)・Yudh.app を作り、固定の下載地址に置く:
+#   https://github.com/Yudhshi/za/releases/download/yudh-mac-latest/Yudh-mac.zip
+# (リリース yudh-mac-latest をビルドのたびに作り直す)。英語の語表は入れない(教材由来でリポジトリにも無い):
+# 英語タブは同期フォルダの english-library/ を読む。Apple の開発者署名は無い(ad-hoc 署名)
+name: Yudh for Mac
+
+on:
+  push:
+    branches: [main, "claude/**"]
+    paths:
+      - "杂/nippo/**"
+      - ".github/workflows/yudh-mac.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: yudh-mac
+  cancel-in-progress: true
+
+jobs:
+  mac:
+    name: Mac app
+    runs-on: macos-26
+    defaults:
+      run:
+        working-directory: 杂/nippo
+    steps:
+      - uses: actions/checkout@v4
+      - name: Toolchain
+        run: |
+          xcodebuild -version
+          swift --version
+      - run: swift build
+      - run: swift run nippo-tests
+      - name: Build Yudh.app
+        run: NO_OPEN=1 ./build-app.sh
+      - name: Zip
+        run: ditto -c -k --keepParent dist/Yudh.app dist/Yudh-mac.zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Yudh-mac
+          path: 杂/nippo/dist/Yudh-mac.zip
+          if-no-files-found: error
+      - name: Publish to the fixed download link
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release delete yudh-mac-latest --cleanup-tag --yes || true
+          gh release create yudh-mac-latest dist/Yudh-mac.zip \
+            --target "$GITHUB_SHA" --prerelease \
+            --title "Yudh for Mac（最新构建）" \
+            --notes "分支 ${GITHUB_REF_NAME} · 提交 ${GITHUB_SHA::7}。需要 macOS 26、Apple 芯片。
+
+          安装：解压，把 Yudh.app 拖进「应用程序」。没有 Apple 开发者签名，第一次打开会被拦：
+          系统设置 → 隐私与安全性 → 拉到最下面点「仍要打开」。或者在终端执行
+          xattr -dr com.apple.quarantine /Applications/Yudh.app
+
+          这个包里没有英语词表（来自教材，不公开）：英语页会读同步文件夹里的 english-library/（自己编译的 Yudh 同步时写进去的，Windows 也读这里）。"

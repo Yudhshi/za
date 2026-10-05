@@ -9,9 +9,9 @@ public struct QuietDayChecker {
     }
 
     public enum Reason: String {
-        case weekend = "週末"
-        case holiday = "祝日"
-        case vacation = "休暇日"
+        case weekend = "周末"
+        case holiday = "节假日"
+        case vacation = "休假"
     }
 
     /// 静默日:周末、日本节假日(祝日法から自動計算)、用户登记的请假日。

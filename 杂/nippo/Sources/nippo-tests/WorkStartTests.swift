@@ -25,8 +25,8 @@ func runWorkStartTests() {
 
     T.run("duration text") {
         let start = tokyoDate(2026, 10, 1, 8, 53)
-        T.expectEqual(WorkStart.durationText(from: start, to: tokyoDate(2026, 10, 1, 9, 38)), "45分")
-        T.expectEqual(WorkStart.durationText(from: start, to: tokyoDate(2026, 10, 1, 12, 5)), "3時間12分")
-        T.expectEqual(WorkStart.durationText(from: start, to: tokyoDate(2026, 10, 1, 8, 50)), "0分")
+        T.expectEqual(WorkStart.durationText(from: start, to: tokyoDate(2026, 10, 1, 9, 38)), "45 分钟")
+        T.expectEqual(WorkStart.durationText(from: start, to: tokyoDate(2026, 10, 1, 12, 5)), "3 小时 12 分")
+        T.expectEqual(WorkStart.durationText(from: start, to: tokyoDate(2026, 10, 1, 8, 50)), "0 分钟")
     }
 }

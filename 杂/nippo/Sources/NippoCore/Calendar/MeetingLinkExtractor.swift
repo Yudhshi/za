@@ -22,7 +22,7 @@ public enum MeetingLinkExtractor {
     /// 会議リンクが safelinks.protection.outlook.com/?url=<encoded> に包まれると
     /// ホスト照合が全滅するため、走査前に必ず解包する。入れ子対応・上限付き。
     private static let safeLinksRegex = try! NSRegularExpression(
-        pattern: #"https://[\S]+\.safelinks\.protection\.outlook\.com/[\S]*?url=([^&\s]+)"#,
+        pattern: #"https://[\S]+\.safelinks\.protection\.outlook\.com/[\S]*?url=([^&\s]+)\S*"#,
         options: [.caseInsensitive])
 
     static func unwrapSafeLinks(_ text: String) -> String {

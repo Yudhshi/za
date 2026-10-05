@@ -1,0 +1,84 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <!--
+    Yudh のアプリアイコン「30/30」:水泥の墙に模板で喷いた時計。左(坐)の半分は灰の漆、右(站)の半分は青(#12e9d3)。
+    針は橙(#ff6412)で站の側を指す。刻度は模板の切り欠き、真ん中の縦の隙間は模板の桥。scripts/make-icon-svg.py が作る
+  -->
+  <defs>
+    <filter id="spray" x="-6%" y="-6%" width="112%" height="112%">
+      <feTurbulence type="fractalNoise" baseFrequency="0.035" numOctaves="2" seed="3" result="n"/>
+      <feDisplacementMap in="SourceGraphic" in2="n" scale="9" xChannelSelector="R" yChannelSelector="G" result="d"/>
+      <feTurbulence type="fractalNoise" baseFrequency="0.012" numOctaves="3" seed="11" result="m"/>
+      <feColorMatrix in="m" type="matrix" values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 -0.9 0.62" result="shade"/>
+      <feComposite in="shade" in2="d" operator="in" result="s"/>
+      <feMerge><feMergeNode in="d"/><feMergeNode in="s"/></feMerge>
+    </filter>
+    <filter id="grain" x="0" y="0" width="100%" height="100%">
+      <feTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves="2" seed="5"/>
+      <feColorMatrix type="matrix" values="0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  0 0 0 0.07 0"/>
+    </filter>
+    <filter id="concrete" x="0" y="0" width="100%" height="100%">
+      <feTurbulence type="fractalNoise" baseFrequency="0.016" numOctaves="3" seed="21" result="m"/>
+      <feColorMatrix in="m" type="matrix" values="0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  0 0 0 0.16 -0.05" result="mottle"/>
+      <feTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves="1" seed="4" result="s"/>
+      <feColorMatrix in="s" type="matrix" values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 2.2 -1.5" result="pits"/>
+      <feMerge><feMergeNode in="mottle"/><feMergeNode in="pits"/></feMerge>
+    </filter>
+    <clipPath id="plate"><rect x="28" y="28" width="968" height="968" rx="210" ry="210"/></clipPath>
+  </defs>
+  <g clip-path="url(#plate)">
+    <rect width="1024" height="1024" fill="#3a3d40"/>
+    <rect width="1024" height="1024" filter="url(#concrete)"/>
+    <rect width="1024" height="1024" filter="url(#grain)"/>
+    <g transform="translate(512 512) scale(1.1748) translate(-512 -512)">
+      <clipPath id="sit"><path d="M503.0,194 A318,318 0 0 0 503.0,830 Z"/></clipPath>
+      <path d="M503.0,194 A318,318 0 0 0 503.0,830 Z" fill="#53585c"/>
+      <rect width="1024" height="1024" filter="url(#grain)" clip-path="url(#sit)"/>
+      <path d="M521.0,194 A318,318 0 0 1 521.0,830 Z" fill="#12e9d3" filter="url(#spray)"/>
+      <circle cx="1033.6" cy="409.5" r="2.3" fill="#12e9d3" opacity="0.40"/>
+      <circle cx="855.7" cy="203.7" r="5.3" fill="#12e9d3" opacity="0.52"/>
+      <circle cx="397.9" cy="296.7" r="4.9" fill="#12e9d3" opacity="0.44"/>
+      <circle cx="371.5" cy="651.9" r="5.6" fill="#12e9d3" opacity="0.90"/>
+      <circle cx="998.3" cy="404.6" r="4.2" fill="#12e9d3" opacity="0.50"/>
+      <circle cx="966.5" cy="579.6" r="4.3" fill="#12e9d3" opacity="0.53"/>
+      <circle cx="401.3" cy="766.2" r="4.6" fill="#12e9d3" opacity="0.66"/>
+      <circle cx="698.3" cy="812.8" r="3.6" fill="#12e9d3" opacity="0.43"/>
+      <circle cx="292.9" cy="487.6" r="5.4" fill="#12e9d3" opacity="0.45"/>
+      <circle cx="957.4" cy="286.5" r="5.7" fill="#12e9d3" opacity="0.85"/>
+      <circle cx="701.4" cy="150.0" r="3.8" fill="#12e9d3" opacity="0.89"/>
+      <circle cx="976.0" cy="437.8" r="5.8" fill="#12e9d3" opacity="0.74"/>
+      <circle cx="339.6" cy="594.2" r="4.5" fill="#12e9d3" opacity="0.86"/>
+      <circle cx="305.5" cy="510.1" r="3.8" fill="#12e9d3" opacity="0.84"/>
+      <circle cx="944.2" cy="313.5" r="4.8" fill="#12e9d3" opacity="0.86"/>
+      <circle cx="616.4" cy="177.7" r="3.1" fill="#12e9d3" opacity="0.53"/>
+      <circle cx="574.4" cy="214.3" r="6.5" fill="#12e9d3" opacity="0.50"/>
+      <circle cx="947.7" cy="340.4" r="6.8" fill="#12e9d3" opacity="0.74"/>
+      <circle cx="330.7" cy="502.9" r="5.3" fill="#12e9d3" opacity="0.67"/>
+      <circle cx="552.0" cy="805.0" r="4.6" fill="#12e9d3" opacity="0.86"/>
+      <circle cx="453.3" cy="298.0" r="6.1" fill="#12e9d3" opacity="0.75"/>
+      <circle cx="935.7" cy="339.1" r="5.7" fill="#12e9d3" opacity="0.38"/>
+      <circle cx="487.6" cy="248.2" r="3.1" fill="#12e9d3" opacity="0.83"/>
+      <circle cx="940.4" cy="723.6" r="6.3" fill="#12e9d3" opacity="0.48"/>
+      <circle cx="763.0" cy="871.1" r="4.1" fill="#12e9d3" opacity="0.74"/>
+      <circle cx="994.4" cy="577.4" r="2.9" fill="#12e9d3" opacity="0.72"/>
+      <circle cx="998.4" cy="699.3" r="2.1" fill="#12e9d3" opacity="0.75"/>
+      <circle cx="989.6" cy="554.4" r="6.1" fill="#12e9d3" opacity="0.44"/>
+      <circle cx="815.7" cy="837.0" r="3.9" fill="#12e9d3" opacity="0.37"/>
+      <circle cx="983.5" cy="492.4" r="2.2" fill="#12e9d3" opacity="0.54"/>
+      <line x1="673.0" y1="233.1" x2="649.0" y2="274.7" stroke="#3a3d40" stroke-width="16"/>
+      <line x1="790.9" y1="351.0" x2="749.3" y2="375.0" stroke="#3a3d40" stroke-width="16"/>
+      <line x1="834.0" y1="512.0" x2="760.0" y2="512.0" stroke="#3a3d40" stroke-width="22"/>
+      <line x1="790.9" y1="673.0" x2="749.3" y2="649.0" stroke="#3a3d40" stroke-width="16"/>
+      <line x1="673.0" y1="790.9" x2="649.0" y2="749.3" stroke="#3a3d40" stroke-width="16"/>
+      <line x1="351.0" y1="790.9" x2="375.0" y2="749.3" stroke="#3a3d40" stroke-width="16"/>
+      <line x1="233.1" y1="673.0" x2="274.7" y2="649.0" stroke="#3a3d40" stroke-width="16"/>
+      <line x1="190.0" y1="512.0" x2="264.0" y2="512.0" stroke="#3a3d40" stroke-width="22"/>
+      <line x1="233.1" y1="351.0" x2="274.7" y2="375.0" stroke="#3a3d40" stroke-width="16"/>
+      <line x1="351.0" y1="233.1" x2="375.0" y2="274.7" stroke="#3a3d40" stroke-width="16"/>
+      <line x1="512" y1="512" x2="726.8" y2="636.0" stroke-linecap="round" stroke="#161615" stroke-width="72"/>
+      <line x1="512" y1="512" x2="726.8" y2="636.0" stroke-linecap="round" stroke="#ff6412" stroke-width="46"/>
+      <circle cx="512" cy="512" r="40" fill="#161615"/>
+      <circle cx="512" cy="512" r="14" fill="#abafb2"/>
+    </g>
+  </g>
+  <rect x="29.5" y="29.5" width="965" height="965" rx="210" ry="210" fill="none" stroke="#ffffff" stroke-opacity="0.08" stroke-width="3"/>
+</svg>

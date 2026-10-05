@@ -6,6 +6,28 @@ public final class AppSettings: ObservableObject {
 
     public init(defaults: UserDefaults = .standard) {
         self.d = defaults
+        migrate()
+    }
+
+    /// 設定の版(保存が無い = 0:前の版)。移し替えを一度だけにするため
+    static let settingsVersion = 1
+
+    /// 前の版の設定を今の形に移す(一度だけ)。斜角肌は立つたびに毎回やる分(fixedStretches)になったので、
+    /// 保存した輪番の先頭の斜角肌を外す(既定のままなら保存を消して今の既定に)。
+    /// 腹式呼吸と隔天の肩袖力量は決まりにして設定から外したので、前に切ってあっても戻す
+    private func migrate() {
+        guard d.integer(forKey: "settingsVersion") < Self.settingsVersion else { return }
+        if let saved = d.string(forKey: "stretches") {
+            if let moved = BreakReminder.migratedStretches(saved) {
+                if moved != saved { d.set(moved, forKey: "stretches") }
+            } else {
+                d.removeObject(forKey: "stretches")
+            }
+            d.set(0, forKey: "lastStretchIndex")
+        }
+        d.removeObject(forKey: "breathHabit")
+        d.removeObject(forKey: "ritualStrengthOn")
+        d.set(Self.settingsVersion, forKey: "settingsVersion")
     }
 
     public var reminderLeadMinutes: Int {
@@ -26,6 +48,12 @@ public final class AppSettings: ObservableObject {
     public var autoLaunchApplied: Bool {
         get { d.bool(forKey: "autoLaunchApplied") }
         set { d.set(newValue, forKey: "autoLaunchApplied"); objectWillChange.send() }
+    }
+
+    /// Nippo.app → Yudh.app の改名後に、ログイン項目を新しい場所で登録し直したか
+    public var loginItemMovedToYudh: Bool {
+        get { d.bool(forKey: "loginItemMovedToYudh") }
+        set { d.set(newValue, forKey: "loginItemMovedToYudh"); objectWillChange.send() }
     }
 
     /// 勤務時間("HH:mm")。立ち作業リマインドはこの時間帯だけ動く
@@ -56,7 +84,10 @@ public final class AppSettings: ObservableObject {
         let end = timeComponents(workEndTime, fallback: (18, 0))
         let c = calendar.dateComponents([.hour, .minute], from: date)
         let now = c.hour! * 60 + c.minute!
-        return now >= start.hour * 60 + start.minute && now < end.hour * 60 + end.minute
+        let s = start.hour * 60 + start.minute, e = end.hour * 60 + end.minute
+        if s == e { return false }
+        // 終了が開始より早ければ深夜をまたぐ時間帯(22:00–06:00)
+        return s < e ? (now >= s && now < e) : (now >= s || now < e)
     }
 
     /// 「いまのタスク」メモ(字下げで階層。TaskOutline で解釈)
@@ -65,9 +96,18 @@ public final class AppSettings: ObservableObject {
         set { d.set(newValue, forKey: "taskMemo"); objectWillChange.send() }
     }
 
-    /// 「次のシャチョケン」を探す件名キーワード(カンマ区切り)
+    /// シャチョケン = 26卒_新卒社長研修。カレンダーの件名は正式名なので正式名で探す
+    public static let defaultShachokenKeywords = "新卒社長研修, シャチョケン"
+
+    /// 「次のシャチョケン」を探す件名キーワード(カンマ区切り)。
+    /// 旧既定値「シャチョケン」だけでは件名(26卒_新卒社長研修)に当たらなかったので、新しい既定値に読み替える
     public var shachokenKeywords: String {
-        get { d.string(forKey: "shachokenKeywords") ?? "シャチョケン" }
+        get {
+            guard let value = d.string(forKey: "shachokenKeywords"), value != "シャチョケン" else {
+                return Self.defaultShachokenKeywords
+            }
+            return value
+        }
         set { d.set(newValue, forKey: "shachokenKeywords"); objectWillChange.send() }
     }
 
@@ -77,17 +117,18 @@ public final class AppSettings: ObservableObject {
         set { d.set(newValue, forKey: "postureEnabled"); objectWillChange.send() }
     }
 
-    public var sitMinutes: Int {
-        get { d.object(forKey: "sitMinutes") as? Int ?? 45 }
-        set { d.set(newValue, forKey: "sitMinutes"); objectWillChange.send() }
+    /// 坐る / 立つ分数は計画で固定(設定には出さない。前の版で保存した値は使わない)
+    public var sitMinutes: Int { BreakReminder.planSitMinutes }
+
+    public var standMinutes: Int { BreakReminder.planStandMinutes }
+
+    /// 立つたびに必ずやる拉伸(斜角肌。空行区切りで複数も可)。そのあとに stretches から 1 つずつ
+    public var fixedStretches: String {
+        get { d.string(forKey: "fixedStretches") ?? BreakReminder.defaultFixed }
+        set { d.set(newValue, forKey: "fixedStretches"); objectWillChange.send() }
     }
 
-    public var standMinutes: Int {
-        get { d.object(forKey: "standMinutes") as? Int ?? 15 }
-        set { d.set(newValue, forKey: "standMinutes"); objectWillChange.send() }
-    }
-
-    /// 切り替え時に 1 つずつ出すストレッチ(1 行 1 つ)
+    /// 斜角肌のあとに 1 つずつ順に出す拉伸(空行区切り。1 行目が名前)
     public var stretches: String {
         get { d.string(forKey: "stretches") ?? BreakReminder.defaultStretches }
         set { d.set(newValue, forKey: "stretches"); objectWillChange.send() }
@@ -96,6 +137,125 @@ public final class AppSettings: ObservableObject {
     public var lastStretchIndex: Int {
         get { d.integer(forKey: "lastStretchIndex") }
         set { d.set(newValue, forKey: "lastStretchIndex") }
+    }
+
+    /// 自分で動かした坐站の小窓の左上(画面の座標)。nil = マウスのある画面の上部中央。再起動しても同じ所に出す
+    public var postureTopLeft: CGPoint? {
+        get {
+            guard let xy = d.array(forKey: "postureTopLeft") as? [Double], xy.count == 2 else { return nil }
+            return CGPoint(x: xy[0], y: xy[1])
+        }
+        set {
+            if let point = newValue {
+                d.set([Double(point.x), Double(point.y)], forKey: "postureTopLeft")
+            } else {
+                d.removeObject(forKey: "postureTopLeft")
+            }
+        }
+    }
+
+    /// 泡澡のあとの日课:動画(1 行 1 本「名前 URL」)と、そのあとの拉伸(空行区切り)
+    public var ritualVideos: String {
+        get { d.string(forKey: "ritualVideos") ?? Ritual.defaultVideos }
+        set { d.set(newValue, forKey: "ritualVideos"); objectWillChange.send() }
+    }
+
+    public var ritualStretches: String {
+        get { d.string(forKey: "ritualStretches") ?? Ritual.defaultStretches }
+        set { d.set(newValue, forKey: "ritualStretches"); objectWillChange.send() }
+    }
+
+    /// 隔天に足す肩袖の力と、床の上の拉伸(最後は仰向けの腹式呼吸)
+    public var ritualStrength: String {
+        get { d.string(forKey: "ritualStrength") ?? Ritual.defaultStrength }
+        set { d.set(newValue, forKey: "ritualStrength"); objectWillChange.send() }
+    }
+
+    public var ritualFloor: String {
+        get { d.string(forKey: "ritualFloor") ?? Ritual.defaultFloor }
+        set { d.set(newValue, forKey: "ritualFloor"); objectWillChange.send() }
+    }
+
+    /// 日课に隔天で肩袖の力を入れる(決まり:設定には出さない。前の版で切ったものは migrate で戻す)
+    public var ritualStrengthOn: Bool {
+        get { d.object(forKey: "ritualStrengthOn") as? Bool ?? true }
+        set { d.set(newValue, forKey: "ritualStrengthOn"); objectWillChange.send() }
+    }
+
+    /// 力量を入れた日课を終えた日
+    public var ritualStrengthLog: [String: Int] {
+        get { d.dictionary(forKey: "ritualStrengthLog") as? [String: Int] ?? [:] }
+        set { d.set(newValue, forKey: "ritualStrengthLog"); objectWillChange.send() }
+    }
+
+    /// 日课をやり終えた日("yyyy-MM-dd" → 回数)
+    public var ritualLog: [String: Int] {
+        get { d.dictionary(forKey: "ritualLog") as? [String: Int] ?? [:] }
+        set { d.set(newValue, forKey: "ritualLog"); objectWillChange.send() }
+    }
+
+    /// 立つたびに、拉伸の前に腹式呼吸を 3 回(习惯にする。決まり:設定には出さない。前の版で切ったものは migrate で戻す)
+    public var breathHabit: Bool {
+        get { d.object(forKey: "breathHabit") as? Bool ?? true }
+        set { d.set(newValue, forKey: "breathHabit"); objectWillChange.send() }
+    }
+
+    /// 座っていて 10 分以内に会議が始まるとき「站着开会？」と聞く(立って会議に出るのが好み)
+    public var meetingStandAsk: Bool {
+        get { d.object(forKey: "meetingStandAsk") as? Bool ?? true }
+        set { d.set(newValue, forKey: "meetingStandAsk"); objectWillChange.send() }
+    }
+
+    /// マイクかカメラが使われていたら通話中とみなす(小窓を出さない・無操作を離席と数えない)。日历に無い会議にも効く
+    public var callDetection: Bool {
+        get { d.object(forKey: "callDetection") as? Bool ?? true }
+        set { d.set(newValue, forKey: "callDetection"); objectWillChange.send() }
+    }
+
+    /// 腹式呼吸をした回数("yyyy-MM-dd" → 回数)
+    public var breathLog: [String: Int] {
+        get { d.dictionary(forKey: "breathLog") as? [String: Int] ?? [:] }
+        set { d.set(newValue, forKey: "breathLog"); objectWillChange.send() }
+    }
+
+    /// 英語の進捗を共有するフォルダ(OneDrive / iCloud Drive の中など)。nil = 同期しない
+    public var syncRoot: String? {
+        get {
+            guard let path = d.string(forKey: "syncRoot"), !path.isEmpty else { return nil }
+            return path
+        }
+        set { d.set(newValue ?? "", forKey: "syncRoot"); objectWillChange.send() }
+    }
+
+    /// 今日と明日の会議を同期フォルダの agenda.json に書く(Windows はカレンダーを読まず、これを読む)
+    public var agendaExport: Bool {
+        get { d.object(forKey: "agendaExport") as? Bool ?? true }
+        set { d.set(newValue, forKey: "agendaExport"); objectWillChange.send() }
+    }
+
+    /// 英語の語表を同期フォルダの english-library/ に写す(Windows は語表を持たず、ここから読む)
+    public var libraryExport: Bool {
+        get { d.object(forKey: "libraryExport") as? Bool ?? true }
+        set { d.set(newValue, forKey: "libraryExport"); objectWillChange.send() }
+    }
+
+    /// 最後に書いた habits-<端末>.json の場所(端末名を変えたら古いほうを消す:別の端末として二重に数えないように)
+    public var habitsWrittenPath: String? {
+        get { d.string(forKey: "habitsWrittenPath") }
+        set { d.set(newValue, forKey: "habitsWrittenPath") }
+    }
+
+    /// 出来事に付ける、この端末の名前(同期フォルダのファイル名にもなる)
+    public var deviceName: String {
+        get {
+            if let name = d.string(forKey: "deviceName"), !name.isEmpty { return name }
+            return Self.defaultDeviceName
+        }
+        set { d.set(newValue, forKey: "deviceName"); objectWillChange.send() }
+    }
+
+    public static var defaultDeviceName: String {
+        Host.current().localizedName ?? "Mac"
     }
 
     public func timeComponents(_ value: String,
