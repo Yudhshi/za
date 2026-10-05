@@ -202,10 +202,19 @@ final class EnglishCoordinator: ObservableObject {
         mode = Mode(rawValue: UserDefaults.standard.string(forKey: "englishMode") ?? "") ?? .vocab
     }
 
-    /// 素材の置き場所:.app の Resources/English(swift run のときはリポジトリの Resources/English)
-    static func dataDirectory() -> URL {
-        // .app の中 → 開発中(swift run、.app の外)だけリポジトリの Resources/English。.app で欠けていれば欠けたまま(素材なしの表示)
-        if let url = BundledResource.url("English") { return url }
+    /// .app に入っている語表(swift run のときはリポジトリの Resources/English)。入っていれば同期フォルダへ写す側
+    static func bundledDirectory() -> URL? {
+        BundledResource.url("English")
+    }
+
+    /// 素材の置き場所:.app の Resources/English → 無ければ(GitHub で作った配布用の .app には語表を入れない)
+    /// 同期フォルダの english-library/(前に自分で作った .app が写した語表。Windows と同じ所)→ どちらも無ければ素材なしの表示
+    func dataDirectory() -> URL {
+        if let url = Self.bundledDirectory() { return url }
+        if let root = syncRoot() {
+            let shared = URL(fileURLWithPath: root).appendingPathComponent(EnglishSync.libraryFolder)
+            if FileManager.default.fileExists(atPath: shared.appendingPathComponent("vocab.json").path) { return shared }
+        }
         return (Bundle.main.resourceURL ?? URL(fileURLWithPath: NSTemporaryDirectory())).appendingPathComponent("English")
     }
 
@@ -214,16 +223,17 @@ final class EnglishCoordinator: ObservableObject {
         listened = false
     }
 
-    /// 初回だけ素材を読む(辞書が 2MB あるので裏で)。開くたびに同期も走らせる
+    /// 初回だけ素材を読む(辞書が 2MB あるので裏で)。開くたびに同期も走らせる。
+    /// 語表が空のまま(配布用の .app で、同期フォルダをまだ選んでいない)なら、開くたびに読み直す
     func loadIfNeeded() {
-        guard !loaded else {
+        guard !loaded || (library.isEmpty && Self.bundledDirectory() == nil) else {
             prepare()
             syncNow()
             return
         }
         guard !loading else { return }
         loading = true
-        let dir = Self.dataDirectory()
+        let dir = dataDirectory()
         Task.detached(priority: .userInitiated) { [weak self] in
             let library = EnglishLibrary.load(from: dir)
             await MainActor.run {
@@ -256,8 +266,9 @@ final class EnglishCoordinator: ObservableObject {
         syncing = true
         store.device = deviceName()
         let sync = EnglishSync(root: URL(fileURLWithPath: root), device: store.device, store: store)
-        // 語表は読み終えてから写す(読む前は空の語表を写しかねない)
-        let librarySource = loaded && libraryExport() ? Self.dataDirectory() : nil
+        // 語表は読み終えてから写す(読む前は空の語表を写しかねない)。写すのは .app に入っている語表だけ
+        // (同期フォルダから読んでいるときに自分へ写し直さない)
+        let librarySource = loaded && libraryExport() ? Self.bundledDirectory() : nil
         Task.detached(priority: .utility) { [weak self] in
             let imported: Int
             let failure: String?

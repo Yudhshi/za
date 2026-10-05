@@ -31,6 +31,11 @@
 
 ## 构建与启动
 
+不想自己编译的话，直接下载 GitHub 上编好的（每次推送 `杂/nippo/` 都会重新编译、跑测试）：
+<https://github.com/Yudhshi/za/releases/download/yudh-mac-latest/Yudh-mac.zip>
+（Apple 芯片；没有 Apple 开发者签名，第一次打开要在「系统设置 → 隐私与安全性」里点「仍要打开」）。
+这个包里没有英语词表，英语页读同步文件夹里的 `english-library/`（自己编译的 Yudh 同步时会写进去，Windows 也读这里）。
+
 ```bash
 IELTS_DIR=~/Downloads/ielts-dist-v71 ./build-app.sh   # 第一次：导入英语素材并构建
 ./build-app.sh                                        # 之后（已导入的素材会继续用）
@@ -42,6 +47,7 @@ open dist/Yudh.app
 
 英语素材（`Resources/English/`）含有从教材里抽取的词表，所以没有放进公开仓库（已加入 `.gitignore`）。
 也可以用 `node scripts/import-english.mjs <IELTS app 文件夹>` 单独导入。
+.app 里没有词表时（GitHub 上编的包），英语页改读同步文件夹的 `english-library/`；那里也没有就显示没有素材。
 
 ### 素材与版权
 
